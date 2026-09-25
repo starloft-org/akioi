@@ -81,7 +81,7 @@ alwaysApply: true
 ## 9. Git 工作流
 
 - 每次代码修改后自行 `git commit` 并 `git push origin/main`（用户已明确要求自动 push）。
-- 远端为 `https://github.com/fancyun/akioi.git`，主分支 `main`。**不要在仓库里配置 `http.proxy`/`https.proxy`**：本机代理 `127.0.0.1:7890` 未开启时会导致 `Failed to connect to github.com:443 over proxy`，直连 HTTPS 可正常推送。
+- 远端为 `https://github.com/fancyun/akioi.git`，主分支 `main`。推送必须走本机代理：仓库内已配置 `http.proxy`/`https.proxy = http://127.0.0.1:7890`；代理未启动时直连 github.com:443 也会超时，报 `Failed to connect to github.com:443` 时先确认代理已运行再重试。
 - push 时直接提交项目内全部改动（`git add -A` 全量暂存），无需只挑选本会话修改的文件。
 - 仓库只保留源码；编译产物、生成目录、日志、`./data`、`.env`、测试数据一律 gitignore / 删除。
 
