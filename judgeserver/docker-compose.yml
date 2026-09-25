@@ -1,6 +1,6 @@
 # 评测节点：可部署在独立机器上，通过 .env 指向主站的 MySQL 与 Redis（主站见 ../main）。
 # 首次部署：
-#   1. cp .env.example .env 并填写 DB_HOST / DB_PASSWORD / REDIS_ADDR / REDIS_PASSWORD / HOST_TESTDATA_DIR / HOST_WORK_DIR
+#   1. cp .env.example .env 并填写 DB_HOST / DB_PASSWORD / REDIS_ADDR / REDIS_PASSWORD / JUDGE_SYNC_SECRET / HOST_TESTDATA_DIR / HOST_WORK_DIR
 #   2. docker compose --profile sandbox build sandbox    # 构建判题沙箱镜像 akioi-sandbox:latest
 #   3. docker compose up -d --build                      # 启动 judge
 # 判题沙箱镜像不是常驻服务，只用于给 judge 提供隔离运行环境，因此放在 sandbox profile 下。
@@ -22,6 +22,9 @@ services:
       - ./data/logs:/app/logs
       - ./data/testdata:/app/testdata
       - ./data/work:/app/work
+    ports:
+      # 主站推送测试数据使用；只对主站开放，不要暴露到公网
+      - "${JUDGE_LISTEN_PORT:-9100}:9100"
 
   sandbox:
     image: akioi-sandbox:latest

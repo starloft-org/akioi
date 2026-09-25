@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -168,13 +169,20 @@ func (s *TestdataService) Delete(problemID uint) error {
 
 // Zip 打包测试数据，供管理员与出题人下载。
 func (s *TestdataService) Zip(problemID uint) ([]byte, error) {
-	dir := s.Dir(problemID)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+	buf := new(bytes.Buffer)
+	if err := writeZip(buf, s.Dir(problemID)); err != nil {
 		return nil, err
 	}
-	buf := new(bytes.Buffer)
-	zw := zip.NewWriter(buf)
+	return buf.Bytes(), nil
+}
+
+// writeZip 把目录下的文件写入 zip 流。
+func writeZip(w io.Writer, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	zw := zip.NewWriter(w)
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -182,22 +190,19 @@ func (s *TestdataService) Zip(problemID uint) ([]byte, error) {
 		content, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			_ = zw.Close()
-			return nil, err
+			return err
 		}
-		w, err := zw.Create(e.Name())
+		fw, err := zw.Create(e.Name())
 		if err != nil {
 			_ = zw.Close()
-			return nil, err
+			return err
 		}
-		if _, err := w.Write(content); err != nil {
+		if _, err := fw.Write(content); err != nil {
 			_ = zw.Close()
-			return nil, err
+			return err
 		}
 	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return zw.Close()
 }
 
 // ExtractZip 展开上传的 zip 数据包，返回文件名到内容的映射。

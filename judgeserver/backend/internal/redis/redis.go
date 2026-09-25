@@ -1,4 +1,4 @@
-// Package redis 提供评测进程使用的 Redis 连接。
+// Package redis 提供评测进程使用的 Redis 连接与任务锁键约定。
 package redis
 
 import (
@@ -10,6 +10,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 )
+
+// KeyJudgeLockPrefix 为单次评测任务的占用锁前缀，完整键为 {前缀}{提交ID}:{judge_token}。
+const KeyJudgeLockPrefix = "akioi:judge:lock:"
 
 // Connect 建立 Redis 连接并探测可用性。
 func Connect(cfg *config.Config) (*redis.Client, error) {

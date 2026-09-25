@@ -19,11 +19,16 @@ type WeChatConfig struct {
 	RedirectURI string
 }
 
-// JudgeConfig 为主站侧评测相关配置：投递队列与测试数据存储。
+// JudgeConfig 为主站侧评测相关配置：投递队列、测试数据存储与评测节点同步。
 type JudgeConfig struct {
 	QueueKey     string
 	TestdataDir  string
 	MaxTestcases int
+
+	// 测试数据变动后依次推送到下列评测节点
+	NodeEndpoints  []string
+	SyncSecret     string
+	SyncTimeoutSec int
 }
 
 type Config struct {
@@ -105,6 +110,10 @@ func Load() (*Config, error) {
 			QueueKey:     getEnv("JUDGE_QUEUE_KEY", "akioi:judge:queue"),
 			TestdataDir:  getEnv("TESTDATA_DIR", "/app/testdata"),
 			MaxTestcases: getEnvInt("MAX_TESTCASES", 100),
+
+			NodeEndpoints:  splitAndTrim(getEnv("JUDGE_NODE_ENDPOINTS", "")),
+			SyncSecret:     getEnv("JUDGE_SYNC_SECRET", ""),
+			SyncTimeoutSec: getEnvInt("JUDGE_SYNC_TIMEOUT_SEC", 120),
 		},
 
 		LogDir:   getEnv("LOG_DIR", "/app/logs"),
@@ -132,6 +141,9 @@ func (c *Config) validate() error {
 	}
 	if c.RedisAddr == "" {
 		return fmt.Errorf("REDIS_ADDR 未配置")
+	}
+	if len(c.Judge.NodeEndpoints) > 0 && c.Judge.SyncSecret == "" {
+		return fmt.Errorf("配置了 JUDGE_NODE_ENDPOINTS 时必须同时配置 JUDGE_SYNC_SECRET")
 	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"akioi/internal/agent"
 	"akioi/internal/config"
 	"akioi/internal/database"
 	"akioi/internal/judge"
@@ -60,10 +61,17 @@ func main() {
 		logger.Judgef("已重新投递 %d 条未完成的提交", count)
 	}
 
-	engine := judge.New(cfg, db)
+	engine := judge.New(cfg, db, rdb)
 	q := queue.New(rdb, cfg.Judge.QueueKey)
 	workers := cfg.Judge.Concurrency
 	logger.Businessf("评测进程启动，并发度 %d，队列 %s", workers, cfg.Judge.QueueKey)
+
+	// 控制面：接收主站推送的测试数据；未配置密钥时不监听。
+	if cfg.Judge.SyncSecret == "" {
+		logger.Errorf("JUDGE_SYNC_SECRET 未配置，测试数据接收接口未启用")
+	} else {
+		go agent.New(cfg).Run(ctx)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {

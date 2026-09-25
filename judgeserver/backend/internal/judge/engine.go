@@ -13,7 +13,9 @@ import (
 	"akioi/internal/config"
 	"akioi/internal/logger"
 	"akioi/internal/model"
+	"akioi/internal/redis"
 
+	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -26,15 +28,27 @@ var (
 type Engine struct {
 	cfg *config.Config
 	db  *gorm.DB
+	rdb *goredis.Client
 	sb  *Sandbox
 }
 
-func New(cfg *config.Config, db *gorm.DB) *Engine {
-	return &Engine{cfg: cfg, db: db, sb: NewSandbox(&cfg.Judge)}
+func New(cfg *config.Config, db *gorm.DB, rdb *goredis.Client) *Engine {
+	return &Engine{cfg: cfg, db: db, rdb: rdb, sb: NewSandbox(&cfg.Judge)}
 }
 
 // Judge 执行一次评测；仅当 submission 的 judge_token 与 token 一致时回写结果。
 func (e *Engine) Judge(ctx context.Context, submissionID uint, token string) error {
+	release, owned, err := e.acquire(ctx, submissionID, token)
+	if err != nil {
+		// 锁不可用时继续评测：结果以 judge_token 校验，重复写回的值相同。
+		logger.Errorf("获取评测占用锁失败 submission=%d err=%v", submissionID, err)
+	} else if !owned {
+		logger.Judgef("提交 %d 正由其它评测节点处理，跳过本次任务", submissionID)
+		return nil
+	} else {
+		defer release()
+	}
+
 	var sub model.Submission
 	if err := e.db.First(&sub, submissionID).Error; err != nil {
 		return fmt.Errorf("提交 %d 不存在: %w", submissionID, err)
@@ -142,7 +156,7 @@ func (e *Engine) Judge(ctx context.Context, submissionID uint, token string) err
 		return err
 	}
 	if finalStatus == model.StatusAccepted {
-		e.markAccepted(&sub, &prob)
+		e.markAccepted(prob.ID)
 	}
 	logger.Judgef("提交 %d 评测完成 status=%s score=%d time=%dms memory=%dKB", sub.ID, finalStatus, totalScore, maxTimeMS, maxMemoryKB)
 	return nil
@@ -271,17 +285,39 @@ func (e *Engine) finish(sub model.Submission, token, status string, score int,
 	return nil
 }
 
-// markAccepted 在选手首次通过该题时递增题目通过数。
-func (e *Engine) markAccepted(sub *model.Submission, prob *model.Problem) {
-	var prev int64
-	e.db.Model(&model.Submission{}).
-		Where("user_id = ? AND problem_id = ? AND status = ? AND id <> ?", sub.UserID, prob.ID, model.StatusAccepted, sub.ID).
-		Count(&prev)
-	if prev > 0 {
-		return
+// acquire 抢占本次评测任务的占用锁，返回释放函数与是否抢到锁。
+// 多节点同时收到同一 token 的任务时只有抢到锁的节点执行评测。
+func (e *Engine) acquire(ctx context.Context, submissionID uint, token string) (func(), bool, error) {
+	key := fmt.Sprintf("%s%d:%s", redis.KeyJudgeLockPrefix, submissionID, token)
+	ttl := time.Duration(e.cfg.Judge.TaskTimeoutSec+60) * time.Second
+	ok, err := e.rdb.SetNX(ctx, key, token, ttl).Result()
+	if err != nil {
+		return nil, false, err
 	}
-	e.db.Model(&model.Problem{}).Where("id = ?", prob.ID).
-		UpdateColumn("accepted_count", gorm.Expr("accepted_count + 1"))
+	if !ok {
+		return nil, false, nil
+	}
+	release := func() {
+		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = e.rdb.Eval(releaseCtx, releaseLockScript, []string{key}, token).Err()
+	}
+	return release, true, nil
+}
+
+// releaseLockScript 仅在锁值仍属于自己时删除，避免误删超时后被他节点抢占的锁。
+const releaseLockScript = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0`
+
+// markAccepted 重算题目的通过人数，口径为去重后的通过用户数；
+// 单条 SQL 完成，重测与多节点并发都不会重复计数。
+func (e *Engine) markAccepted(problemID uint) {
+	err := e.db.Exec(`UPDATE problems SET accepted_count = (
+	SELECT COUNT(DISTINCT s.user_id) FROM submissions s
+	WHERE s.problem_id = problems.id AND s.status = ?) WHERE id = ?`,
+		model.StatusAccepted, problemID).Error
+	if err != nil {
+		logger.Errorf("重算题目通过人数失败 problem=%d err=%v", problemID, err)
+	}
 }
 
 func (e *Engine) hostTestdataDir() string {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -405,7 +406,7 @@ func (h *Handler) AdminDeleteProblem(c *gin.Context) {
 		httpx.ServerError(c, "删除题目失败")
 		return
 	}
-	httpx.OK(c, gin.H{})
+	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
 }
 
 // nextProblemDisplayID 从 P1001 起递增，返回首个未被占用的题号。
@@ -542,7 +543,11 @@ func (h *Handler) AdminUploadTestdata(c *gin.Context) {
 		httpx.ServerError(c, "查询测试数据失败")
 		return
 	}
-	httpx.OK(c, gin.H{"items": items, "total_score": testcaseTotalScore(items)})
+	httpx.OK(c, gin.H{
+		"items":       items,
+		"total_score": testcaseTotalScore(items),
+		"sync_failed": h.Testdata.SyncToNodes(syncContext(c), p.ID),
+	})
 }
 
 // AdminDeleteTestdata 清空某题的测试数据。
@@ -560,7 +565,12 @@ func (h *Handler) AdminDeleteTestdata(c *gin.Context) {
 		httpx.ServerError(c, "删除测试数据失败")
 		return
 	}
-	httpx.OK(c, gin.H{})
+	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
+}
+
+// syncContext 以不随客户端断连取消的上下文同步数据，保证推送不会半途中断。
+func syncContext(c *gin.Context) context.Context {
+	return context.WithoutCancel(c.Request.Context())
 }
 
 // AdminDownloadTestdata 打包下载某题的测试数据。

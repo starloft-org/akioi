@@ -18,6 +18,7 @@ alwaysApply: true
 - API 与评测进程分离部署：`server` 通过 Redis 列表队列下发判题任务，`judge` 阻塞拉取任务并直接回写数据库；两者不通过 HTTP 互相调用。
 - **两侧共享契约**（改动必须同步到另一侧）：`internal/model/*`（表结构与常量）、`internal/queue.Task`（队列消息格式）、`.env` 的 `JUDGE_QUEUE_KEY`。
 - 路由一级段约定：`/api/v1/*`（用户侧 JSON API）、`/api/admin/v1/*`（管理后台，需登录 + 出题人/管理员角色）、`/healthz` 与 `/readyz`（探针）、`/uploads/*`（静态文件）。前端 SPA 的后台页面走前端路由 `/admin/*`，**不反代给后端**（因此后台接口前缀必须是 `/api/admin/v1`，避免与前端路由冲突）。
+- 评测节点另有控制面接口，不属站内 API、不经主站反代：`PUT|DELETE /internal/v1/testdata/{problemID}`，用 `X-Sync-Secret` 共享密钥校验（常量时间比较），只在 `JUDGE_LISTEN_ADDR` 上监听，仅对主站开放。
 - 修改代码后保持 `gofmt` 干净；提交前在 `main/backend` 与 `judgeserver/backend` 两个 module 下分别确认 `go build ./...`、`go vet ./...`、`go test ./...` 通过。
 
 ## 2. 部署与网络
@@ -26,7 +27,8 @@ alwaysApply: true
 - 后端仅在容器内网暴露 `8080`（`expose`，不映射宿主端口）；对外 TLS 终止与域名分发由宿主机/1Panel Nginx 反代到前端容器端口，需透传 `Host` 头与真实 IP（`X-Real-IP`/`X-Forwarded-For`）。
 - 反代到后端必须用「变量 + 无 URI 的 proxy_pass」：`proxy_pass http://$backend_endpoint;`（在 `proxy_pass` 里写 URI 会截断剩余路径）；变量与 `resolver 127.0.0.11` 必须保留（运行期解析 compose 服务名，避免 DNS 未就绪启动失败）。
 - **判题通过 docker-outside-of-docker 实现**：`judge` 挂载 `/var/run/docker.sock` 与本机同路径的 `judgeserver/data/testdata`、`judgeserver/data/work`，用 `docker run` 创建一次性沙箱容器；因此 `HOST_TESTDATA_DIR`/`HOST_WORK_DIR` 必须配成本机绝对路径，否则沙箱挂载的是不存在的路径。`docker.sock` 只给 `judge`，不给 `server`。
-- **跨机分布式部署**：评测节点通过 `.env` 的 `DB_HOST`/`REDIS_ADDR` 连接主站；与主站同机部署填 `host.docker.internal`，跨机填主站内网 IP。主站的 MySQL/Redis 默认只绑 `127.0.0.1`（`DB_BIND_ADDR`/`REDIS_BIND_ADDR`），跨机部署时改为内网 IP 并用防火墙把来源限制为评测机，禁止暴露到公网。测试数据落文件系统，两侧 `data/testdata/{problemID}/` 必须保持一致。
+- **跨机分布式部署**：评测节点通过 `.env` 的 `DB_HOST`/`REDIS_ADDR` 连接主站；与主站同机部署填 `host.docker.internal`，跨机填主站内网 IP。主站的 MySQL/Redis 默认只绑 `127.0.0.1`（`DB_BIND_ADDR`/`REDIS_BIND_ADDR`），跨机部署时改为内网 IP 并用防火墙把来源限制为评测机，禁止暴露到公网。
+- **测试数据分发**：测试数据落文件系统，主站改动后按 `JUDGE_NODE_ENDPOINTS` 的顺序**依次**推送到各评测节点，单个节点失败只记录并继续，接口响应返回 `sync_failed` 节点列表供前端提示；推送把 zip 打到临时文件后流式上传，不整包进内存。节点侧先写临时目录再改名替换，避免留下半个数据包；节点未配置 `JUDGE_SYNC_SECRET` 时不监听接收接口。
 - 数据持久化到各自目录下的 `data/`：主站 `main/data/`（`mysql`、`redis`、`logs`、`testdata`、`uploads`），评测节点 `judgeserver/data/`（`logs`、`testdata`、`work`），全部 gitignore；容器以 root 运行，bind mount 目录由 Docker 自动创建即可写。
 
 ## 3. 数据库
@@ -48,7 +50,7 @@ alwaysApply: true
 - 回调/回跳地址硬编码进代码（与业务深度耦合，改动需改码）。
 - **`.env` 与同目录的 `.env.example` 结构必须完全一致**：注释、分组标题、键名、键顺序逐行对齐，仅取值可不同。`.env.example` 按逻辑顺序分组并用连续序号编号。
 - 每次修改 `.env.example` 后必须同步改同目录的 `.env`：保留已配置的值（含密钥、PEM 等多行 `\n` 字面量原样不动），删除已废弃键，新增键按 `.env.example` 补齐；同步后逐行结构（把所有 `KEY=值` 归一为 `KEY=` 后比较）应完全相同。
-- `.env` 含真实密钥，只保留在本地/服务器，禁止提交仓库。两侧 `.env` 中的 `DB_PASSWORD`/`REDIS_PASSWORD`/`JUDGE_QUEUE_KEY` 必须一致。
+- `.env` 含真实密钥，只保留在本地/服务器，禁止提交仓库。两侧 `.env` 中的 `DB_PASSWORD`/`REDIS_PASSWORD`/`JUDGE_QUEUE_KEY`/`JUDGE_SYNC_SECRET` 必须一致。
 
 ## 5. 日志
 
@@ -67,7 +69,8 @@ alwaysApply: true
 - 评测任务通过 Redis 列表队列下发，**必须幂等**：任务带唯一 `judge_token`，回写时用 `WHERE id = ? AND judge_token = ?` 比对；judge 启动时重新投递 24 小时内 `Pending`/`Judging` 的提交，崩溃可自愈。
 - 编译参数、编译器路径、沙箱镜像、并发度统一在 `judgeserver/.env` 配置，不得散落在代码中；语言白名单在 `judgeserver/backend/internal/judge/lang.go` 的 `ResolveLanguage` 登记编译与运行方式，并在两侧 `internal/model/constants.go` 的 `SupportedLanguages()` 中登记对前端暴露的键与名称，新增语言必须两侧同步。
 - 评测机磁盘与 CPU 是共享资源：并发评测数受 `JUDGE_CONCURRENCY` 限制，队列积压时不得无限创建容器；`JUDGE_CONCURRENCY` 是单节点并发，总并发为节点数之和。
-- **多评测节点限制**：`judge.RequeueUnfinished` 在 judge 启动时全量重投 24 小时内未完成的提交，多节点同时在线会把同一条提交重复投递（token 相同、两侧都能回写）；`markAccepted` 的「先 Count 再加一」在并发下会重复计数。上多节点前必须先给任务加 Redis 占用锁、并把通过数自增改为原子更新。
+- **多评测节点去重**：`RequeueUnfinished` 会在 judge 启动时全量重投 24 小时内未完成的提交，多节点会重复投递；`Engine.Judge` 执行前用 Redis 锁 `akioi:judge:lock:{提交ID}:{judge_token}`（TTL = `JUDGE_TASK_TIMEOUT_SEC` + 60s）抢占，抢不到直接跳过，释放时用 Lua 校验锁值以免误删超时后被他节点抢占的锁。锁键含 token，因此重测（新 token）不会被旧任务的锁挡住。
+- 题目通过人数 `accepted_count` 由 `Engine.markAccepted` 用单条 SQL 重算（`COUNT(DISTINCT user_id)`），重测与多节点并发都不会重复计数。
 
 ## 7. 权限与赛制
 
@@ -83,7 +86,7 @@ alwaysApply: true
 - 响应格式统一由 `internal/httpx` 输出 JSON `{code, message, data}`，`code == 0` 成功；HTTP 状态码与业务语义对齐；字段名与前端契约绑定，改动需同步前端。统一使用 `httpx.OK/Fail/BadRequest/NotFound/Conflict/ServerError` 与 `httpx.CurrentUser/MustUser/Pagination/List/PathID`。
 - 中间件为返回 `gin.HandlerFunc` 的工厂函数，依赖经参数注入；限流基于 Redis 滑动窗口（Lua 脚本），管理员豁免，Redis 不可用 fail-closed。
 - 主站启动顺序（`main/backend/cmd/server/main.go`）：`config.Load()` → `logger.Init` → `migrate.Run` → `database.Connect` → `AutoMigrate` → `database.Seed` → `redis.Connect` → `router.Setup(handler.New(db, cfg, rdb), cfg, db, rdb)` → `r.Run(addr)`。
-- 评测节点启动顺序（`judgeserver/backend/cmd/judge/main.go`）：`config.Load()` → `logger.Init` → `database.Connect` → `redis.Connect` → 沙箱自检 → `judge.RequeueUnfinished` → 按 `JUDGE_CONCURRENCY` 起多 worker 阻塞消费队列。
+- 评测节点启动顺序（`judgeserver/backend/cmd/judge/main.go`）：`config.Load()` → `logger.Init` → `database.Connect` → `redis.Connect` → 沙箱自检 → `judge.RequeueUnfinished` → 配置了 `JUDGE_SYNC_SECRET` 时启动测试数据接收接口 → 按 `JUDGE_CONCURRENCY` 起多 worker 阻塞消费队列。
 
 ## 9. Git 工作流
 

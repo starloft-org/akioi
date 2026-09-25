@@ -33,6 +33,11 @@ type JudgeConfig struct {
 	CCompiler         string
 	CStd              string
 	CFlags            string
+
+	// 控制面：接收主站推送的测试数据
+	ListenAddr    string
+	SyncSecret    string
+	MaxTestdataMB int
 }
 
 // Config 为评测节点配置，仅含连接主站与执行评测所需的项。
@@ -90,6 +95,10 @@ func Load() (*Config, error) {
 			CCompiler:         getEnv("C_COMPILER", "gcc"),
 			CStd:              getEnv("C_STD", "c11"),
 			CFlags:            getEnv("C_FLAGS", "-O2"),
+
+			ListenAddr:    getEnv("JUDGE_LISTEN_ADDR", ":9100"),
+			SyncSecret:    getEnv("JUDGE_SYNC_SECRET", ""),
+			MaxTestdataMB: getEnvInt("MAX_TESTDATA_MB", 512),
 		},
 
 		LogDir:   getEnv("LOG_DIR", "/app/logs"),

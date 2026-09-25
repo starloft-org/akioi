@@ -84,6 +84,16 @@ const scoresInput = ref('')
 
 const shortHash = (hash) => (hash ? `${hash.slice(0, 12)}…` : '-')
 
+// warnSyncFailed 提示未同步成功的评测节点，返回是否已给出提示。
+const warnSyncFailed = (payload) => {
+  const failed = payload?.sync_failed || []
+  if (!failed.length) {
+    return false
+  }
+  ElMessage.warning(`测试数据已保存，但以下评测节点同步失败：${failed.join('、')}`)
+  return true
+}
+
 const load = async () => {
   loading.value = true
   try {
@@ -122,8 +132,10 @@ const handleUpload = async () => {
   }
   uploading.value = true
   try {
-    await adminUploadTestdata(problemId.value, files, scores)
-    ElMessage.success('测试数据已替换')
+    const res = await adminUploadTestdata(problemId.value, files, scores)
+    if (!warnSyncFailed(res)) {
+      ElMessage.success('测试数据已替换')
+    }
     fileList.value = []
     scoresInput.value = ''
     load()
@@ -149,12 +161,15 @@ const clearTestdata = async () => {
   } catch (e) {
     return
   }
+  let res
   try {
-    await adminDeleteTestdata(problemId.value)
+    res = await adminDeleteTestdata(problemId.value)
   } catch (e) {
     return
   }
-  ElMessage.success('已清空')
+  if (!warnSyncFailed(res)) {
+    ElMessage.success('已清空')
+  }
   load()
 }
 
