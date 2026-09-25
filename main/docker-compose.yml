@@ -1,5 +1,5 @@
 # 主站：MySQL + Redis + 后端 API + 前端。
-# 评测节点已拆分到 ../JudgeServer，可部署在本机或独立机器，本文件不再包含 judge。
+# 评测节点已拆分到 ../judgeserver，可部署在本机或独立机器，本文件不再包含 judge。
 # 首次部署：
 #   1. cp .env.example .env 并按注释填写（必须改 DB_PASSWORD / REDIS_PASSWORD / JWT_SECRET）
 #   2. docker compose up -d --build

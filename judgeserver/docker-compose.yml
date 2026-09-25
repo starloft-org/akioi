@@ -1,4 +1,4 @@
-# 评测节点：可部署在独立机器上，通过 .env 指向主站的 MySQL 与 Redis（主站见 ../Main）。
+# 评测节点：可部署在独立机器上，通过 .env 指向主站的 MySQL 与 Redis（主站见 ../main）。
 # 首次部署：
 #   1. cp .env.example .env 并填写 DB_HOST / DB_PASSWORD / REDIS_ADDR / REDIS_PASSWORD / HOST_TESTDATA_DIR / HOST_WORK_DIR
 #   2. docker compose --profile sandbox build sandbox    # 构建判题沙箱镜像 akioi-sandbox:latest
