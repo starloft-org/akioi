@@ -1,0 +1,185 @@
+package handler
+
+import (
+	"errors"
+	"strings"
+	"time"
+
+	"akioi/internal/httpx"
+	"akioi/internal/model"
+	"akioi/internal/service"
+
+	"github.com/gin-gonic/gin"
+)
+
+// SubmissionItem 是提交列表与详情共用的视图，不含源码。
+type SubmissionItem struct {
+	ID               uint       `json:"id"`
+	UserID           uint       `json:"user_id"`
+	Username         string     `json:"username"`
+	Nickname         string     `json:"nickname"`
+	ProblemID        uint       `json:"problem_id"`
+	ProblemDisplayID string     `json:"problem_display_id"`
+	ProblemTitle     string     `json:"problem_title"`
+	ContestID        uint       `json:"contest_id"`
+	Language         string     `json:"language"`
+	Status           string     `json:"status"`
+	Score            int        `json:"score"`
+	TimeMS           int        `json:"time_ms"`
+	MemoryKB         int        `json:"memory_kb"`
+	CodeLength       int        `json:"code_length"`
+	CreatedAt        time.Time  `json:"created_at"`
+	JudgedAt         *time.Time `json:"judged_at"`
+}
+
+type submitRequest struct {
+	ProblemID uint   `json:"problem_id"`
+	ContestID uint   `json:"contest_id"`
+	Language  string `json:"language"`
+	Code      string `json:"code"`
+}
+
+// CreateSubmission 校验并创建提交，随即投递评测任务。
+func (h *Handler) CreateSubmission(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	var req submitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+	sub, err := h.Judge.Submit(c.Request.Context(), service.SubmitInput{
+		UserID:    u.ID,
+		ProblemID: req.ProblemID,
+		ContestID: req.ContestID,
+		Language:  req.Language,
+		Code:      req.Code,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrSubmitTooFast):
+			httpx.TooMany(c, httpx.CodeSubmitTooFast, err.Error())
+		case errors.Is(err, service.ErrProblemNotVisible), errors.Is(err, service.ErrContestNotRunning),
+			errors.Is(err, service.ErrNotRegistered), errors.Is(err, service.ErrCodeTooLong),
+			errors.Is(err, service.ErrLanguageInvalid):
+			httpx.BadRequest(c, err.Error())
+		default:
+			httpx.ServerError(c, err.Error())
+		}
+		return
+	}
+	httpx.OK(c, gin.H{"submission_id": sub.ID, "status": sub.Status})
+}
+
+// ListSubmissions 返回提交列表；普通用户只能查看自己的提交。
+func (h *Handler) ListSubmissions(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	items, total, page, pageSize, err := h.querySubmissions(c, u, 0)
+	if err != nil {
+		httpx.ServerError(c, "查询提交失败")
+		return
+	}
+	httpx.OK(c, httpx.List(total, page, pageSize, items))
+}
+
+// GetSubmission 返回提交详情；源码仅本人与出题人/管理员可见。
+func (h *Handler) GetSubmission(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	id, ok := httpx.PathID(c, "id")
+	if !ok {
+		return
+	}
+	var sub model.Submission
+	if err := h.DB.First(&sub, id).Error; err != nil {
+		httpx.NotFound(c, "提交不存在")
+		return
+	}
+	isManager := u.CanManageProblems()
+	if sub.UserID != u.ID && !isManager {
+		httpx.Forbidden(c, "无权查看该提交")
+		return
+	}
+	if sub.ContestID > 0 && !isManager && !h.contestRevealed(sub.ContestID) {
+		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
+		return
+	}
+
+	items := h.decorateSubmissions([]model.Submission{sub})
+	canSeeCode := isManager || sub.UserID == u.ID
+	data := gin.H{
+		"submission":       items[0],
+		"code_visible":     canSeeCode,
+		"testcase_results": sub.Results(),
+	}
+	if canSeeCode {
+		data["code"] = sub.Code
+	}
+	if sub.Status == model.StatusCompileError {
+		data["compile_error"] = sub.CompileError
+	}
+	if sub.JudgeMessage != "" {
+		data["judge_message"] = sub.JudgeMessage
+	}
+	httpx.OK(c, data)
+}
+
+// querySubmissions 组装提交列表查询，contestID 为 0 时按参数中的 contest_id 过滤。
+func (h *Handler) querySubmissions(c *gin.Context, u *model.User, contestID uint) ([]SubmissionItem, int64, int, int, error) {
+	page, pageSize, offset := httpx.Pagination(c)
+
+	query := h.DB.Model(&model.Submission{})
+	if contestID > 0 {
+		query = query.Where("contest_id = ?", contestID)
+	} else if raw := strings.TrimSpace(c.Query("contest_id")); raw != "" {
+		if raw == "0" {
+			query = query.Where("contest_id = 0")
+		} else {
+			query = query.Where("contest_id = ?", httpx.QueryUint(c, "contest_id"))
+		}
+	}
+	if pid := httpx.QueryUint(c, "problem_id"); pid > 0 {
+		query = query.Where("problem_id = ?", pid)
+	}
+	if lang := strings.TrimSpace(c.Query("language")); lang != "" {
+		query = query.Where("language = ?", lang)
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	isManager := u.CanManageProblems()
+	uid := httpx.QueryUint(c, "user_id")
+	if !isManager {
+		// 普通用户仅能查看本人提交，避免比赛期间泄露他人成绩。
+		query = query.Where("user_id = ?", u.ID)
+	} else if uid > 0 {
+		query = query.Where("user_id = ?", uid)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, 0, 0, err
+	}
+	var subs []model.Submission
+	if err := query.Order("id desc").Offset(offset).Limit(pageSize).Find(&subs).Error; err != nil {
+		return nil, 0, 0, 0, err
+	}
+	return h.decorateSubmissions(subs), total, page, pageSize, nil
+}
+
+// contestRevealed 判断比赛是否已过封榜可公开查看他人提交。
+func (h *Handler) contestRevealed(contestID uint) bool {
+	var contest model.Contest
+	if err := h.DB.First(&contest, contestID).Error; err != nil {
+		return false
+	}
+	return !time.Now().Before(contest.EndAt)
+}

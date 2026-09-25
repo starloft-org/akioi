@@ -1,0 +1,162 @@
+<template>
+  <div class="panel">
+    <h3 class="panel__title">测试数据</h3>
+    <p class="muted">题目 ID：{{ problemId }}　测试点数量：{{ items.length }}　总分：{{ totalScore }}</p>
+
+    <el-alert
+      type="warning"
+      :closable="false"
+      show-icon
+      title="上传会整体替换该题现有的全部测试数据"
+      style="margin-bottom: 12px"
+    />
+
+    <div class="toolbar">
+      <el-upload
+        v-model:file-list="fileList"
+        action="#"
+        multiple
+        :auto-upload="false"
+        accept=".in,.out,.ans,.zip"
+      >
+        <el-button>选择文件</el-button>
+      </el-upload>
+      <el-input
+        v-model="scoresInput"
+        placeholder="各测试点分值 JSON 数组，留空为均分，例如 [10,10,80]"
+        style="width: 340px"
+      />
+      <el-button type="primary" :loading="uploading" :disabled="!fileList.length" @click="handleUpload">
+        上传并替换
+      </el-button>
+    </div>
+
+    <el-table v-loading="loading" :data="items" border>
+      <el-table-column prop="index" label="测试点" width="90" />
+      <el-table-column prop="score" label="分值" width="80" />
+      <el-table-column label="输入大小" width="110">
+        <template #default="{ row }">{{ formatFileSize(row.input_size) }}</template>
+      </el-table-column>
+      <el-table-column label="输出大小" width="110">
+        <template #default="{ row }">{{ formatFileSize(row.output_size) }}</template>
+      </el-table-column>
+      <el-table-column label="输入 SHA256" min-width="160">
+        <template #default="{ row }">
+          <span class="mono" :title="row.input_hash">{{ shortHash(row.input_hash) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="输出 SHA256" min-width="160">
+        <template #default="{ row }">
+          <span class="mono" :title="row.output_hash">{{ shortHash(row.output_hash) }}</span>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div class="toolbar" style="margin-top: 16px">
+      <el-button @click="downloadPackage">下载数据包</el-button>
+      <el-button :disabled="!items.length" @click="clearTestdata">清空测试数据</el-button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  adminDeleteTestdata,
+  adminDownloadTestdata,
+  adminListTestdata,
+  adminUploadTestdata,
+  saveBlob
+} from '@/api'
+import { formatFileSize } from '@/utils/format'
+
+const route = useRoute()
+const problemId = computed(() => Number(route.params.id))
+
+const loading = ref(false)
+const uploading = ref(false)
+const items = ref([])
+const totalScore = ref(0)
+const fileList = ref([])
+const scoresInput = ref('')
+
+const shortHash = (hash) => (hash ? `${hash.slice(0, 12)}…` : '-')
+
+const load = async () => {
+  loading.value = true
+  try {
+    const data = await adminListTestdata(problemId.value)
+    items.value = data.items || []
+    totalScore.value = data.total_score ?? 0
+  } catch (e) {
+    items.value = []
+    totalScore.value = 0
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleUpload = async () => {
+  const files = fileList.value.map((item) => item.raw).filter(Boolean)
+  if (!files.length) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+  let scores = null
+  const text = scoresInput.value.trim()
+  if (text) {
+    let parsed
+    try {
+      parsed = JSON.parse(text)
+    } catch (e) {
+      ElMessage.error('分值需为 JSON 数字数组，例如 [10,10,80]')
+      return
+    }
+    if (!Array.isArray(parsed) || parsed.some((num) => typeof num !== 'number')) {
+      ElMessage.error('分值需为 JSON 数字数组，例如 [10,10,80]')
+      return
+    }
+    scores = parsed
+  }
+  uploading.value = true
+  try {
+    await adminUploadTestdata(problemId.value, files, scores)
+    ElMessage.success('测试数据已替换')
+    fileList.value = []
+    scoresInput.value = ''
+    load()
+  } catch (e) {
+    // 错误提示已由请求层处理
+  } finally {
+    uploading.value = false
+  }
+}
+
+const downloadPackage = async () => {
+  try {
+    const blob = await adminDownloadTestdata(problemId.value)
+    saveBlob(blob, `problem-${problemId.value}-testdata.zip`)
+  } catch (e) {
+    // 错误提示已由请求层处理
+  }
+}
+
+const clearTestdata = async () => {
+  try {
+    await ElMessageBox.confirm('确认清空该题的全部测试数据？', '清空确认', { type: 'warning' })
+  } catch (e) {
+    return
+  }
+  try {
+    await adminDeleteTestdata(problemId.value)
+  } catch (e) {
+    return
+  }
+  ElMessage.success('已清空')
+  load()
+}
+
+onMounted(load)
+</script>

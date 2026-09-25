@@ -1,0 +1,13 @@
+.env
+data/
+node_modules/
+frontend/dist/
+dist/
+*.log
+*.exe
+.DS_Store
+coverage/
+*.test
+.idea/
+.vscode/
+tmp/
