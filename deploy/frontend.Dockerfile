@@ -2,8 +2,11 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+# npm 镜像（国内镜像，避免访问 registry.npmjs.org 超时）
+ENV NPM_CONFIG_REGISTRY=https://mirrors.cloud.tencent.com/npm/
+
 COPY frontend/package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm install --prefer-offline --no-audit --no-fund
 
 COPY frontend/ ./
 RUN npm run build

@@ -5,6 +5,9 @@ RUN apk add --no-cache git
 
 WORKDIR /src
 
+# Go 模块代理（国内镜像，避免访问 proxy.golang.org 超时）
+ENV GOPROXY=https://mirrors.tencent.com/go/,https://goproxy.cn,direct
+
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
