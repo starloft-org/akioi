@@ -43,10 +43,9 @@ type JudgeConfig struct {
 }
 
 type Config struct {
-	AppName      string
-	Env          string
-	ServerAddr   string
-	FrontendPort int
+	AppName    string
+	Env        string
+	ServerAddr string
 
 	DBHost        string
 	DBPort        int
@@ -87,10 +86,9 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		AppName:      getEnv("APP_NAME", "AKIOI"),
-		Env:          getEnv("APP_ENV", "production"),
-		ServerAddr:   getEnv("SERVER_ADDR", ":8080"),
-		FrontendPort: getEnvInt("FRONTEND_PORT", 3000),
+		AppName:    getEnv("APP_NAME", "AKIOI"),
+		Env:        getEnv("APP_ENV", "production"),
+		ServerAddr: getEnv("SERVER_ADDR", ":8080"),
 
 		DBHost:        getEnv("DB_HOST", "mysql"),
 		DBPort:        getEnvInt("DB_PORT", 3306),
