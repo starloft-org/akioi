@@ -1,7 +1,6 @@
 .env
 data/
 node_modules/
-frontend/dist/
 dist/
 *.log
 *.exe

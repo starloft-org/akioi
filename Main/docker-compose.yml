@@ -1,0 +1,79 @@
+# 主站：MySQL + Redis + 后端 API + 前端。
+# 评测节点已拆分到 ../JudgeServer，可部署在本机或独立机器，本文件不再包含 judge。
+# 首次部署：
+#   1. cp .env.example .env 并按注释填写（必须改 DB_PASSWORD / REDIS_PASSWORD / JWT_SECRET）
+#   2. docker compose up -d --build
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: akioi_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: akioi
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    ports:
+      # 独立评测节点需要直连主站数据库；默认只绑本机回环，
+      # 同内网部署时把 DB_BIND_ADDR 改为主站内网 IP，并用防火墙把来源限制为评测机。
+      - "${DB_BIND_ADDR:-127.0.0.1}:3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: akioi_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ./data/redis:/data
+    ports:
+      # 同 MySQL，默认只绑本机回环；跨机部署时改 REDIS_BIND_ADDR 为内网 IP。
+      - "${REDIS_BIND_ADDR:-127.0.0.1}:6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: deploy/backend.Dockerfile
+    image: akioi-backend:latest
+    container_name: akioi_server
+    restart: unless-stopped
+    command: ["/app/server"]
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+      REDIS_ADDR: redis:6379
+    expose:
+      - "8080"
+    volumes:
+      - ./data/logs:/app/logs
+      - ./data/testdata:/app/testdata
+      - ./data/uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/frontend.Dockerfile
+    container_name: akioi_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      - server
