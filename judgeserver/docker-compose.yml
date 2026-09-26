@@ -7,8 +7,7 @@
 services:
   judge:
     build:
-      context: .
-      dockerfile: deploy/judge.Dockerfile
+      context: ./backend
     image: akioi-judge:latest
     container_name: akioi_judge
     restart: unless-stopped
@@ -29,7 +28,7 @@ services:
   sandbox:
     image: akioi-sandbox:latest
     build:
-      context: deploy/sandbox
+      context: ./sandbox
     profiles:
       - sandbox
     entrypoint:

@@ -24,6 +24,8 @@ alwaysApply: true
 ## 2. 部署与网络
 
 - `main/docker-compose.yml` 编排 `mysql`、`redis`、`server`、`frontend`（Nginx 容器，内置前端构建产物 + SPA 回退，反代 `/api`、`/uploads` 至后端）；`judgeserver/docker-compose.yml` 编排 `judge` 与只在 `sandbox` profile 下按需构建的 `sandbox`（产出 `akioi-sandbox:latest` 镜像）。首次部署：主站 `cd main && docker compose up -d --build`；评测节点 `cd judgeserver && docker compose --profile sandbox build sandbox && docker compose up -d --build`。
+- 构建文件与被构建的目录放在一起，不设单独的 `deploy/`：`main/backend/Dockerfile`（server + akioi-cli）、`main/frontend/Dockerfile` 与 `main/frontend/nginx.conf`、`judgeserver/backend/Dockerfile`（judge）、`judgeserver/sandbox/Dockerfile`（沙箱镜像）。compose 的 `build.context` 指向对应子目录（`./backend`、`./frontend`、`./sandbox`），因此 Dockerfile 内的 COPY 路径以该子目录为根。
+- 前端构建上下文是 `frontend/`，`frontend/.dockerignore` 必须排除 `node_modules` 与 `dist`，否则本机的 `node_modules`（尤其 Windows 上安装的 esbuild/rollup 二进制）会进入镜像干扰构建。
 - 后端仅在容器内网暴露 `8080`（`expose`，不映射宿主端口）；对外 TLS 终止与域名分发由宿主机/1Panel Nginx 反代到前端容器端口，需透传 `Host` 头与真实 IP（`X-Real-IP`/`X-Forwarded-For`）。
 - 反代到后端必须用「变量 + 无 URI 的 proxy_pass」：`proxy_pass http://$backend_endpoint;`（在 `proxy_pass` 里写 URI 会截断剩余路径）；变量与 `resolver 127.0.0.11` 必须保留（运行期解析 compose 服务名，避免 DNS 未就绪启动失败）。
 - **判题通过 docker-outside-of-docker 实现**：`judge` 挂载 `/var/run/docker.sock` 与本机同路径的 `judgeserver/data/testdata`、`judgeserver/data/work`，用 `docker run` 创建一次性沙箱容器；因此 `HOST_TESTDATA_DIR`/`HOST_WORK_DIR` 必须配成本机绝对路径，否则沙箱挂载的是不存在的路径。`docker.sock` 只给 `judge`，不给 `server`。

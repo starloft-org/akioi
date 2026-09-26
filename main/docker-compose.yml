@@ -45,8 +45,7 @@ services:
 
   server:
     build:
-      context: .
-      dockerfile: deploy/backend.Dockerfile
+      context: ./backend
     image: akioi-backend:latest
     container_name: akioi_server
     restart: unless-stopped
@@ -69,8 +68,7 @@ services:
 
   frontend:
     build:
-      context: .
-      dockerfile: deploy/frontend.Dockerfile
+      context: ./frontend
     container_name: akioi_frontend
     restart: unless-stopped
     ports:
