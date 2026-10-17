@@ -17,6 +17,7 @@ type problemItem struct {
 	Difficulty     string    `json:"difficulty"`
 	Tags           []string  `json:"tags"`
 	Source         string    `json:"source"`
+	Points         int       `json:"points"`
 	TimeLimitMS    int       `json:"time_limit_ms"`
 	MemoryLimitMB  int       `json:"memory_limit_mb"`
 	SubmitCount    int       `json:"submit_count"`
@@ -83,6 +84,7 @@ func (h *Handler) ListProblems(c *gin.Context) {
 			Difficulty:     p.Difficulty,
 			Tags:           p.Tags(),
 			Source:         p.Source,
+			Points:         p.Points,
 			TimeLimitMS:    p.TimeLimitMS,
 			MemoryLimitMB:  p.MemoryLimitMB,
 			SubmitCount:    p.SubmitCount,
@@ -123,6 +125,7 @@ func (h *Handler) GetProblem(c *gin.Context) {
 		Difficulty:     p.Difficulty,
 		Tags:           p.Tags(),
 		Source:         p.Source,
+		Points:         p.Points,
 		TimeLimitMS:    p.TimeLimitMS,
 		MemoryLimitMB:  p.MemoryLimitMB,
 		SubmitCount:    p.SubmitCount,
@@ -153,6 +156,7 @@ func (h *Handler) GetProblem(c *gin.Context) {
 			"difficulty":      p.Difficulty,
 			"tags":            p.Tags(),
 			"source":          p.Source,
+			"points":          p.Points,
 			"submit_count":    p.SubmitCount,
 			"accepted_count":  p.AcceptedCount,
 			"acceptance_rate": item.AcceptanceRate,
@@ -186,9 +190,10 @@ func (h *Handler) ListLanguages(c *gin.Context) {
 func (h *Handler) SiteInfo(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"app_name":                      h.Cfg.AppName,
-		"register_enabled":              h.Cfg.RegisterEnabled,
+		"register_enabled":              h.Cfg.RegisterEnabled && h.SMS.Enabled(),
 		"register_invite_code_required": h.Cfg.RegisterInviteCode != "",
 		"wechat_enabled":                h.WeChat.Enabled(),
+		"sms_enabled":                   h.SMS.Enabled(),
 		"languages":                     model.SupportedLanguages(),
 	})
 }
@@ -197,7 +202,7 @@ func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 	if p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly {
 		return true
 	}
-	if u := httpx.CurrentUser(c); u != nil && u.CanManageProblems() {
+	if u := httpx.CurrentUser(c); u != nil && u.IsAdmin() {
 		return true
 	}
 	var count int64

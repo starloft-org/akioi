@@ -27,7 +27,7 @@ const usage = `用法: akioi-cli <command> [options]
   migrate                执行未应用的数据库迁移并补齐表结构
   status                 显示迁移状态
   reset-password         重置账号密码   -user <用户名> -password <新密码>
-  set-role               调整账号角色   -user <用户名> -role <admin|setter|user>
+  set-role               调整账号角色   -user <用户名> -role <admin|user>
   create-user            创建账号       -user <用户名> -password <密码> [-nickname 昵称] [-role 角色]
   import-users           批量导入 CSV   -file <路径> [-default-password 密码]
   rejudge                重新评测       [-problem <题号>] [-contest <比赛ID>] [-ids 1,2,3]
@@ -120,17 +120,13 @@ func runResetPassword(cfg *config.Config, args []string) {
 		fatal("密码长度至少 6 位")
 	}
 	db := withDB(cfg)
-	auth := service.NewAuth(db, withRedis(cfg), cfg)
-	hash, err := auth.HashPassword(*password)
-	if err != nil {
-		fatal("密码加密失败: " + err.Error())
-	}
-	res := db.Model(&model.User{}).Where("username = ?", *username).UpdateColumn("password_hash", hash)
-	if res.Error != nil {
-		fatal("重置失败: " + res.Error.Error())
-	}
-	if res.RowsAffected == 0 {
+	var u model.User
+	if err := db.Where("username = ?", *username).First(&u).Error; err != nil {
 		fatal("用户不存在: " + *username)
+	}
+	auth := service.NewAuth(db, withRedis(cfg), cfg)
+	if err := auth.ResetPassword(u.ID, *password); err != nil {
+		fatal("重置失败: " + err.Error())
 	}
 	fmt.Println("密码已重置:", *username)
 }
@@ -144,8 +140,8 @@ func runSetRole(cfg *config.Config, args []string) {
 	if *username == "" || *role == "" {
 		fatal("必须提供 -user 与 -role")
 	}
-	if *role != model.RoleAdmin && *role != model.RoleSetter && *role != model.RoleUser {
-		fatal("角色只能是 admin、setter 或 user")
+	if !model.ValidRole(*role) {
+		fatal("角色只能是 admin 或 user")
 	}
 	db := withDB(cfg)
 	res := db.Model(&model.User{}).Where("username = ?", *username).UpdateColumn("role", *role)
@@ -171,6 +167,9 @@ func runCreateUser(cfg *config.Config, args []string) {
 	}
 	if len(*password) < 6 {
 		fatal("密码长度至少 6 位")
+	}
+	if !model.ValidRole(*role) {
+		fatal("角色只能是 admin 或 user")
 	}
 	db := withDB(cfg)
 	var exists int64
@@ -245,13 +244,23 @@ func runImportUsers(cfg *config.Config, args []string) {
 		if len(row) > 2 && strings.TrimSpace(row[2]) != "" {
 			nickname = strings.TrimSpace(row[2])
 		}
-		email := ""
+		phone := ""
 		if len(row) > 3 {
-			email = strings.TrimSpace(row[3])
+			phone = strings.TrimSpace(row[3])
+			if phone != "" && !service.ValidPhone(phone) {
+				fmt.Printf("第 %d 行跳过：手机号格式不正确\n", i+1)
+				skipped++
+				continue
+			}
 		}
 		role := model.RoleUser
 		if len(row) > 4 && strings.TrimSpace(row[4]) != "" {
 			role = strings.TrimSpace(row[4])
+		}
+		if !model.ValidRole(role) {
+			fmt.Printf("第 %d 行跳过：角色只能是 admin 或 user\n", i+1)
+			skipped++
+			continue
 		}
 		var exists int64
 		db.Model(&model.User{}).Where("username = ?", username).Count(&exists)
@@ -267,7 +276,7 @@ func runImportUsers(cfg *config.Config, args []string) {
 		}
 		u := model.User{
 			Username: username, PasswordHash: hash, Nickname: nickname,
-			Email: email, Role: role, Status: model.UserStatusActive,
+			Phone: model.PhonePointer(phone), Role: role, Status: model.UserStatusActive,
 		}
 		if err := db.Create(&u).Error; err != nil {
 			fmt.Printf("第 %d 行跳过：%v\n", i+1, err)

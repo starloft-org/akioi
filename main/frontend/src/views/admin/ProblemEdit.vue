@@ -50,6 +50,11 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
+          <el-form-item label="排行榜积分">
+            <el-input-number v-model="form.points" :min="0" :max="100000" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
           <el-form-item label="可见性">
             <el-radio-group v-model="form.visibility">
               <el-radio :value="1">公开</el-radio>
@@ -146,6 +151,7 @@ const form = reactive({
   difficulty: '',
   tags: [],
   source: '',
+  points: 100,
   visibility: 1,
   contest_only: false,
   compare_mode: 'default',
@@ -173,6 +179,7 @@ const loadProblem = async () => {
     form.difficulty = p.difficulty || ''
     form.tags = p.tags || []
     form.source = p.source || ''
+    form.points = p.points ?? 100
     form.visibility = p.visibility ?? 1
     form.contest_only = !!p.contest_only
     form.compare_mode = p.compare_mode || 'default'
@@ -209,6 +216,7 @@ const buildPayload = () => ({
   difficulty: form.difficulty,
   tags: form.tags,
   source: form.source,
+  points: form.points,
   visibility: form.visibility,
   contest_only: form.contest_only,
   compare_mode: form.compare_mode,

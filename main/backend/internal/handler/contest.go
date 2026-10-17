@@ -95,7 +95,7 @@ func (h *Handler) GetContest(c *gin.Context) {
 			Where("contest_id = ? AND user_id = ?", contest.ID, u.ID).Count(&count)
 		registered = count > 0
 	}
-	isManager := u != nil && u.CanManageProblems()
+	isAdmin := u != nil && u.IsAdmin()
 
 	type problemEntry struct {
 		ProblemID     uint   `json:"problem_id"`
@@ -174,7 +174,7 @@ func (h *Handler) GetContest(c *gin.Context) {
 		},
 		"problems":   entries,
 		"registered": registered,
-		"can_submit": status == model.ContestStatusRunning && (!contest.RegisterRequired || registered) || isManager,
+		"can_submit": status == model.ContestStatusRunning && (!contest.RegisterRequired || registered) || isAdmin,
 	})
 }
 
@@ -229,7 +229,7 @@ func (h *Handler) ContestRank(c *gin.Context) {
 	}
 	u := httpx.CurrentUser(c)
 	now := time.Now()
-	revealAll := (u != nil && u.CanManageProblems()) || !now.Before(contest.EndAt)
+	revealAll := (u != nil && u.IsAdmin()) || !now.Before(contest.EndAt)
 
 	items, frozen, err := h.Rank.Compute(&contest, now, revealAll)
 	if err != nil {
@@ -257,7 +257,7 @@ func (h *Handler) ContestRankCSV(c *gin.Context) {
 	}
 	u := httpx.CurrentUser(c)
 	now := time.Now()
-	revealAll := (u != nil && u.CanManageProblems()) || !now.Before(contest.EndAt)
+	revealAll := (u != nil && u.IsAdmin()) || !now.Before(contest.EndAt)
 	items, _, err := h.Rank.Compute(&contest, now, revealAll)
 	if err != nil {
 		httpx.ServerError(c, "榜单计算失败")
@@ -305,7 +305,7 @@ func (h *Handler) ContestSubmissions(c *gin.Context) {
 		httpx.NotFound(c, "比赛不存在")
 		return
 	}
-	if u.CanManageProblems() || !time.Now().Before(contest.EndAt) {
+	if u.IsAdmin() || !time.Now().Before(contest.EndAt) {
 		items, total, page, pageSize, err := h.querySubmissions(c, u, contest.ID)
 		if err != nil {
 			httpx.ServerError(c, "查询提交失败")

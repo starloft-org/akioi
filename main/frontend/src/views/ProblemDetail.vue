@@ -10,11 +10,16 @@
           <div class="problem-meta muted">
             <span>时间限制 {{ problem.time_limit_ms }} ms</span>
             <span>内存限制 {{ problem.memory_limit_mb }} MB</span>
+            <span>积分 {{ problem.points }}</span>
             <el-tag v-if="problem.difficulty" size="small">{{ problem.difficulty }}</el-tag>
             <el-tag v-if="problem.contest_only" type="warning" size="small">比赛专用</el-tag>
             <span>通过率 {{ rateText(problem.acceptance_rate) }}</span>
             <span>提交 {{ problem.submit_count }} · 通过 {{ problem.accepted_count }}</span>
             <span v-if="problem.source">来源 {{ problem.source }}</span>
+          </div>
+          <div class="toolbar" style="margin-top: 16px">
+            <el-button @click="router.push(`/problems/${problem.id}/solutions`)">查看题解</el-button>
+            <el-button @click="router.push(`/discussions?problem_id=${problem.id}`)">相关讨论</el-button>
           </div>
           <div v-if="problem.tags && problem.tags.length" class="problem-tags">
             <el-tag v-for="tag in problem.tags" :key="tag" type="info" size="small">{{ tag }}</el-tag>

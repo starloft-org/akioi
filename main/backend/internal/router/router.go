@@ -49,11 +49,14 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 		api.GET("/site", h.SiteInfo)
 		api.GET("/languages", h.ListLanguages)
 		api.GET("/announcements", h.ListAnnouncements)
+		api.GET("/rankings", h.GlobalRanking)
 
 		authGroup := api.Group("/auth")
 		{
 			authGroup.POST("/register", h.Register)
 			authGroup.POST("/login", h.Login)
+			authGroup.POST("/sms/send", h.SendSMSCode)
+			authGroup.POST("/password/reset", h.ResetPassword)
 			authGroup.POST("/logout", required, h.Logout)
 			authGroup.GET("/me", required, h.Me)
 			authGroup.GET("/wechat/url", h.WeChatURL)
@@ -64,6 +67,31 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 		{
 			problems.GET("", optional, h.ListProblems)
 			problems.GET("/:id", optional, h.GetProblem)
+			problems.GET("/:id/solutions", optional, h.ListSolutions)
+			problems.POST("/:id/solutions", required, h.CreateSolution)
+		}
+
+		solutions := api.Group("/solutions")
+		{
+			solutions.GET("/:id", optional, h.GetSolution)
+			solutions.PUT("/:id", required, h.UpdateSolution)
+			solutions.DELETE("/:id", required, h.DeleteSolution)
+		}
+
+		discussions := api.Group("/discussions")
+		{
+			discussions.GET("", optional, h.ListDiscussions)
+			discussions.POST("", required, h.CreateDiscussion)
+			discussions.GET("/:id", optional, h.GetDiscussion)
+			discussions.PUT("/:id", required, h.UpdateDiscussion)
+			discussions.DELETE("/:id", required, h.DeleteDiscussion)
+			discussions.POST("/:id/comments", required, h.CreateComment)
+		}
+
+		comments := api.Group("/comments")
+		{
+			comments.PUT("/:id", required, h.UpdateComment)
+			comments.DELETE("/:id", required, h.DeleteComment)
 		}
 
 		submissions := api.Group("/submissions")

@@ -167,7 +167,7 @@ func (s *TestdataService) Delete(problemID uint) error {
 	})
 }
 
-// Zip 打包测试数据，供管理员与出题人下载。
+// Zip 打包测试数据，供管理员下载。
 func (s *TestdataService) Zip(problemID uint) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if err := writeZip(buf, s.Dir(problemID)); err != nil {

@@ -26,6 +26,7 @@ type adminProblemItem struct {
 	Difficulty    string    `json:"difficulty"`
 	Tags          []string  `json:"tags"`
 	Source        string    `json:"source"`
+	Points        int       `json:"points"`
 	Visibility    int       `json:"visibility"`
 	ContestOnly   bool      `json:"contest_only"`
 	TestcaseCount int       `json:"testcase_count"`
@@ -66,6 +67,7 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 			Difficulty:    p.Difficulty,
 			Tags:          p.Tags(),
 			Source:        p.Source,
+			Points:        p.Points,
 			Visibility:    p.Visibility,
 			ContestOnly:   p.ContestOnly,
 			TestcaseCount: p.TestcaseCount,
@@ -107,6 +109,7 @@ func adminProblemDetail(p *model.Problem) gin.H {
 		"difficulty":      p.Difficulty,
 		"tags":            p.Tags(),
 		"source":          p.Source,
+		"points":          p.Points,
 		"visibility":      p.Visibility,
 		"contest_only":    p.ContestOnly,
 		"compare_mode":    p.CompareMode,
@@ -132,6 +135,7 @@ type adminProblemRequest struct {
 	Difficulty    *string         `json:"difficulty"`
 	Tags          *[]string       `json:"tags"`
 	Source        *string         `json:"source"`
+	Points        *int            `json:"points"`
 	Visibility    *int            `json:"visibility"`
 	ContestOnly   *bool           `json:"contest_only"`
 	CompareMode   *string         `json:"compare_mode"`
@@ -196,6 +200,14 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	if req.FloatEps != nil {
 		floatEps = *req.FloatEps
 	}
+	points := 100
+	if req.Points != nil {
+		if *req.Points < 0 || *req.Points > 100000 {
+			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
+			return
+		}
+		points = *req.Points
+	}
 
 	displayID := ""
 	if req.DisplayID != nil {
@@ -225,6 +237,7 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		Title:         title,
 		TimeLimitMS:   timeLimit,
 		MemoryLimitMB: memoryLimit,
+		Points:        points,
 		Visibility:    visibility,
 		CompareMode:   compareMode,
 		FloatEps:      floatEps,
@@ -350,6 +363,13 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	}
 	if req.Source != nil {
 		updates["source"] = strings.TrimSpace(*req.Source)
+	}
+	if req.Points != nil {
+		if *req.Points < 0 || *req.Points > 100000 {
+			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
+			return
+		}
+		updates["points"] = *req.Points
 	}
 	if req.Visibility != nil {
 		if *req.Visibility != model.ProblemVisibilityPublic && *req.Visibility != model.ProblemVisibilityHidden {

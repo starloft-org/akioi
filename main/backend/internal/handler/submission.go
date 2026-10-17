@@ -87,7 +87,7 @@ func (h *Handler) ListSubmissions(c *gin.Context) {
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
 }
 
-// GetSubmission 返回提交详情；源码仅本人与出题人/管理员可见。
+// GetSubmission 返回提交详情；源码仅本人或管理员可见。
 func (h *Handler) GetSubmission(c *gin.Context) {
 	u := httpx.MustUser(c)
 	if u == nil {
@@ -102,18 +102,18 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 		httpx.NotFound(c, "提交不存在")
 		return
 	}
-	isManager := u.CanManageProblems()
-	if sub.UserID != u.ID && !isManager {
+	isAdmin := u.IsAdmin()
+	if sub.UserID != u.ID && !isAdmin {
 		httpx.Forbidden(c, "无权查看该提交")
 		return
 	}
-	if sub.ContestID > 0 && !isManager && !h.contestRevealed(sub.ContestID) {
+	if sub.ContestID > 0 && !isAdmin && !h.contestRevealed(sub.ContestID) {
 		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
 		return
 	}
 
 	items := h.decorateSubmissions([]model.Submission{sub})
-	canSeeCode := isManager || sub.UserID == u.ID
+	canSeeCode := isAdmin || sub.UserID == u.ID
 	data := gin.H{
 		"submission":       items[0],
 		"code_visible":     canSeeCode,
@@ -155,9 +155,9 @@ func (h *Handler) querySubmissions(c *gin.Context, u *model.User, contestID uint
 		query = query.Where("status = ?", status)
 	}
 
-	isManager := u.CanManageProblems()
+	isAdmin := u.IsAdmin()
 	uid := httpx.QueryUint(c, "user_id")
-	if !isManager {
+	if !isAdmin {
 		// 普通用户仅能查看本人提交，避免比赛期间泄露他人成绩。
 		query = query.Where("user_id = ?", u.ID)
 	} else if uid > 0 {

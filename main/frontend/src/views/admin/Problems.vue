@@ -23,6 +23,7 @@
       <el-table-column prop="display_id" label="题号" width="100" />
       <el-table-column prop="title" label="标题" min-width="180" />
       <el-table-column prop="difficulty" label="难度" width="100" />
+      <el-table-column prop="points" label="积分" width="80" />
       <el-table-column label="标签" min-width="160">
         <template #default="{ row }">
           <el-tag v-for="tag in row.tags" :key="tag" size="small" style="margin-right: 4px">{{ tag }}</el-tag>

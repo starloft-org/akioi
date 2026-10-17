@@ -9,13 +9,13 @@ export const useUserStore = defineStore('user', {
       app_name: 'AKIOI',
       register_enabled: true,
       register_invite_code_required: false,
-      wechat_enabled: false
+      wechat_enabled: false,
+      sms_enabled: false
     },
     languages: []
   }),
   getters: {
     isLogin: (state) => !!state.user,
-    isManager: (state) => !!state.user && ['admin', 'setter'].includes(state.user.role),
     isAdmin: (state) => !!state.user && state.user.role === 'admin'
   },
   actions: {

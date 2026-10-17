@@ -7,15 +7,17 @@ import (
 
 	"akioi/internal/httpx"
 	"akioi/internal/model"
+	"akioi/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type adminUserItem struct {
 	ID              uint       `json:"id"`
 	Username        string     `json:"username"`
 	Nickname        string     `json:"nickname"`
-	Email           string     `json:"email"`
+	Phone           string     `json:"phone"`
 	Role            string     `json:"role"`
 	Status          int        `json:"status"`
 	School          string     `json:"school"`
@@ -32,7 +34,7 @@ func (h *Handler) AdminListUsers(c *gin.Context) {
 	query := h.DB.Model(&model.User{})
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
-		query = query.Where("username LIKE ? OR nickname LIKE ?", like, like)
+		query = query.Where("username LIKE ? OR nickname LIKE ? OR phone LIKE ?", like, like, like)
 	}
 	if role := strings.TrimSpace(c.Query("role")); role != "" {
 		query = query.Where("role = ?", role)
@@ -77,7 +79,7 @@ func (h *Handler) AdminListUsers(c *gin.Context) {
 			ID:              u.ID,
 			Username:        u.Username,
 			Nickname:        u.Nickname,
-			Email:           u.Email,
+			Phone:           model.PhoneString(u.Phone),
 			Role:            u.Role,
 			Status:          u.Status,
 			School:          u.School,
@@ -117,7 +119,7 @@ func (h *Handler) AdminUpdateUser(c *gin.Context) {
 	updates := map[string]any{}
 	if req.Role != nil {
 		role := strings.TrimSpace(*req.Role)
-		if role != model.RoleAdmin && role != model.RoleSetter && role != model.RoleUser {
+		if !model.ValidRole(role) {
 			httpx.BadRequest(c, "角色取值非法")
 			return
 		}
@@ -149,6 +151,7 @@ func (h *Handler) AdminUpdateUser(c *gin.Context) {
 			return
 		}
 		updates["password_hash"] = hash
+		updates["auth_version"] = gorm.Expr("auth_version + 1")
 	}
 
 	if len(updates) > 0 {
@@ -223,8 +226,24 @@ func (h *Handler) AdminImportUsers(c *gin.Context) {
 			httpx.ServerError(c, "导入失败")
 			return
 		}
+		phone := cell(3)
+		if phone != "" && !service.ValidPhone(phone) {
+			skipped++
+			continue
+		}
+		if phone != "" {
+			var phoneExists int64
+			if err := h.DB.Model(&model.User{}).Where("phone = ?", phone).Count(&phoneExists).Error; err != nil {
+				httpx.ServerError(c, "导入失败")
+				return
+			}
+			if phoneExists > 0 {
+				skipped++
+				continue
+			}
+		}
 		role := cell(4)
-		if role != model.RoleAdmin && role != model.RoleSetter && role != model.RoleUser {
+		if !model.ValidRole(role) {
 			role = model.RoleUser
 		}
 		nickname := cell(2)
@@ -235,7 +254,7 @@ func (h *Handler) AdminImportUsers(c *gin.Context) {
 			Username:     username,
 			PasswordHash: hash,
 			Nickname:     nickname,
-			Email:        cell(3),
+			Phone:        model.PhonePointer(phone),
 			Role:         role,
 			Status:       model.UserStatusActive,
 		}

@@ -2,9 +2,8 @@ package model
 
 // 用户角色
 const (
-	RoleAdmin  = "admin"
-	RoleSetter = "setter"
-	RoleUser   = "user"
+	RoleAdmin = "admin"
+	RoleUser  = "user"
 )
 
 // 用户状态

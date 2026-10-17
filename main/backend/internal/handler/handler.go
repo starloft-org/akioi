@@ -15,6 +15,7 @@ type Handler struct {
 	RDB      *redis.Client
 	Auth     *service.AuthService
 	WeChat   *service.WeChatService
+	SMS      *service.SMSService
 	Queue    *queue.Queue
 	Rank     *service.RankService
 	Testdata *service.TestdataService
@@ -28,6 +29,7 @@ func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client) *Handler {
 		RDB:      rdb,
 		Auth:     service.NewAuth(db, rdb, cfg),
 		WeChat:   service.NewWeChat(db, rdb, cfg),
+		SMS:      service.NewSMS(rdb, cfg),
 		Queue:    queue.New(rdb, cfg.Judge.QueueKey),
 		Rank:     service.NewRank(db),
 		Testdata: service.NewTestdata(db, cfg),

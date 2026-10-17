@@ -51,6 +51,7 @@
           <el-tag v-if="row.difficulty" size="small">{{ row.difficulty }}</el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="points" label="积分" width="80" />
       <el-table-column label="标签" min-width="180">
         <template #default="{ row }">
           <el-tag

@@ -9,14 +9,15 @@ type User struct {
 	ID           uint       `gorm:"primaryKey" json:"id"`
 	Username     string     `gorm:"size:32;uniqueIndex;not null" json:"username"`
 	PasswordHash string     `gorm:"size:100;not null" json:"-"`
+	Phone        *string    `gorm:"size:20;uniqueIndex" json:"-"`
 	Nickname     string     `gorm:"size:32" json:"nickname"`
-	Email        string     `gorm:"size:64" json:"email"`
 	Signature    string     `gorm:"size:255" json:"signature"`
 	School       string     `gorm:"size:64" json:"school"`
 	Grade        string     `gorm:"size:32" json:"grade"`
 	Avatar       string     `gorm:"size:255" json:"avatar"`
 	Role         string     `gorm:"size:16;index;not null;default:user" json:"role"`
 	Status       int        `gorm:"not null;default:1" json:"status"`
+	AuthVersion  int        `gorm:"not null;default:0" json:"-"`
 	LastLoginAt  *time.Time `json:"last_login_at"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -26,11 +27,6 @@ func (User) TableName() string { return "users" }
 
 // IsAdmin 表示拥有后台全部权限。
 func (u *User) IsAdmin() bool { return u.Role == RoleAdmin }
-
-// CanManageProblems 表示可管理题目与测试数据。
-func (u *User) CanManageProblems() bool {
-	return u.Role == RoleAdmin || u.Role == RoleSetter
-}
 
 // OAuthBinding 记录第三方登录账号与站内用户的绑定关系。
 type OAuthBinding struct {
@@ -49,7 +45,6 @@ type PublicUser struct {
 	ID          uint       `json:"id"`
 	Username    string     `json:"username"`
 	Nickname    string     `json:"nickname"`
-	Email       string     `json:"email"`
 	Signature   string     `json:"signature"`
 	School      string     `json:"school"`
 	Grade       string     `json:"grade"`
@@ -65,7 +60,6 @@ func NewPublicUser(u *User) PublicUser {
 		ID:          u.ID,
 		Username:    u.Username,
 		Nickname:    u.Nickname,
-		Email:       u.Email,
 		Signature:   u.Signature,
 		School:      u.School,
 		Grade:       u.Grade,
@@ -75,6 +69,31 @@ func NewPublicUser(u *User) PublicUser {
 		LastLoginAt: u.LastLoginAt,
 		CreatedAt:   u.CreatedAt,
 	}
+}
+
+// PrivateUser 是仅返回给用户本人的资料视图，包含绑定手机号。
+type PrivateUser struct {
+	PublicUser
+	Phone string `json:"phone"`
+}
+
+func NewPrivateUser(u *User) PrivateUser {
+	return PrivateUser{PublicUser: NewPublicUser(u), Phone: PhoneString(u.Phone)}
+}
+
+// PhonePointer 将空手机号表示为 NULL，确保唯一索引允许多个未绑定手机号的微信用户。
+func PhonePointer(phone string) *string {
+	if phone == "" {
+		return nil
+	}
+	return &phone
+}
+
+func PhoneString(phone *string) string {
+	if phone == nil {
+		return ""
+	}
+	return *phone
 }
 
 func marshalJSON(v any) string {

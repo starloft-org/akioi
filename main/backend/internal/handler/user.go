@@ -57,7 +57,6 @@ type updateProfileRequest struct {
 	Signature *string `json:"signature"`
 	School    *string `json:"school"`
 	Grade     *string `json:"grade"`
-	Email     *string `json:"email"`
 }
 
 func (h *Handler) UpdateMe(c *gin.Context) {
@@ -93,11 +92,8 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	if req.Grade != nil {
 		updates["grade"] = strings.TrimSpace(*req.Grade)
 	}
-	if req.Email != nil {
-		updates["email"] = strings.TrimSpace(*req.Email)
-	}
 	if len(updates) == 0 {
-		httpx.OK(c, gin.H{"user": model.NewPublicUser(u)})
+		httpx.OK(c, gin.H{"user": model.NewPrivateUser(u)})
 		return
 	}
 	if err := h.DB.Model(&model.User{}).Where("id = ?", u.ID).Updates(updates).Error; err != nil {
@@ -109,7 +105,7 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		httpx.ServerError(c, "保存失败")
 		return
 	}
-	httpx.OK(c, gin.H{"user": model.NewPublicUser(&fresh)})
+	httpx.OK(c, gin.H{"user": model.NewPrivateUser(&fresh)})
 }
 
 type changePasswordRequest struct {
@@ -135,17 +131,22 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		httpx.BadRequest(c, "新密码长度需在 6 到 64 个字符之间")
 		return
 	}
-	hash, err := h.Auth.HashPassword(req.NewPassword)
-	if err != nil {
+	if err := h.Auth.ResetPassword(u.ID, req.NewPassword); err != nil {
 		httpx.ServerError(c, "修改密码失败")
 		return
 	}
-	if err := h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("password_hash", hash).Error; err != nil {
+	var fresh model.User
+	if err := h.DB.First(&fresh, u.ID).Error; err != nil {
 		httpx.ServerError(c, "修改密码失败")
+		return
+	}
+	token, err := h.Auth.Issue(&fresh)
+	if err != nil {
+		httpx.ServerError(c, "登录凭证签发失败")
 		return
 	}
 	logger.Businessf("用户 %s 修改密码 ip=%s", u.Username, c.ClientIP())
-	httpx.OK(c, gin.H{})
+	httpx.OK(c, gin.H{"token": token})
 }
 
 var allowedAvatarExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}

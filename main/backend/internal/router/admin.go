@@ -11,12 +11,12 @@ import (
 
 // registerAdmin 装配管理后台路由，路由前缀 /api/admin/v1。
 func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config.Config) {
-	admin := r.Group("/api/admin/v1", middleware.Auth(h.Auth), middleware.RequireProblemManager())
+	admin := r.Group("/api/admin/v1", middleware.Auth(h.Auth), middleware.RequireAdmin())
 
 	admin.GET("/stats", h.AdminStats)
 	admin.GET("/logs", h.AdminLogs)
 
-	users := admin.Group("/users", middleware.RequireAdmin())
+	users := admin.Group("/users")
 	{
 		users.GET("", h.AdminListUsers)
 		users.PUT("/:id", h.AdminUpdateUser)

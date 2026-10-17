@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -15,15 +16,16 @@ import (
 
 type registerRequest struct {
 	Username   string `json:"username"`
+	Phone      string `json:"phone"`
+	SMSCode    string `json:"sms_code"`
 	Password   string `json:"password"`
 	Nickname   string `json:"nickname"`
-	Email      string `json:"email"`
 	InviteCode string `json:"invite_code"`
 }
 
 // Register 开放注册，受 REGISTER_ENABLED 与邀请码控制。
 func (h *Handler) Register(c *gin.Context) {
-	if !h.Cfg.RegisterEnabled {
+	if !h.Cfg.RegisterEnabled || !h.SMS.Enabled() {
 		httpx.Forbidden(c, "当前未开放注册")
 		return
 	}
@@ -33,6 +35,8 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.SMSCode = strings.TrimSpace(req.SMSCode)
 	req.Nickname = strings.TrimSpace(req.Nickname)
 	if err := validateUsername(req.Username); err != nil {
 		httpx.BadRequest(c, err.Error())
@@ -42,18 +46,27 @@ func (h *Handler) Register(c *gin.Context) {
 		httpx.BadRequest(c, "密码长度需在 6 到 64 个字符之间")
 		return
 	}
+	if !service.ValidPhone(req.Phone) {
+		httpx.BadRequest(c, "请输入有效的中国大陆手机号")
+		return
+	}
 	if h.Cfg.RegisterInviteCode != "" && req.InviteCode != h.Cfg.RegisterInviteCode {
 		httpx.Forbidden(c, "邀请码不正确")
 		return
 	}
 
 	var exists int64
-	if err := h.DB.Model(&model.User{}).Where("username = ?", req.Username).Count(&exists).Error; err != nil {
+	accounts := []string{req.Username, req.Phone}
+	if err := h.DB.Model(&model.User{}).Where("username IN ? OR phone IN ?", accounts, accounts).Count(&exists).Error; err != nil {
 		httpx.ServerError(c, "注册失败")
 		return
 	}
 	if exists > 0 {
-		httpx.Conflict(c, "用户名已被占用")
+		httpx.Conflict(c, "用户名或手机号已被使用")
+		return
+	}
+	if err := h.SMS.VerifyCode(c.Request.Context(), req.Phone, service.SMSPurposeRegister, req.SMSCode); err != nil {
+		httpx.BadRequest(c, err.Error())
 		return
 	}
 
@@ -67,9 +80,9 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	u := model.User{
 		Username:     req.Username,
+		Phone:        model.PhonePointer(req.Phone),
 		PasswordHash: hash,
 		Nickname:     req.Nickname,
-		Email:        strings.TrimSpace(req.Email),
 		Role:         model.RoleUser,
 		Status:       model.UserStatusActive,
 	}
@@ -83,11 +96,12 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 	logger.Businessf("新用户注册成功 username=%s ip=%s", u.Username, c.ClientIP())
-	httpx.OK(c, gin.H{"token": token, "user": model.NewPublicUser(&u)})
+	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(&u)})
 }
 
 type loginRequest struct {
-	Username string `json:"username"`
+	Account  string `json:"account"`
+	Username string `json:"username"` // 兼容旧客户端
 	Password string `json:"password"`
 }
 
@@ -97,16 +111,19 @@ func (h *Handler) Login(c *gin.Context) {
 		httpx.BadRequest(c, "请求参数格式错误")
 		return
 	}
-	req.Username = strings.TrimSpace(req.Username)
+	account := strings.TrimSpace(req.Account)
+	if account == "" {
+		account = strings.TrimSpace(req.Username)
+	}
 
 	var u model.User
-	if err := h.DB.Where("username = ?", req.Username).First(&u).Error; err != nil {
-		httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, "用户名或密码错误")
+	if err := h.DB.Where("username = ? OR phone = ?", account, account).First(&u).Error; err != nil {
+		httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, "账号或密码错误")
 		return
 	}
 	if !h.Auth.CheckPassword(u.PasswordHash, req.Password) {
-		logger.Businessf("登录失败 username=%s ip=%s", req.Username, c.ClientIP())
-		httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, "用户名或密码错误")
+		logger.Businessf("登录失败 account=%s ip=%s", account, c.ClientIP())
+		httpx.Fail(c, http.StatusUnauthorized, httpx.CodeUnauthorized, "账号或密码错误")
 		return
 	}
 	if u.Status != model.UserStatusActive {
@@ -122,7 +139,98 @@ func (h *Handler) Login(c *gin.Context) {
 	h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("last_login_at", now)
 	u.LastLoginAt = &now
 	logger.Businessf("登录成功 username=%s ip=%s", u.Username, c.ClientIP())
-	httpx.OK(c, gin.H{"token": token, "user": model.NewPublicUser(&u)})
+	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(&u)})
+}
+
+type sendSMSCodeRequest struct {
+	Phone   string `json:"phone"`
+	Purpose string `json:"purpose"`
+}
+
+// SendSMSCode 为注册或密码重置发送验证码，不提供短信登录用途。
+func (h *Handler) SendSMSCode(c *gin.Context) {
+	var req sendSMSCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+	req.Phone = strings.TrimSpace(req.Phone)
+	if !service.ValidPhone(req.Phone) {
+		httpx.BadRequest(c, "请输入有效的中国大陆手机号")
+		return
+	}
+	if req.Purpose != service.SMSPurposeRegister && req.Purpose != service.SMSPurposeResetPassword {
+		httpx.BadRequest(c, "验证码用途不正确")
+		return
+	}
+	if req.Purpose == service.SMSPurposeRegister && !h.Cfg.RegisterEnabled {
+		httpx.Forbidden(c, "当前未开放注册")
+		return
+	}
+	var count int64
+	if err := h.DB.Model(&model.User{}).Where("phone = ?", req.Phone).Count(&count).Error; err != nil {
+		httpx.ServerError(c, "发送验证码失败")
+		return
+	}
+	if req.Purpose == service.SMSPurposeRegister && count > 0 {
+		httpx.Conflict(c, "手机号已被使用")
+		return
+	}
+	if req.Purpose == service.SMSPurposeResetPassword && count == 0 {
+		// 保持与成功请求一致的响应，避免枚举已注册手机号。
+		httpx.OK(c, gin.H{"expires_in": h.Cfg.SMS.CodeTTLMinutes * 60})
+		return
+	}
+	if err := h.SMS.SendCode(c.Request.Context(), req.Phone, req.Purpose); err != nil {
+		if errors.Is(err, service.ErrSMSTooFrequent) {
+			httpx.TooMany(c, httpx.CodeTooManyRequest, err.Error())
+			return
+		}
+		logger.Errorf("短信验证码发送失败 purpose=%s phone=%s err=%v", req.Purpose, maskPhone(req.Phone), err)
+		httpx.ServerError(c, "验证码发送失败")
+		return
+	}
+	httpx.OK(c, gin.H{"expires_in": h.Cfg.SMS.CodeTTLMinutes * 60})
+}
+
+type resetPasswordRequest struct {
+	Phone       string `json:"phone"`
+	SMSCode     string `json:"sms_code"`
+	NewPassword string `json:"new_password"`
+}
+
+// ResetPassword 仅允许通过已绑定手机号的短信验证码重置密码。
+func (h *Handler) ResetPassword(c *gin.Context) {
+	var req resetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	if !service.ValidPhone(req.Phone) {
+		httpx.BadRequest(c, "请输入有效的中国大陆手机号")
+		return
+	}
+	if len(req.NewPassword) < 6 || len(req.NewPassword) > 64 {
+		httpx.BadRequest(c, "密码长度需在 6 到 64 个字符之间")
+		return
+	}
+	var u model.User
+	if err := h.DB.Where("phone = ?", req.Phone).First(&u).Error; err != nil {
+		httpx.BadRequest(c, "验证码错误或已过期")
+		return
+	}
+	if err := h.SMS.VerifyCode(c.Request.Context(), req.Phone, service.SMSPurposeResetPassword, req.SMSCode); err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	if err := h.Auth.ResetPassword(u.ID, req.NewPassword); err != nil {
+		httpx.ServerError(c, "重置密码失败")
+		return
+	}
+	logger.Businessf("用户通过短信重置密码 username=%s ip=%s", u.Username, c.ClientIP())
+	httpx.OK(c, gin.H{})
 }
 
 func (h *Handler) Logout(c *gin.Context) {
@@ -137,7 +245,7 @@ func (h *Handler) Me(c *gin.Context) {
 	if u == nil {
 		return
 	}
-	httpx.OK(c, gin.H{"user": model.NewPublicUser(u)})
+	httpx.OK(c, gin.H{"user": model.NewPrivateUser(u)})
 }
 
 // WeChatURL 返回微信扫码登录地址；未启用时 enabled 为 false。
@@ -198,7 +306,7 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 	now := time.Now()
 	h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("last_login_at", now)
 	logger.Businessf("微信登录成功 username=%s ip=%s", u.Username, c.ClientIP())
-	httpx.OK(c, gin.H{"token": token, "user": model.NewPublicUser(u), "redirect": redirect})
+	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": redirect})
 }
 
 func bearerOf(c *gin.Context) string {
@@ -230,3 +338,10 @@ func randomState() (string, error) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func maskPhone(phone string) string {
+	if len(phone) != 11 {
+		return "***"
+	}
+	return phone[:3] + "****" + phone[7:]
+}

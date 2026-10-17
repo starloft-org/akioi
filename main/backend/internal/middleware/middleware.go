@@ -49,19 +49,6 @@ func RequireAdmin() gin.HandlerFunc {
 	}
 }
 
-// RequireProblemManager 要求管理员或出题人角色。
-func RequireProblemManager() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		u := httpx.CurrentUser(c)
-		if u == nil || !u.CanManageProblems() {
-			httpx.Forbidden(c, "需要出题人或管理员权限")
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
-
 func bearerToken(c *gin.Context) string {
 	h := c.GetHeader("Authorization")
 	if h == "" {

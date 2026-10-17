@@ -17,7 +17,7 @@ alwaysApply: true
 - `judgeserver/backend/`（Go module 同为 `akioi`）：入口 `cmd/judge/main.go`（评测进程）；只含评测所需的 `internal/{config,logger,database,redis,queue,judge,model}`，不引入 handler/router/httpx/migrate，评测节点不得改表结构。
 - API 与评测进程分离部署：`server` 通过 Redis 列表队列下发判题任务，`judge` 阻塞拉取任务并直接回写数据库；两者不通过 HTTP 互相调用。
 - **两侧共享契约**（改动必须同步到另一侧）：`internal/model/*`（表结构与常量）、`internal/queue.Task`（队列消息格式）、`.env` 的 `JUDGE_QUEUE_KEY`。
-- 路由一级段约定：`/api/v1/*`（用户侧 JSON API）、`/api/admin/v1/*`（管理后台，需登录 + 出题人/管理员角色）、`/healthz` 与 `/readyz`（探针）、`/uploads/*`（静态文件）。前端 SPA 的后台页面走前端路由 `/admin/*`，**不反代给后端**（因此后台接口前缀必须是 `/api/admin/v1`，避免与前端路由冲突）。
+- 路由一级段约定：`/api/v1/*`（用户侧 JSON API）、`/api/admin/v1/*`（管理后台，需管理员角色）、`/healthz` 与 `/readyz`（探针）、`/uploads/*`（静态文件）。前端 SPA 的后台页面走前端路由 `/admin/*`，**不反代给后端**（因此后台接口前缀必须是 `/api/admin/v1`，避免与前端路由冲突）。
 - 评测节点另有控制面接口，不属站内 API、不经主站反代：`PUT|DELETE /internal/v1/testdata/{problemID}`，用 `X-Sync-Secret` 共享密钥校验（常量时间比较），只在 `JUDGE_LISTEN_ADDR` 上监听，仅对主站开放。
 - 修改代码后保持 `gofmt` 干净；提交前在 `main/backend` 与 `judgeserver/backend` 两个 module 下分别确认 `go build ./...`、`go vet ./...`、`go test ./...` 通过。
 
@@ -76,9 +76,13 @@ alwaysApply: true
 
 ## 7. 权限与赛制
 
-- 角色：`admin`（全部权限）、`setter`（出题/改题/看测试数据）、`user`（选手）。权限校验在中间件完成，handler 内不重复判断角色字符串。
-- 普通用户只能看到已发布题目；测试数据、其它用户源码仅本人与管理/出题人可见（比赛进行中题目源码一律不可见）。
+- 角色：`admin`（全部管理权限）、`user`（选手）。权限校验在中间件完成，handler 内不重复判断角色字符串。
+- 账号注册必须验证手机号短信验证码并设置密码；登录只接受手机号或用户名 + 密码以及微信扫码，不提供短信验证码登录。短信验证码仅允许 `register` 与 `reset_password` 两种用途。
+- 用户公开资料不得返回手机号；手机号只在本人资料与管理员用户列表中展示。
+- 普通用户只能看到已发布题目；测试数据仅管理员可见，源码仅本人或管理员可见（比赛进行中按比赛可见性规则限制）。
 - 比赛进行中禁止用户看到他人提交结果详情与测试点数据；榜单为 OI 赛制（同题取多次提交的最高分累加，先比总分、再比通过题数、再比最后提交时间），榜单计算唯一实现在 `internal/service/rank.go`，handler 只负责取数与权限裁剪。
+- 全站积分榜只统计公开且非比赛专用题目，单题积分为 `题目积分 × 历史最高评测得分 / 测试点总分` 并封顶；排序依次比较总积分、满分题数、用户 ID。
+- 题解、讨论与评论公开可读，登录后可发布；内容仅作者或管理员可编辑、删除。
 - 题面须包含：题目描述、输入格式、输出格式、数据范围与说明、样例；题目有唯一题号（`P{四位数字}`）。
 - 开放接口若存在，必须与站内共用同一鉴权与限流中间件，不得另起一套。
 

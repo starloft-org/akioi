@@ -9,6 +9,8 @@
         <nav class="app-nav">
           <router-link to="/problems">题库</router-link>
           <router-link to="/contests">比赛</router-link>
+          <router-link to="/ranking">排行榜</router-link>
+          <router-link to="/discussions">讨论</router-link>
           <router-link to="/submissions">评测记录</router-link>
         </nav>
         <div class="app-header__right">
@@ -16,7 +18,7 @@
             <router-link to="/profile" class="app-user">
               {{ store.user.nickname || store.user.username }}
             </router-link>
-            <el-button v-if="store.isManager" size="small" @click="router.push('/admin')">管理后台</el-button>
+            <el-button v-if="store.isAdmin" size="small" @click="router.push('/admin')">管理后台</el-button>
             <el-button size="small" text @click="handleLogout">退出</el-button>
           </template>
           <template v-else>

@@ -49,7 +49,8 @@ func (s *AuthService) CheckPassword(hash, pw string) bool {
 }
 
 type claims struct {
-	UserID uint `json:"uid"`
+	UserID      uint `json:"uid"`
+	AuthVersion int  `json:"av"`
 	jwt.RegisteredClaims
 }
 
@@ -61,7 +62,8 @@ func (s *AuthService) Issue(u *model.User) (string, error) {
 	}
 	ttl := time.Duration(s.cfg.JWTTTLHours) * time.Hour
 	c := claims{
-		UserID: u.ID,
+		UserID:      u.ID,
+		AuthVersion: u.AuthVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			Subject:   strconv.FormatUint(uint64(u.ID), 10),
@@ -108,7 +110,22 @@ func (s *AuthService) Authenticate(token string) (*model.User, error) {
 	if u.Status != model.UserStatusActive {
 		return nil, ErrUserBanned
 	}
+	if u.AuthVersion != c.AuthVersion {
+		return nil, ErrUnauthorized
+	}
 	return &u, nil
+}
+
+// ResetPassword 更新密码并提升鉴权版本，使该用户已签发的所有 JWT 立即失效。
+func (s *AuthService) ResetPassword(userID uint, password string) error {
+	hash, err := s.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	return s.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]any{
+		"password_hash": hash,
+		"auth_version":  gorm.Expr("auth_version + 1"),
+	}).Error
 }
 
 // Revoke 使当前令牌对应的会话失效。

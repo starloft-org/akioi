@@ -4,8 +4,8 @@
       <div class="auth-brand">{{ store.site.app_name }}</div>
       <div class="auth-sub">信息学奥赛在线评测系统</div>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" @keyup.enter="handleLogin" />
+        <el-form-item label="账号" prop="account">
+          <el-input v-model="form.account" placeholder="手机号或用户名" @keyup.enter="handleLogin" />
         </el-form-item>
         <el-form-item label="密码" prop="password">
           <el-input
@@ -26,6 +26,9 @@
           @click="router.push('/register')"
         >
           注册账号
+        </el-link>
+        <el-link type="primary" :underline="false" @click="router.push('/forgot-password')">
+          忘记密码
         </el-link>
       </div>
       <div v-if="store.site.wechat_enabled" class="auth-wechat">
@@ -49,10 +52,10 @@ const route = useRoute()
 const formRef = ref(null)
 const loading = ref(false)
 const wechatLoading = ref(false)
-const form = reactive({ username: '', password: '' })
+const form = reactive({ account: '', password: '' })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  account: [{ required: true, message: '请输入手机号或用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
@@ -77,7 +80,7 @@ const handleLogin = async () => {
   }
   loading.value = true
   try {
-    await store.login({ username: form.username, password: form.password })
+    await store.login({ account: form.account, password: form.password })
     ElMessage.success('登录成功')
     router.replace(route.query.redirect || '/')
   } catch (e) {

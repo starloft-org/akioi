@@ -12,6 +12,11 @@ const routes = [
       { path: '', name: 'home', component: () => import('@/views/Home.vue') },
       { path: 'problems', name: 'problems', component: () => import('@/views/ProblemList.vue') },
       { path: 'problems/:id', name: 'problem-detail', component: () => import('@/views/ProblemDetail.vue') },
+      { path: 'problems/:id/solutions', name: 'solutions', component: () => import('@/views/SolutionList.vue') },
+      { path: 'solutions/:id', name: 'solution-detail', component: () => import('@/views/SolutionDetail.vue') },
+      { path: 'ranking', name: 'ranking', component: () => import('@/views/Ranking.vue') },
+      { path: 'discussions', name: 'discussions', component: () => import('@/views/DiscussionList.vue') },
+      { path: 'discussions/:id', name: 'discussion-detail', component: () => import('@/views/DiscussionDetail.vue') },
       { path: 'submissions', name: 'submissions', component: () => import('@/views/SubmissionList.vue') },
       { path: 'submissions/:id', name: 'submission-detail', component: () => import('@/views/SubmissionDetail.vue') },
       { path: 'contests', name: 'contests', component: () => import('@/views/ContestList.vue') },
@@ -33,10 +38,11 @@ const routes = [
   },
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
   { path: '/register', name: 'register', component: () => import('@/views/Register.vue') },
+  { path: '/forgot-password', name: 'forgot-password', component: () => import('@/views/ForgotPassword.vue') },
   {
     path: '/admin',
     component: AdminLayout,
-    meta: { requiresAuth: true, requiresManager: true },
+    meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/Dashboard.vue') },
       { path: 'users', name: 'admin-users', component: () => import('@/views/admin/Users.vue') },
@@ -95,7 +101,7 @@ router.beforeEach(async (to) => {
     await store.loadSite()
   }
   const needAuth = to.matched.some((r) => r.meta.requiresAuth)
-  const needManager = to.matched.some((r) => r.meta.requiresManager)
+  const needAdmin = to.matched.some((r) => r.meta.requiresAdmin)
 
   if (!store.user && store.token) {
     await store.loadMe()
@@ -103,7 +109,7 @@ router.beforeEach(async (to) => {
   if (needAuth && !store.user) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (needManager && !store.isManager) {
+  if (needAdmin && !store.isAdmin) {
     return { name: 'home' }
   }
   return true

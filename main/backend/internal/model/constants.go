@@ -2,10 +2,14 @@ package model
 
 // 用户角色
 const (
-	RoleAdmin  = "admin"
-	RoleSetter = "setter"
-	RoleUser   = "user"
+	RoleAdmin = "admin"
+	RoleUser  = "user"
 )
+
+// ValidRole 判断角色是否为系统当前支持的角色。
+func ValidRole(role string) bool {
+	return role == RoleAdmin || role == RoleUser
+}
 
 // 用户状态
 const (

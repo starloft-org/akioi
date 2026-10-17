@@ -49,7 +49,7 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 
 // AutoMigrate 补齐表结构。
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&model.User{},
 		&model.OAuthBinding{},
 		&model.Problem{},
@@ -59,7 +59,15 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.ContestProblem{},
 		&model.ContestParticipant{},
 		&model.Announcement{},
-	)
+		&model.Solution{},
+		&model.Discussion{},
+		&model.DiscussionComment{},
+	); err != nil {
+		return err
+	}
+
+	// 历史版本中的出题人角色已取消，降级为普通用户以避免意外提权。
+	return db.Model(&model.User{}).Where("role = ?", "setter").Update("role", model.RoleUser).Error
 }
 
 // Seed 幂等写入初始数据：仅在没有任何管理员时创建默认管理员。

@@ -23,6 +23,7 @@ type Problem struct {
 	Difficulty    string    `gorm:"size:16;index" json:"difficulty"`
 	TagsJSON      string    `gorm:"column:tags;size:255" json:"-"`
 	Source        string    `gorm:"size:128" json:"source"`
+	Points        int       `gorm:"not null;default:100" json:"points"`
 	Visibility    int       `gorm:"not null;default:1" json:"visibility"`
 	ContestOnly   bool      `gorm:"not null;default:false" json:"contest_only"`
 	CompareMode   string    `gorm:"size:16;not null;default:default" json:"compare_mode"`

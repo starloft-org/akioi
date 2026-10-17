@@ -19,6 +19,22 @@ type WeChatConfig struct {
 	RedirectURI string
 }
 
+// SMSConfig 配置 StarLoft 短信 API v2。
+type SMSConfig struct {
+	BaseURL            string
+	APIKey             string
+	APISecret          string
+	RegisterTemplateID string
+	ResetTemplateID    string
+	CodeTTLMinutes     int
+	SendIntervalSec    int
+	RequestTimeoutSec  int
+}
+
+func (c SMSConfig) Enabled() bool {
+	return c.APIKey != "" && c.APISecret != "" && c.RegisterTemplateID != "" && c.ResetTemplateID != ""
+}
+
 // JudgeConfig 为主站侧评测相关配置：投递队列、测试数据存储与评测节点同步。
 type JudgeConfig struct {
 	QueueKey     string
@@ -54,6 +70,7 @@ type Config struct {
 	RegisterInviteCode string
 
 	WeChat WeChatConfig
+	SMS    SMSConfig
 
 	RateLimitPerMinute int
 	SubmitIntervalSec  int
@@ -102,6 +119,16 @@ func Load() (*Config, error) {
 			AppSecret:   getEnv("WECHAT_APPSECRET", ""),
 			RedirectURI: getEnv("WECHAT_REDIRECT_URI", ""),
 		},
+		SMS: SMSConfig{
+			BaseURL:            getEnv("SMS_API_BASE_URL", "https://api.starloft.cn/v2"),
+			APIKey:             getEnv("SMS_API_KEY", ""),
+			APISecret:          getEnv("SMS_API_SECRET", ""),
+			RegisterTemplateID: getEnv("SMS_REGISTER_TEMPLATE_ID", ""),
+			ResetTemplateID:    getEnv("SMS_RESET_TEMPLATE_ID", ""),
+			CodeTTLMinutes:     getEnvInt("SMS_CODE_TTL_MINUTES", 5),
+			SendIntervalSec:    getEnvInt("SMS_SEND_INTERVAL_SEC", 60),
+			RequestTimeoutSec:  getEnvInt("SMS_REQUEST_TIMEOUT_SEC", 10),
+		},
 
 		RateLimitPerMinute: getEnvInt("RATE_LIMIT_PER_MINUTE", 300),
 		SubmitIntervalSec:  getEnvInt("SUBMIT_INTERVAL_SEC", 10),
@@ -144,6 +171,12 @@ func (c *Config) validate() error {
 	}
 	if len(c.Judge.NodeEndpoints) > 0 && c.Judge.SyncSecret == "" {
 		return fmt.Errorf("配置了 JUDGE_NODE_ENDPOINTS 时必须同时配置 JUDGE_SYNC_SECRET")
+	}
+	if c.SMS.CodeTTLMinutes < 1 || c.SMS.CodeTTLMinutes > 30 {
+		return fmt.Errorf("SMS_CODE_TTL_MINUTES 必须在 1 到 30 之间")
+	}
+	if c.SMS.SendIntervalSec < 30 {
+		return fmt.Errorf("SMS_SEND_INTERVAL_SEC 不能小于 30 秒")
 	}
 	return nil
 }

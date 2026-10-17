@@ -3,7 +3,7 @@
     <div class="toolbar">
       <el-input
         v-model="keyword"
-        placeholder="用户名 / 昵称"
+        placeholder="用户名 / 昵称 / 手机号"
         clearable
         style="width: 220px"
         @keyup.enter="search"
@@ -23,7 +23,7 @@
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column prop="nickname" label="昵称" min-width="120" />
-      <el-table-column prop="email" label="邮箱" min-width="180" />
+      <el-table-column prop="phone" label="手机号" min-width="140" />
       <el-table-column label="角色" width="120">
         <template #default="{ row }">
           <el-select :model-value="row.role" size="small" @change="(val) => changeRole(row, val)">
@@ -81,7 +81,6 @@ import { formatTime } from '@/utils/format'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: '管理员' },
-  { value: 'setter', label: '出题人' },
   { value: 'user', label: '选手' }
 ]
 

@@ -8,6 +8,8 @@ export const getLanguages = () => request.get('/api/v1/languages')
 // 鉴权
 export const register = (data) => request.post('/api/v1/auth/register', data)
 export const login = (data) => request.post('/api/v1/auth/login', data)
+export const sendSmsCode = (data) => request.post('/api/v1/auth/sms/send', data)
+export const resetPasswordBySms = (data) => request.post('/api/v1/auth/password/reset', data)
 export const logout = () => request.post('/api/v1/auth/logout')
 export const getMe = () => request.get('/api/v1/auth/me')
 export const getWechatUrl = (redirect) =>
@@ -17,6 +19,28 @@ export const wechatCallback = (params) => request.get('/api/v1/auth/wechat/callb
 // 题库
 export const listProblems = (params) => request.get('/api/v1/problems', { params })
 export const getProblem = (id) => request.get(`/api/v1/problems/${id}`)
+
+// 全站积分榜
+export const listRankings = (params) => request.get('/api/v1/rankings', { params })
+
+// 题解
+export const listSolutions = (problemId, params) =>
+  request.get(`/api/v1/problems/${problemId}/solutions`, { params })
+export const getSolution = (id) => request.get(`/api/v1/solutions/${id}`)
+export const createSolution = (problemId, data) =>
+  request.post(`/api/v1/problems/${problemId}/solutions`, data)
+export const updateSolution = (id, data) => request.put(`/api/v1/solutions/${id}`, data)
+export const deleteSolution = (id) => request.delete(`/api/v1/solutions/${id}`)
+
+// 讨论与评论
+export const listDiscussions = (params) => request.get('/api/v1/discussions', { params })
+export const getDiscussion = (id) => request.get(`/api/v1/discussions/${id}`)
+export const createDiscussion = (data) => request.post('/api/v1/discussions', data)
+export const updateDiscussion = (id, data) => request.put(`/api/v1/discussions/${id}`, data)
+export const deleteDiscussion = (id) => request.delete(`/api/v1/discussions/${id}`)
+export const createComment = (id, data) => request.post(`/api/v1/discussions/${id}/comments`, data)
+export const updateComment = (id, data) => request.put(`/api/v1/comments/${id}`, data)
+export const deleteComment = (id) => request.delete(`/api/v1/comments/${id}`)
 
 // 提交
 export const createSubmission = (data) => request.post('/api/v1/submissions', data)

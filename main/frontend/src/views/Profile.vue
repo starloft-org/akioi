@@ -28,8 +28,8 @@
         <el-form-item label="年级" prop="grade">
           <el-input v-model="form.grade" placeholder="请输入年级" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="form.email" placeholder="请输入邮箱" />
+        <el-form-item label="手机号">
+          <el-input :model-value="store.user?.phone || '未绑定'" disabled />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
@@ -71,22 +71,10 @@ const saving = ref(false)
 const changing = ref(false)
 const avatarLoading = ref(false)
 
-const form = reactive({ nickname: '', signature: '', school: '', grade: '', email: '' })
+const form = reactive({ nickname: '', signature: '', school: '', grade: '' })
 const passwordForm = reactive({ old_password: '', new_password: '', confirm: '' })
 
 const initial = computed(() => (store.user?.nickname || store.user?.username || '?').charAt(0).toUpperCase())
-
-const validateEmail = (rule, value, callback) => {
-  if (!value) {
-    callback()
-    return
-  }
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    callback()
-    return
-  }
-  callback(new Error('邮箱格式不正确'))
-}
 
 const validateConfirm = (rule, value, callback) => {
   if (value !== passwordForm.new_password) {
@@ -98,8 +86,7 @@ const validateConfirm = (rule, value, callback) => {
 
 const profileRules = {
   nickname: [{ max: 32, message: '昵称长度不能超过 32 个字符', trigger: 'blur' }],
-  signature: [{ max: 255, message: '签名长度不能超过 255 个字符', trigger: 'blur' }],
-  email: [{ validator: validateEmail, trigger: 'blur' }]
+  signature: [{ max: 255, message: '签名长度不能超过 255 个字符', trigger: 'blur' }]
 }
 
 const passwordRules = {
@@ -162,10 +149,11 @@ const handleChangePassword = async () => {
   }
   changing.value = true
   try {
-    await changePassword({
+		const data = await changePassword({
       old_password: passwordForm.old_password,
       new_password: passwordForm.new_password
     })
+		store.setToken(data.token)
     ElMessage.success('密码已修改')
     passwordForm.old_password = ''
     passwordForm.new_password = ''
@@ -183,7 +171,6 @@ onMounted(() => {
   form.signature = user.signature || ''
   form.school = user.school || ''
   form.grade = user.grade || ''
-  form.email = user.email || ''
 })
 </script>
 
