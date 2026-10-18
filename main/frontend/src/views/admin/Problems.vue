@@ -15,6 +15,7 @@
       </el-select>
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="router.push('/admin/problems/new')">新建题目</el-button>
+      <el-button @click="importVisible = true">导入题目</el-button>
       <el-button @click="load">刷新</el-button>
     </div>
 
@@ -69,6 +70,35 @@
         @size-change="load"
       />
     </div>
+
+    <el-dialog v-model="importVisible" title="导入题目" width="600px">
+      <el-upload
+        drag
+        :auto-upload="false"
+        :limit="1"
+        accept=".zip"
+        :file-list="importFiles"
+        :on-change="handleImportChange"
+      >
+        <div class="el-upload__text">把题目包 zip 拖到这里，或<em>点击选择</em></div>
+      </el-upload>
+
+      <div class="import-hint">
+        <p class="muted">包内结构：</p>
+        <pre class="pre-block">problem.md        题面，可直接用洛谷「复制 Markdown」的内容
+config.json       可选：title / display_id / difficulty / time_limit_ms
+                  / memory_limit_mb / points / tags / source / visibility
+1.in  1.out       测试数据，可以有多组；都不带时只导入题面</pre>
+        <p class="muted">没有 config.json 时，标题取题面的一级标题，题号自动生成。</p>
+      </div>
+
+      <template #footer>
+        <el-button @click="importVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="!importFiles.length" @click="handleImport">
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -76,7 +106,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminDeleteProblem, adminListProblems } from '@/api'
+import { adminDeleteProblem, adminImportProblem, adminListProblems } from '@/api'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const router = useRouter()
@@ -87,6 +117,9 @@ const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
 const visibilityFilter = ref('')
+const importVisible = ref(false)
+const importing = ref(false)
+const importFiles = ref([])
 
 const visibleItems = computed(() => {
   if (!visibilityFilter.value) {
@@ -135,5 +168,53 @@ const removeProblem = async (row) => {
   load()
 }
 
+const handleImportChange = (file) => {
+  importFiles.value = [file]
+}
+
+const handleImport = async () => {
+  const raw = importFiles.value[0]?.raw
+  if (!raw) {
+    return
+  }
+  importing.value = true
+  try {
+    const data = await adminImportProblem(raw)
+    const failed = data?.sync_failed || []
+    if (failed.length) {
+      ElMessage.warning(`题目已导入，但以下评测节点同步失败：${failed.join('、')}`)
+    } else {
+      ElMessage.success(`已导入「${data?.title || '题目'}」，${data?.testcase_count || 0} 个测试点`)
+    }
+    importVisible.value = false
+    importFiles.value = []
+    load()
+    if (data?.problem?.id) {
+      router.push(`/admin/problems/${data.problem.id}/testdata`)
+    }
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(load)
 </script>
+
+<style scoped>
+.import-hint {
+  margin-top: 16px;
+}
+
+.import-hint p {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.import-hint .pre-block {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+</style>

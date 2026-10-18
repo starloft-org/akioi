@@ -29,6 +29,7 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 	{
 		problems.GET("", h.AdminListProblems)
 		problems.POST("", h.AdminCreateProblem)
+		problems.POST("/import", h.AdminImportProblem)
 		problems.GET("/:id", h.AdminGetProblem)
 		problems.PUT("/:id", h.AdminUpdateProblem)
 		problems.DELETE("/:id", h.AdminDeleteProblem)

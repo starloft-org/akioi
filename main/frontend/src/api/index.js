@@ -89,6 +89,11 @@ export const adminImportUsers = (file) => {
 export const adminListProblems = (params) => request.get('/api/admin/v1/problems', { params })
 export const adminGetProblem = (id) => request.get(`/api/admin/v1/problems/${id}`)
 export const adminCreateProblem = (data) => request.post('/api/admin/v1/problems', data)
+export const adminImportProblem = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/api/admin/v1/problems/import', form, { timeout: 120000 })
+}
 export const adminUpdateProblem = (id, data) => request.put(`/api/admin/v1/problems/${id}`, data)
 export const adminDeleteProblem = (id) => request.delete(`/api/admin/v1/problems/${id}`)
 

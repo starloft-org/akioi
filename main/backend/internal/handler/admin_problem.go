@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"akioi/internal/httpx"
+	"akioi/internal/logger"
 	"akioi/internal/model"
 	"akioi/internal/service"
 
@@ -477,6 +478,127 @@ type testcaseItem struct {
 	OutputSize int64  `json:"output_size"`
 	InputHash  string `json:"input_hash"`
 	OutputHash string `json:"output_hash"`
+}
+
+// AdminImportProblem 从 zip 题目包导入题目：题面取 problem.md，元信息取 config.json，数据取 *.in/*.out。
+func (h *Handler) AdminImportProblem(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		httpx.BadRequest(c, "请上传题目包 zip")
+		return
+	}
+	if !strings.EqualFold(filepath.Ext(file.Filename), ".zip") {
+		httpx.BadRequest(c, "题目包必须是 zip 文件")
+		return
+	}
+	content, err := readUploadedFile(file, int64(h.Settings.Current().MaxTestdataMB)*1024*1024)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	files, err := service.ExtractZip(content)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	pkg, err := service.ParseProblemPackage(files)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+
+	displayID := strings.TrimSpace(pkg.Config.DisplayID)
+	if displayID == "" {
+		displayID, err = h.nextProblemDisplayID()
+		if err != nil {
+			httpx.ServerError(c, "生成题号失败")
+			return
+		}
+	} else if !validProblemDisplayID(displayID) {
+		httpx.BadRequest(c, "config.json 中的题号格式应为 A 加至少 4 位数字，例如 A0000")
+		return
+	}
+	var exists int64
+	if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
+		httpx.ServerError(c, "导入题目失败")
+		return
+	}
+	if exists > 0 {
+		httpx.Conflict(c, "题号 "+displayID+" 已存在")
+		return
+	}
+
+	timeLimit := pkg.Config.TimeLimitMS
+	if timeLimit < 100 || timeLimit > 30000 {
+		timeLimit = 1000
+	}
+	memoryLimit := pkg.Config.MemoryLimitMB
+	if memoryLimit < 16 || memoryLimit > 2048 {
+		memoryLimit = 256
+	}
+	visibility := pkg.Config.Visibility
+	if visibility != model.ProblemVisibilityHidden {
+		visibility = model.ProblemVisibilityPublic
+	}
+	difficulty := strings.TrimSpace(pkg.Config.Difficulty)
+	points := pkg.Config.Points
+	if points <= 0 {
+		points = model.DefaultPoints(difficulty)
+	}
+
+	p := model.Problem{
+		DisplayID:     displayID,
+		Title:         strings.TrimSpace(pkg.Config.Title),
+		Description:   pkg.Description,
+		InputFormat:   pkg.InputFormat,
+		OutputFormat:  pkg.OutputFormat,
+		Hint:          pkg.Hint,
+		TimeLimitMS:   timeLimit,
+		MemoryLimitMB: memoryLimit,
+		Difficulty:    difficulty,
+		Source:        strings.TrimSpace(pkg.Config.Source),
+		Points:        points,
+		Visibility:    visibility,
+		CompareMode:   model.CompareModeDefault,
+		FloatEps:      1e-6,
+		CreatedBy:     u.ID,
+	}
+	p.SetSamples(pkg.Samples)
+	p.SetTags(pkg.Config.Tags)
+
+	if err := h.DB.Create(&p).Error; err != nil {
+		httpx.ServerError(c, "导入题目失败")
+		return
+	}
+
+	// 包里带测试数据才写入；只有题面时允许先建题，之后再单独上传数据。
+	hasTestdata := false
+	for name := range files {
+		switch strings.ToLower(filepath.Ext(name)) {
+		case ".in", ".out", ".ans":
+			hasTestdata = true
+		}
+	}
+	if hasTestdata {
+		if err := h.Testdata.Replace(&p, files, nil); err != nil {
+			h.DB.Delete(&model.Problem{}, p.ID)
+			httpx.BadRequest(c, "导入测试数据失败: "+err.Error())
+			return
+		}
+	}
+
+	logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, p.DisplayID, p.ID, c.ClientIP())
+	httpx.OK(c, gin.H{
+		"problem":        gin.H{"id": p.ID, "display_id": p.DisplayID},
+		"title":          p.Title,
+		"testcase_count": p.TestcaseCount,
+		"sync_failed":    h.Testdata.SyncToNodes(syncContext(c), p.ID),
+	})
 }
 
 // AdminListTestdata 返回某题的测试点清单。
