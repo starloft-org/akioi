@@ -49,9 +49,6 @@ services:
       # 覆盖 .env 里的连接地址，指向本机这套容器
       DB_HOST: mysql
       REDIS_ADDR: redis:6379
-    # 只在回传评测结果时访问主站，走宿主机网关
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data/logs:/app/logs

@@ -55,7 +55,7 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int
 
-	// MainBaseURL 是主站地址，用于回传评测结果，如 http://host.docker.internal
+	// MainBaseURL 是主站地址，用于回传评测结果，同机部署填宿主机内网 IP，跨机填主站地址
 	MainBaseURL string
 
 	Judge JudgeConfig
