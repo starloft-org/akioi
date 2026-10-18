@@ -8,6 +8,7 @@ import (
 	"akioi/internal/migrate"
 	"akioi/internal/redis"
 	"akioi/internal/router"
+	"akioi/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,8 +21,6 @@ func main() {
 	if err := logger.Init(cfg.LogDir, cfg.LogMaxMB); err != nil {
 		panic(err)
 	}
-	logger.Businessf("启动 %s，环境 %s", cfg.AppName, cfg.Env)
-
 	if err := migrate.Run(database.MigrateDSN(cfg)); err != nil {
 		logger.Errorf("数据库迁移失败: %v", err)
 		panic(err)
@@ -39,6 +38,12 @@ func main() {
 		logger.Errorf("初始数据写入失败: %v", err)
 		panic(err)
 	}
+	settings, err := service.NewSettingService(db)
+	if err != nil {
+		logger.Errorf("加载系统设置失败: %v", err)
+		panic(err)
+	}
+	logger.Businessf("启动 %s，环境 %s", settings.Current().AppName, cfg.Env)
 	rdb, err := redis.Connect(cfg)
 	if err != nil {
 		logger.Errorf("连接 Redis 失败: %v", err)
@@ -49,7 +54,7 @@ func main() {
 	if cfg.Env == "development" {
 		gin.SetMode(gin.DebugMode)
 	}
-	r := router.Setup(handler.New(db, cfg, rdb), cfg, db, rdb)
+	r := router.Setup(handler.New(db, cfg, rdb, settings), cfg, db, rdb)
 
 	logger.Businessf("HTTP 服务监听 %s", cfg.ServerAddr)
 	if err := r.Run(cfg.ServerAddr); err != nil {

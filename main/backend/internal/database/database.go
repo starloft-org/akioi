@@ -62,6 +62,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Solution{},
 		&model.Discussion{},
 		&model.DiscussionComment{},
+		&model.SystemSetting{},
 	); err != nil {
 		return err
 	}
@@ -80,7 +81,10 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 		return nil
 	}
 	username := getEnvDefault("ADMIN_INIT_USERNAME", "admin")
-	password := getEnvDefault("ADMIN_INIT_PASSWORD", "akioi@2024")
+	password := config.EnvOr("ADMIN_INIT_PASSWORD", "")
+	if len(password) < 12 {
+		return fmt.Errorf("首次启动时必须在 .env 配置至少 12 位的 ADMIN_INIT_PASSWORD")
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err

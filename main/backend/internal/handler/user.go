@@ -162,7 +162,7 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 		httpx.BadRequest(c, "缺少头像文件")
 		return
 	}
-	maxBytes := int64(h.Cfg.MaxAvatarMB) * 1024 * 1024
+	maxBytes := int64(h.Settings.Current().MaxAvatarMB) * 1024 * 1024
 	if file.Size > maxBytes {
 		httpx.BadRequest(c, "头像文件过大")
 		return

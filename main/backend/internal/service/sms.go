@@ -36,20 +36,24 @@ var (
 )
 
 type SMSService struct {
-	rdb    *goredis.Client
-	cfg    *config.Config
-	client *http.Client
+	rdb      *goredis.Client
+	cfg      *config.Config
+	settings *SettingService
 }
 
-func NewSMS(rdb *goredis.Client, cfg *config.Config) *SMSService {
+func NewSMS(rdb *goredis.Client, cfg *config.Config, settings *SettingService) *SMSService {
 	return &SMSService{
-		rdb: rdb,
-		cfg: cfg,
-		client: &http.Client{Timeout: time.Duration(cfg.SMS.RequestTimeoutSec) * time.Second},
+		rdb:      rdb,
+		cfg:      cfg,
+		settings: settings,
 	}
 }
 
-func (s *SMSService) Enabled() bool { return s.cfg.SMS.Enabled() }
+func (s *SMSService) Enabled() bool {
+	settings := s.settings.Current()
+	return settings.SMSEnabled && s.cfg.SMS.APIKey != "" && s.cfg.SMS.APISecret != "" &&
+		settings.SMSRegisterTemplate != "" && settings.SMSResetTemplate != ""
+}
 
 func ValidPhone(phone string) bool {
 	if len(phone) != 11 || phone[0] != '1' || phone[1] < '3' || phone[1] > '9' {
@@ -72,8 +76,9 @@ func (s *SMSService) SendCode(ctx context.Context, phone, purpose string) error 
 		return ErrSMSCodeInvalid
 	}
 
+	settings := s.settings.Current()
 	cooldownKey := rediskeys.KeySMSCooldownPrefix + purpose + ":" + phone
-	ok, err := s.rdb.SetNX(ctx, cooldownKey, "1", time.Duration(s.cfg.SMS.SendIntervalSec)*time.Second).Result()
+	ok, err := s.rdb.SetNX(ctx, cooldownKey, "1", time.Duration(settings.SMSSendIntervalSec)*time.Second).Result()
 	if err != nil {
 		return fmt.Errorf("写入短信限流失败: %w", err)
 	}
@@ -86,7 +91,7 @@ func (s *SMSService) SendCode(ctx context.Context, phone, purpose string) error 
 		_ = s.rdb.Del(ctx, cooldownKey).Err()
 		return err
 	}
-	ttl := time.Duration(s.cfg.SMS.CodeTTLMinutes) * time.Minute
+	ttl := time.Duration(settings.SMSCodeTTLMinutes) * time.Minute
 	codeKey := rediskeys.KeySMSCodePrefix + purpose + ":" + phone
 	attemptsKey := rediskeys.KeySMSAttemptsPrefix + purpose + ":" + phone
 	if err := s.rdb.Set(ctx, codeKey, s.codeDigest(phone, purpose, code), ttl).Err(); err != nil {
@@ -115,7 +120,7 @@ func (s *SMSService) VerifyCode(ctx context.Context, phone, purpose, code string
 	}
 	if !hmac.Equal([]byte(stored), []byte(s.codeDigest(phone, purpose, code))) {
 		attempts, _ := s.rdb.Incr(ctx, attemptsKey).Result()
-		_ = s.rdb.Expire(ctx, attemptsKey, time.Duration(s.cfg.SMS.CodeTTLMinutes)*time.Minute).Err()
+		_ = s.rdb.Expire(ctx, attemptsKey, time.Duration(s.settings.Current().SMSCodeTTLMinutes)*time.Minute).Err()
 		if attempts >= maxSMSVerifyAttempts {
 			_ = s.rdb.Del(ctx, codeKey, attemptsKey).Err()
 		}
@@ -132,9 +137,10 @@ func (s *SMSService) codeDigest(phone, purpose, code string) string {
 }
 
 func (s *SMSService) send(ctx context.Context, phone, purpose, code string) error {
-	templateID := s.cfg.SMS.RegisterTemplateID
+	settings := s.settings.Current()
+	templateID := settings.SMSRegisterTemplate
 	if purpose == SMSPurposeResetPassword {
-		templateID = s.cfg.SMS.ResetTemplateID
+		templateID = settings.SMSResetTemplate
 	}
 	payload := struct {
 		PhoneNumbers  []string `json:"phone_number_set"`
@@ -143,13 +149,13 @@ func (s *SMSService) send(ctx context.Context, phone, purpose, code string) erro
 	}{
 		PhoneNumbers: []string{phone},
 		TemplateID: templateID,
-		TemplateParams: []string{code, strconv.Itoa(s.cfg.SMS.CodeTTLMinutes)},
+		TemplateParams: []string{code, strconv.Itoa(settings.SMSCodeTTLMinutes)},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	endpoint := strings.TrimRight(s.cfg.SMS.BaseURL, "/") + "/sms/send"
+	endpoint := strings.TrimRight(settings.SMSAPIBaseURL, "/") + "/sms/send"
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return fmt.Errorf("短信接口地址无效: %w", err)
@@ -170,7 +176,8 @@ func (s *SMSService) send(ctx context.Context, phone, purpose, code string) erro
 	req.Header.Set("X-Sign-Version", "hmac_sha256_v2")
 	req.Header.Set("X-Timestamp", timestamp)
 	req.Header.Set("X-Nonce", nonce)
-	resp, err := s.client.Do(req)
+	client := &http.Client{Timeout: time.Duration(settings.SMSRequestTimeoutSec) * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("短信发送失败: %w", err)
 	}

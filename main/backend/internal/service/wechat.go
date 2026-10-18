@@ -27,18 +27,19 @@ const (
 
 // WeChatService 实现微信扫码登录：授权跳转、换取 openid、绑定或创建站内用户。
 type WeChatService struct {
-	cfg *config.Config
-	db  *gorm.DB
-	rdb *goredis.Client
+	cfg      *config.Config
+	db       *gorm.DB
+	rdb      *goredis.Client
+	settings *SettingService
 }
 
-func NewWeChat(db *gorm.DB, rdb *goredis.Client, cfg *config.Config) *WeChatService {
-	return &WeChatService{cfg: cfg, db: db, rdb: rdb}
+func NewWeChat(db *gorm.DB, rdb *goredis.Client, cfg *config.Config, settings *SettingService) *WeChatService {
+	return &WeChatService{cfg: cfg, db: db, rdb: rdb, settings: settings}
 }
 
 // Enabled 表示登录方式是否可用，需开关打开且凭据齐全。
 func (s *WeChatService) Enabled() bool {
-	return s.cfg.WeChat.Enabled && s.cfg.WeChat.AppID != "" && s.cfg.WeChat.AppSecret != ""
+	return s.settings.Current().WeChatEnabled && s.cfg.WeChat.AppID != "" && s.cfg.WeChat.AppSecret != ""
 }
 
 // SaveState 记录一次性 state，回调时校验。
@@ -63,7 +64,7 @@ func (s *WeChatService) ConsumeState(ctx context.Context, state string) (string,
 func (s *WeChatService) AuthorizeURL(state string) string {
 	q := url.Values{}
 	q.Set("appid", s.cfg.WeChat.AppID)
-	q.Set("redirect_uri", s.cfg.WeChat.RedirectURI)
+	q.Set("redirect_uri", s.settings.Current().WeChatRedirectURI)
 	q.Set("response_type", "code")
 	q.Set("scope", "snsapi_login")
 	q.Set("state", state)
@@ -153,7 +154,7 @@ func (s *WeChatService) BindOrCreate(p *wechatProfile) (*model.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	hash, err := NewAuth(s.db, s.rdb, s.cfg).HashPassword(password)
+	hash, err := NewAuth(s.db, s.rdb, s.cfg, s.settings).HashPassword(password)
 	if err != nil {
 		return nil, err
 	}

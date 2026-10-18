@@ -19,7 +19,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 	r.Use(middleware.RealIP())
 	r.Use(middleware.Recover())
 	r.Use(middleware.AccessLog())
-	r.Use(middleware.CORS(cfg.CORSAllowOrigins))
+	r.Use(middleware.CORS(func() []string { return h.Settings.Current().CORSAllowOrigins }))
 	r.MaxMultipartMemory = 64 << 20
 
 	auth := h.Auth
@@ -41,7 +41,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 	})
 	r.Static("/uploads", cfg.UploadDir)
 
-	limiter := middleware.RateLimit(rdb, cfg.RateLimitPerMinute)
+	limiter := middleware.RateLimit(rdb, func() int { return h.Settings.Current().RateLimitPerMinute })
 
 	api := r.Group("/api/v1")
 	api.Use(limiter)

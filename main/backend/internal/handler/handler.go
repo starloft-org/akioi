@@ -18,21 +18,23 @@ type Handler struct {
 	SMS      *service.SMSService
 	Queue    *queue.Queue
 	Rank     *service.RankService
+	Settings *service.SettingService
 	Testdata *service.TestdataService
 	Judge    *service.JudgeService
 }
 
-func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client) *Handler {
+func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client, settings *service.SettingService) *Handler {
 	return &Handler{
 		DB:       db,
 		Cfg:      cfg,
 		RDB:      rdb,
-		Auth:     service.NewAuth(db, rdb, cfg),
-		WeChat:   service.NewWeChat(db, rdb, cfg),
-		SMS:      service.NewSMS(rdb, cfg),
+		Auth:     service.NewAuth(db, rdb, cfg, settings),
+		WeChat:   service.NewWeChat(db, rdb, cfg, settings),
+		SMS:      service.NewSMS(rdb, cfg, settings),
 		Queue:    queue.New(rdb, cfg.Judge.QueueKey),
 		Rank:     service.NewRank(db),
-		Testdata: service.NewTestdata(db, cfg),
-		Judge:    service.NewJudge(db, cfg, rdb),
+		Settings: settings,
+		Testdata: service.NewTestdata(db, cfg, settings),
+		Judge:    service.NewJudge(db, cfg, rdb, settings),
 	}
 }

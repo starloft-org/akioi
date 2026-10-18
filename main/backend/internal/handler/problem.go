@@ -188,9 +188,10 @@ func (h *Handler) ListLanguages(c *gin.Context) {
 
 // SiteInfo 返回站点公开配置，供前端渲染登录方式与注册开关。
 func (h *Handler) SiteInfo(c *gin.Context) {
+	settings := h.Settings.Current()
 	httpx.OK(c, gin.H{
-		"app_name":                      h.Cfg.AppName,
-		"register_enabled":              h.Cfg.RegisterEnabled && h.SMS.Enabled(),
+		"app_name":                      settings.AppName,
+		"register_enabled":              settings.RegisterEnabled && h.SMS.Enabled(),
 		"register_invite_code_required": h.Cfg.RegisterInviteCode != "",
 		"wechat_enabled":                h.WeChat.Enabled(),
 		"sms_enabled":                   h.SMS.Enabled(),

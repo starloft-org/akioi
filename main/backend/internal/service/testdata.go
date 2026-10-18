@@ -21,12 +21,13 @@ import (
 
 // TestdataService 管理测试数据文件与元数据：文件落文件系统，库内只存清单与哈希。
 type TestdataService struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db       *gorm.DB
+	cfg      *config.Config
+	settings *SettingService
 }
 
-func NewTestdata(db *gorm.DB, cfg *config.Config) *TestdataService {
-	return &TestdataService{db: db, cfg: cfg}
+func NewTestdata(db *gorm.DB, cfg *config.Config, settings *SettingService) *TestdataService {
+	return &TestdataService{db: db, cfg: cfg, settings: settings}
 }
 
 // Dir 返回某题的测试数据目录。
@@ -92,8 +93,9 @@ func (s *TestdataService) Replace(prob *model.Problem, files map[string][]byte, 
 		indexes = append(indexes, idx)
 	}
 	sort.Ints(indexes)
-	if len(indexes) > s.cfg.Judge.MaxTestcases {
-		return fmt.Errorf("测试点数量 %d 超过上限 %d", len(indexes), s.cfg.Judge.MaxTestcases)
+	maxTestcases := s.settings.Current().MaxTestcases
+	if len(indexes) > maxTestcases {
+		return fmt.Errorf("测试点数量 %d 超过上限 %d", len(indexes), maxTestcases)
 	}
 
 	dir := s.Dir(prob.ID)

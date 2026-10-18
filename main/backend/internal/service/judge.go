@@ -29,13 +29,14 @@ var (
 
 // JudgeService 负责提交的创建、校验与评测任务投递。
 type JudgeService struct {
-	db  *gorm.DB
-	cfg *config.Config
-	rdb *goredis.Client
+	db       *gorm.DB
+	cfg      *config.Config
+	rdb      *goredis.Client
+	settings *SettingService
 }
 
-func NewJudge(db *gorm.DB, cfg *config.Config, rdb *goredis.Client) *JudgeService {
-	return &JudgeService{db: db, cfg: cfg, rdb: rdb}
+func NewJudge(db *gorm.DB, cfg *config.Config, rdb *goredis.Client, settings *SettingService) *JudgeService {
+	return &JudgeService{db: db, cfg: cfg, rdb: rdb, settings: settings}
 }
 
 type SubmitInput struct {
@@ -94,9 +95,10 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 		return nil, ErrProblemNotVisible
 	}
 
-	if s.cfg.SubmitIntervalSec > 0 {
+	submitInterval := s.settings.Current().SubmitIntervalSec
+	if submitInterval > 0 {
 		key := fmt.Sprintf("%s%d:%d", redis.KeySubmitLockPrefix, in.UserID, in.ProblemID)
-		ok, err := s.rdb.SetNX(ctx, key, time.Now().Unix(), time.Duration(s.cfg.SubmitIntervalSec)*time.Second).Result()
+		ok, err := s.rdb.SetNX(ctx, key, time.Now().Unix(), time.Duration(submitInterval)*time.Second).Result()
 		if err != nil {
 			return nil, fmt.Errorf("提交限频检查失败: %w", err)
 		}

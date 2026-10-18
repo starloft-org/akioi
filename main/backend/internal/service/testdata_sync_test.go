@@ -23,12 +23,13 @@ func newSyncTestService(t *testing.T, endpoints ...string) *TestdataService {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{Judge: config.JudgeConfig{
-		TestdataDir:    dir,
-		NodeEndpoints:  endpoints,
-		SyncSecret:     "test-secret",
-		SyncTimeoutSec: 5,
+		TestdataDir: dir,
+		SyncSecret:  "test-secret",
 	}}
-	return NewTestdata(nil, cfg)
+	settings := DefaultRuntimeSettings()
+	settings.JudgeNodeEndpoints = endpoints
+	settings.JudgeSyncTimeoutSec = 5
+	return NewTestdata(nil, cfg, NewStaticSettingService(settings))
 }
 
 func TestSyncToNodesPushesInOrder(t *testing.T) {

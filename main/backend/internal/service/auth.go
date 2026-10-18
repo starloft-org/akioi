@@ -27,13 +27,14 @@ var (
 )
 
 type AuthService struct {
-	db  *gorm.DB
-	rdb *goredis.Client
-	cfg *config.Config
+	db       *gorm.DB
+	rdb      *goredis.Client
+	cfg      *config.Config
+	settings *SettingService
 }
 
-func NewAuth(db *gorm.DB, rdb *goredis.Client, cfg *config.Config) *AuthService {
-	return &AuthService{db: db, rdb: rdb, cfg: cfg}
+func NewAuth(db *gorm.DB, rdb *goredis.Client, cfg *config.Config, settings *SettingService) *AuthService {
+	return &AuthService{db: db, rdb: rdb, cfg: cfg, settings: settings}
 }
 
 func (s *AuthService) HashPassword(pw string) (string, error) {
@@ -60,7 +61,7 @@ func (s *AuthService) Issue(u *model.User) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ttl := time.Duration(s.cfg.JWTTTLHours) * time.Hour
+	ttl := time.Duration(s.settings.Current().JWTTTLHours) * time.Hour
 	c := claims{
 		UserID:      u.ID,
 		AuthVersion: u.AuthVersion,

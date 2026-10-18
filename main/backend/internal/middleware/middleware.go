@@ -107,12 +107,12 @@ func RealIP() gin.HandlerFunc {
 }
 
 // CORS 仅在配置了允许来源时启用跨域，供本地前端联调使用。
-func CORS(origins []string) gin.HandlerFunc {
-	allowed := make(map[string]bool, len(origins))
-	for _, o := range origins {
-		allowed[o] = true
-	}
+func CORS(origins func() []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		allowed := make(map[string]bool)
+		for _, o := range origins() {
+			allowed[o] = true
+		}
 		origin := c.GetHeader("Origin")
 		if origin != "" && (allowed["*"] || allowed[origin]) {
 			c.Header("Access-Control-Allow-Origin", origin)

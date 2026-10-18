@@ -88,6 +88,14 @@ func withRedis(cfg *config.Config) *goredis.Client {
 	return rdb
 }
 
+func withSettings(db *gorm.DB) *service.SettingService {
+	settings, err := service.NewSettingService(db)
+	if err != nil {
+		fatal("加载系统设置失败: " + err.Error())
+	}
+	return settings
+}
+
 func runMigrate(cfg *config.Config) {
 	if err := migrate.Run(database.MigrateDSN(cfg)); err != nil {
 		fatal("执行迁移失败: " + err.Error())
@@ -124,7 +132,7 @@ func runResetPassword(cfg *config.Config, args []string) {
 	if err := db.Where("username = ?", *username).First(&u).Error; err != nil {
 		fatal("用户不存在: " + *username)
 	}
-	auth := service.NewAuth(db, withRedis(cfg), cfg)
+	auth := service.NewAuth(db, withRedis(cfg), cfg, service.NewStaticSettingService(service.DefaultRuntimeSettings()))
 	if err := auth.ResetPassword(u.ID, *password); err != nil {
 		fatal("重置失败: " + err.Error())
 	}
@@ -177,7 +185,7 @@ func runCreateUser(cfg *config.Config, args []string) {
 	if exists > 0 {
 		fatal("用户已存在: " + *username)
 	}
-	auth := service.NewAuth(db, withRedis(cfg), cfg)
+	auth := service.NewAuth(db, withRedis(cfg), cfg, service.NewStaticSettingService(service.DefaultRuntimeSettings()))
 	hash, err := auth.HashPassword(*password)
 	if err != nil {
 		fatal("密码加密失败: " + err.Error())
@@ -220,7 +228,7 @@ func runImportUsers(cfg *config.Config, args []string) {
 		fatal("解析 CSV 失败: " + err.Error())
 	}
 	db := withDB(cfg)
-	auth := service.NewAuth(db, withRedis(cfg), cfg)
+	auth := service.NewAuth(db, withRedis(cfg), cfg, service.NewStaticSettingService(service.DefaultRuntimeSettings()))
 
 	imported, skipped := 0, 0
 	for i, row := range records {
@@ -296,7 +304,7 @@ func runRejudge(cfg *config.Config, args []string) {
 	_ = fs.Parse(args)
 
 	db := withDB(cfg)
-	judgeSvc := service.NewJudge(db, cfg, withRedis(cfg))
+	judgeSvc := service.NewJudge(db, cfg, withRedis(cfg), withSettings(db))
 	ctx := context.Background()
 
 	var (

@@ -27,8 +27,9 @@ return count
 `)
 
 // RateLimit 基于 Redis 滑动窗口限流；管理员豁免，Redis 不可用时按失败关闭处理。
-func RateLimit(rdb *goredis.Client, limit int) gin.HandlerFunc {
+func RateLimit(rdb *goredis.Client, currentLimit func() int) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		limit := currentLimit()
 		if limit <= 0 {
 			c.Next()
 			return

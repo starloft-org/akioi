@@ -70,6 +70,8 @@ export const uploadAvatar = (file) => {
 
 // 管理后台
 export const adminGetStats = () => request.get('/api/admin/v1/stats')
+export const adminGetSettings = () => request.get('/api/admin/v1/settings')
+export const adminUpdateSettings = (data) => request.put('/api/admin/v1/settings', data)
 
 export const adminListUsers = (params) => request.get('/api/admin/v1/users', { params })
 export const adminUpdateUser = (id, data) => request.put(`/api/admin/v1/users/${id}`, data)

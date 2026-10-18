@@ -15,6 +15,8 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 
 	admin.GET("/stats", h.AdminStats)
 	admin.GET("/logs", h.AdminLogs)
+	admin.GET("/settings", h.AdminGetSettings)
+	admin.PUT("/settings", h.AdminUpdateSettings)
 
 	users := admin.Group("/users")
 	{

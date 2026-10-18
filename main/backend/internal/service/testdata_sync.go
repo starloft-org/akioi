@@ -15,13 +15,14 @@ import (
 
 // SyncToNodes 依次把某题的测试数据推送到各评测节点，返回推送失败的节点。
 func (s *TestdataService) SyncToNodes(ctx context.Context, problemID uint) []string {
-	if len(s.cfg.Judge.NodeEndpoints) == 0 {
+	nodes := s.settings.Current().JudgeNodeEndpoints
+	if len(nodes) == 0 {
 		return nil
 	}
 	zipPath, err := s.packageFile(problemID)
 	if err != nil {
 		logger.Errorf("打包题目 %d 测试数据失败: %v", problemID, err)
-		return append([]string{}, s.cfg.Judge.NodeEndpoints...)
+		return append([]string{}, nodes...)
 	}
 	defer func() { _ = os.Remove(zipPath) }()
 
@@ -32,7 +33,7 @@ func (s *TestdataService) SyncToNodes(ctx context.Context, problemID uint) []str
 
 // ClearOnNodes 依次通知各评测节点删除某题的测试数据，返回通知失败的节点。
 func (s *TestdataService) ClearOnNodes(ctx context.Context, problemID uint) []string {
-	if len(s.cfg.Judge.NodeEndpoints) == 0 {
+	if len(s.settings.Current().JudgeNodeEndpoints) == 0 {
 		return nil
 	}
 	return s.eachNode(ctx, problemID, func(ctx context.Context, endpoint string) error {
@@ -45,7 +46,7 @@ func (s *TestdataService) eachNode(ctx context.Context, problemID uint,
 	action func(ctx context.Context, endpoint string) error) []string {
 
 	var failed []string
-	for _, endpoint := range s.cfg.Judge.NodeEndpoints {
+	for _, endpoint := range s.settings.Current().JudgeNodeEndpoints {
 		if err := action(ctx, endpoint); err != nil {
 			logger.Errorf("同步题目 %d 测试数据到评测节点 %s 失败: %v", problemID, endpoint, err)
 			failed = append(failed, endpoint)
@@ -84,7 +85,7 @@ func (s *TestdataService) deleteOnNode(ctx context.Context, endpoint string, pro
 }
 
 func (s *TestdataService) do(req *http.Request) error {
-	client := &http.Client{Timeout: time.Duration(s.cfg.Judge.SyncTimeoutSec) * time.Second}
+	client := &http.Client{Timeout: time.Duration(s.settings.Current().JudgeSyncTimeoutSec) * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

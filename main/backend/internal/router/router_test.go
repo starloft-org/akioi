@@ -5,6 +5,7 @@ import (
 
 	"akioi/internal/config"
 	"akioi/internal/handler"
+	"akioi/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,7 +17,8 @@ func TestSetupRegistersRoutes(t *testing.T) {
 		JWTSecret: "test-secret",
 		Judge:     config.JudgeConfig{QueueKey: "test:queue"},
 	}
-	h := handler.New(nil, cfg, nil)
+	settings := service.NewStaticSettingService(service.DefaultRuntimeSettings())
+	h := handler.New(nil, cfg, nil, settings)
 
 	engine := Setup(h, cfg, nil, nil)
 
@@ -39,6 +41,8 @@ func TestSetupRegistersRoutes(t *testing.T) {
 		"POST /api/v1/contests/:id/register",
 		"PUT /api/v1/users/me/password",
 		"GET /api/admin/v1/stats",
+		"GET /api/admin/v1/settings",
+		"PUT /api/admin/v1/settings",
 		"GET /api/admin/v1/users",
 		"POST /api/admin/v1/problems",
 		"POST /api/admin/v1/problems/:id/testdata",

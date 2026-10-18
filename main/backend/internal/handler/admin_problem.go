@@ -520,7 +520,7 @@ func (h *Handler) AdminUploadTestdata(c *gin.Context) {
 		httpx.BadRequest(c, "缺少测试数据文件")
 		return
 	}
-	maxBytes := int64(h.Cfg.MaxTestdataMB) * 1024 * 1024
+	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
 
 	var data map[string][]byte
 	if len(files) == 1 && strings.EqualFold(filepath.Ext(files[0].Filename), ".zip") {

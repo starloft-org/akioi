@@ -9,6 +9,7 @@
         <el-menu-item index="/admin/submissions">评测记录</el-menu-item>
         <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
         <el-menu-item v-if="store.isAdmin" index="/admin/users">用户管理</el-menu-item>
+        <el-menu-item index="/admin/settings">系统设置</el-menu-item>
         <el-menu-item index="/admin/logs">日志查看</el-menu-item>
       </el-menu>
     </el-aside>

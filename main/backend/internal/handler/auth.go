@@ -23,9 +23,9 @@ type registerRequest struct {
 	InviteCode string `json:"invite_code"`
 }
 
-// Register 开放注册，受 REGISTER_ENABLED 与邀请码控制。
+// Register 开放注册，受数据库注册开关与环境变量邀请码控制。
 func (h *Handler) Register(c *gin.Context) {
-	if !h.Cfg.RegisterEnabled || !h.SMS.Enabled() {
+	if !h.Settings.Current().RegisterEnabled || !h.SMS.Enabled() {
 		httpx.Forbidden(c, "当前未开放注册")
 		return
 	}
@@ -163,7 +163,8 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 		httpx.BadRequest(c, "验证码用途不正确")
 		return
 	}
-	if req.Purpose == service.SMSPurposeRegister && !h.Cfg.RegisterEnabled {
+	settings := h.Settings.Current()
+	if req.Purpose == service.SMSPurposeRegister && !settings.RegisterEnabled {
 		httpx.Forbidden(c, "当前未开放注册")
 		return
 	}
@@ -178,7 +179,7 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 	}
 	if req.Purpose == service.SMSPurposeResetPassword && count == 0 {
 		// 保持与成功请求一致的响应，避免枚举已注册手机号。
-		httpx.OK(c, gin.H{"expires_in": h.Cfg.SMS.CodeTTLMinutes * 60})
+		httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
 		return
 	}
 	if err := h.SMS.SendCode(c.Request.Context(), req.Phone, req.Purpose); err != nil {
@@ -190,7 +191,7 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 		httpx.ServerError(c, "验证码发送失败")
 		return
 	}
-	httpx.OK(c, gin.H{"expires_in": h.Cfg.SMS.CodeTTLMinutes * 60})
+	httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
 }
 
 type resetPasswordRequest struct {

@@ -83,6 +83,7 @@ const routes = [
         name: 'admin-announcements',
         component: () => import('@/views/admin/Announcements.vue')
       },
+      { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/Settings.vue') },
       { path: 'logs', name: 'admin-logs', component: () => import('@/views/admin/Logs.vue') }
     ]
   },
