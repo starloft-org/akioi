@@ -24,8 +24,12 @@ type registerRequest struct {
 
 // Register 开放注册，仅受数据库注册开关与短信服务状态控制。
 func (h *Handler) Register(c *gin.Context) {
-	if !h.Settings.Current().RegisterEnabled || !h.SMS.Enabled() {
+	if !h.Settings.Current().RegisterEnabled {
 		httpx.Forbidden(c, "当前未开放注册")
+		return
+	}
+	if !h.SMS.Enabled() {
+		httpx.BadRequest(c, "短信服务未配置，暂时无法注册")
 		return
 	}
 	var req registerRequest
@@ -180,6 +184,10 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 	if err := h.SMS.SendCode(c.Request.Context(), req.Phone, req.Purpose); err != nil {
 		if errors.Is(err, service.ErrSMSTooFrequent) {
 			httpx.TooMany(c, httpx.CodeTooManyRequest, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrSMSNotConfigured) {
+			httpx.BadRequest(c, "短信服务未配置，暂时无法发送验证码")
 			return
 		}
 		logger.Errorf("短信验证码发送失败 purpose=%s phone=%s err=%v", req.Purpose, maskPhone(req.Phone), err)
