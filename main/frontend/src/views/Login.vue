@@ -32,8 +32,9 @@
         </el-link>
       </div>
       <div v-if="store.site.wechat_enabled" class="auth-wechat">
-        <el-button :loading="wechatLoading" @click="handleWechat">微信登录</el-button>
+        <el-button @click="wechatDialog.open()">微信扫码登录</el-button>
       </div>
+      <WechatQrDialog ref="wechatDialog" purpose="login" @login="onWechatLogin" />
     </div>
   </div>
 </template>
@@ -42,7 +43,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getWechatUrl, wechatCallback } from '@/api'
+import { wechatCallback } from '@/api'
+import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
@@ -51,7 +53,7 @@ const route = useRoute()
 
 const formRef = ref(null)
 const loading = ref(false)
-const wechatLoading = ref(false)
+const wechatDialog = ref(null)
 const form = reactive({ account: '', password: '' })
 
 const rules = {
@@ -96,21 +98,14 @@ const handleLogin = async () => {
   }
 }
 
-const handleWechat = async () => {
-  wechatLoading.value = true
-  try {
-    // state 里存的是登录成功后要回到的页面，不能传登录页自身，否则回调后原地打转
-    const data = await getWechatUrl(route.query.redirect || '/')
-    if (data?.enabled && data.url) {
-      window.location.href = data.url
-      return
-    }
-    ElMessage.warning('微信登录未启用')
-  } catch (e) {
-    // 错误提示由请求层统一处理
-  } finally {
-    wechatLoading.value = false
+// PC 端扫码成功后由对话框带回 token
+const onWechatLogin = (data) => {
+  store.setToken(data.token)
+  if (data.user) {
+    store.user = data.user
   }
+  ElMessage.success('登录成功')
+  router.replace(data.redirect || route.query.redirect || '/')
 }
 
 onMounted(() => {

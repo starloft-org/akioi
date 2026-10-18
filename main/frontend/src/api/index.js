@@ -17,6 +17,7 @@ export const getWechatUrl = (params) =>
     params: typeof params === 'string' ? { redirect: params } : params
   })
 export const wechatCallback = (params) => request.get('/api/v1/auth/wechat/callback', { params })
+export const getWechatStatus = (state) => request.get('/api/v1/auth/wechat/status', { params: { state } })
 export const unbindWechat = () => request.delete('/api/v1/auth/wechat/binding')
 
 // 题库

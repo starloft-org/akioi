@@ -283,6 +283,35 @@ func (h *Handler) WeChatURL(c *gin.Context) {
 	httpx.OK(c, gin.H{"enabled": true, "url": h.WeChat.AuthorizeURL(state), "state": state})
 }
 
+// WeChatStatus 供 PC 端轮询扫码结果：pending 表示还没扫或授权未完成。
+func (h *Handler) WeChatStatus(c *gin.Context) {
+	state := c.Query("state")
+	if state == "" {
+		httpx.BadRequest(c, "缺少 state")
+		return
+	}
+	res, ok := h.WeChat.GetScanResult(c.Request.Context(), state)
+	if !ok {
+		httpx.OK(c, gin.H{"status": "pending"})
+		return
+	}
+	if res.Bound {
+		httpx.OK(c, gin.H{"status": "bound", "redirect": res.Redirect})
+		return
+	}
+	var u model.User
+	if err := h.DB.First(&u, res.UserID).Error; err != nil {
+		httpx.OK(c, gin.H{"status": "pending"})
+		return
+	}
+	httpx.OK(c, gin.H{
+		"status":   "authorized",
+		"token":    res.Token,
+		"user":     model.NewPrivateUser(&u),
+		"redirect": res.Redirect,
+	})
+}
+
 // WeChatUnbind 解除当前账号的微信绑定。
 func (h *Handler) WeChatUnbind(c *gin.Context) {
 	u := httpx.MustUser(c)
@@ -336,6 +365,11 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 			return
 		}
 		logger.Businessf("用户 %d 绑定微信成功", st.UserID)
+		_ = h.WeChat.SetScanResult(c.Request.Context(), c.Query("state"), service.ScanResult{
+			Bound:    true,
+			UserID:   st.UserID,
+			Redirect: st.Redirect,
+		})
 		httpx.OK(c, gin.H{"bound": true, "redirect": st.Redirect})
 		return
 	}
@@ -357,6 +391,12 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 	now := time.Now()
 	h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("last_login_at", now)
 	logger.Businessf("微信登录成功 username=%s ip=%s", u.Username, c.ClientIP())
+	// 结果同时暂存，供 PC 端的二维码页面轮询取走。
+	_ = h.WeChat.SetScanResult(c.Request.Context(), c.Query("state"), service.ScanResult{
+		Token:    token,
+		UserID:   u.ID,
+		Redirect: st.Redirect,
+	})
 	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": st.Redirect})
 }
 

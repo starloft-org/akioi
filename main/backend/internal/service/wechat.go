@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	wechatAuthorizeURL = "https://open.weixin.qq.com/connect/qrconnect"
+	// 公众号网页授权，必须在微信内置浏览器打开；PC 端靠二维码引导手机扫码。
+	wechatAuthorizeURL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 	wechatTokenURL     = "https://api.weixin.qq.com/sns/oauth2/access_token"
 	wechatUserInfoURL  = "https://api.weixin.qq.com/sns/userinfo"
 	wechatProvider     = "wechat"
@@ -91,9 +92,48 @@ func (s *WeChatService) AuthorizeURL(state string) string {
 	q.Set("appid", s.cfg.WeChat.AppID)
 	q.Set("redirect_uri", s.settings.Current().WeChatRedirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "snsapi_login")
+	// 公众号网页授权：snsapi_userinfo 能拿到昵称头像，首次会弹确认页。
+	q.Set("scope", "snsapi_userinfo")
 	q.Set("state", state)
 	return wechatAuthorizeURL + "?" + q.Encode() + "#wechat_redirect"
+}
+
+// ScanResult 暂存扫码授权的结果，供 PC 端轮询取走。
+type ScanResult struct {
+	Token    string `json:"token"`
+	UserID   uint   `json:"user_id"`
+	Bound    bool   `json:"bound"`
+	Redirect string `json:"redirect"`
+}
+
+// SetScanResult 写入一次扫码结果，等待发起端轮询。
+func (s *WeChatService) SetScanResult(ctx context.Context, state string, r ScanResult) error {
+	payload, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return s.rdb.Set(ctx, scanResultKey(state), payload, wechatStateTTL).Err()
+}
+
+// GetScanResult 读取扫码结果。结果随 state 的 TTL 自然过期，不主动删除，
+// 避免 PC 端偶发的请求失败把结果消费掉。
+func (s *WeChatService) GetScanResult(ctx context.Context, state string) (*ScanResult, bool) {
+	if state == "" {
+		return nil, false
+	}
+	raw, err := s.rdb.Get(ctx, scanResultKey(state)).Result()
+	if err != nil {
+		return nil, false
+	}
+	var r ScanResult
+	if err := json.Unmarshal([]byte(raw), &r); err != nil {
+		return nil, false
+	}
+	return &r, true
+}
+
+func scanResultKey(state string) string {
+	return redis.KeyWeChatStatePrefix + "scan:" + state
 }
 
 type wechatProfile struct {

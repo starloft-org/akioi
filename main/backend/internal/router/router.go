@@ -61,6 +61,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			authGroup.GET("/me", required, h.Me)
 			authGroup.GET("/wechat/url", optional, h.WeChatURL)
 			authGroup.GET("/wechat/callback", h.WeChatCallback)
+			authGroup.GET("/wechat/status", h.WeChatStatus)
 			authGroup.DELETE("/wechat/binding", required, h.WeChatUnbind)
 		}
 
