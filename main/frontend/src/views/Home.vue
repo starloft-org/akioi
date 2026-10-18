@@ -228,7 +228,7 @@ const durationText = (row) => {
   return `${Math.round(hours / 24)} 天`
 }
 
-const DIFFICULTY_TYPES = ['success', 'success', 'primary', 'warning', 'danger', 'danger']
+const DIFFICULTY_TYPES = ['info', 'success', 'primary', 'warning', 'danger']
 
 const difficultyType = (value) => {
   const idx = DIFFICULTIES.indexOf(value)

@@ -6,7 +6,7 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="题号">
-            <el-input v-model="form.display_id" :placeholder="isEdit ? '' : '留空自动生成 P1001'" />
+            <el-input v-model="form.display_id" :placeholder="isEdit ? '' : '留空自动生成，如 A0000'" />
           </el-form-item>
         </el-col>
         <el-col :span="12">

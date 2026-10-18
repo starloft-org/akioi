@@ -24,7 +24,7 @@ export const LANGUAGES = [
 export const languageName = (key) =>
   LANGUAGES.find((item) => item.key === key)?.name || key || '-'
 
-export const DIFFICULTIES = ['入门', '普及-', '普及', '提高', '省选', 'NOI']
+export const DIFFICULTIES = ['入门', '简单', '中等', '困难', '挑战']
 
 export const COMPARE_MODES = [
   { value: 'default', label: '忽略行尾空格与末尾空行' },

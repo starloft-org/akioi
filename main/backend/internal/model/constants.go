@@ -58,14 +58,13 @@ func SupportedLanguages() []map[string]string {
 	}
 }
 
-// 难度
+// 难度（自建五级体系，与前端 DIFFICULTIES 保持一致）
 const (
-	DifficultyEntry    = "入门"
-	DifficultyPopularM = "普及-"
-	DifficultyPopular  = "普及"
-	DifficultyImprove  = "提高"
-	DifficultyProvince = "省选"
-	DifficultyNOI      = "NOI"
+	DifficultyEntry     = "入门"
+	DifficultyEasy      = "简单"
+	DifficultyMedium    = "中等"
+	DifficultyHard      = "困难"
+	DifficultyChallenge = "挑战"
 )
 
 // 比赛状态（按当前时间与起止时间计算）

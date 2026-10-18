@@ -221,6 +221,10 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		}
 		displayID = next
 	} else {
+		if !validProblemDisplayID(displayID) {
+			httpx.BadRequest(c, "题号格式应为 A 加至少 4 位数字，例如 A0000")
+			return
+		}
 		var exists int64
 		if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
 			httpx.ServerError(c, "创建题目失败")
@@ -312,6 +316,10 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 		displayID := strings.TrimSpace(*req.DisplayID)
 		if displayID == "" {
 			httpx.BadRequest(c, "题号不能为空")
+			return
+		}
+		if !validProblemDisplayID(displayID) {
+			httpx.BadRequest(c, "题号格式应为 A 加至少 4 位数字，例如 A0000")
 			return
 		}
 		var exists int64
@@ -429,18 +437,34 @@ func (h *Handler) AdminDeleteProblem(c *gin.Context) {
 	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
 }
 
-// nextProblemDisplayID 从 P1001 起递增，返回首个未被占用的题号。
+// nextProblemDisplayID 返回 A 开头的下一个题号：取现有最大编号加一，空库从 A0000 开始。
 func (h *Handler) nextProblemDisplayID() (string, error) {
-	for n := 1001; ; n++ {
-		displayID := "P" + strconv.Itoa(n)
-		var count int64
-		if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&count).Error; err != nil {
-			return "", err
-		}
-		if count == 0 {
-			return displayID, nil
+	var ids []string
+	if err := h.DB.Model(&model.Problem{}).
+		Where("display_id LIKE 'A%'").
+		Pluck("display_id", &ids).Error; err != nil {
+		return "", err
+	}
+	next := 0
+	for _, id := range ids {
+		if n, err := strconv.Atoi(strings.TrimPrefix(id, "A")); err == nil && n >= next {
+			next = n + 1
 		}
 	}
+	return fmt.Sprintf("A%04d", next), nil
+}
+
+// validProblemDisplayID 校验题号形如 A0000：字母 A 加至少 4 位数字。
+func validProblemDisplayID(id string) bool {
+	if len(id) < 5 || id[0] != 'A' {
+		return false
+	}
+	for _, c := range id[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type testcaseItem struct {
