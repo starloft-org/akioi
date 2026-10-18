@@ -98,7 +98,12 @@
       </el-row>
 
       <el-form-item label="题目描述">
-        <el-input v-model="form.description" type="textarea" :rows="6" />
+        <el-input
+          v-model="form.description"
+          type="textarea"
+          :rows="8"
+          placeholder="支持 Markdown：标题、列表、表格、行内代码、三反引号代码块、图片等"
+        />
       </el-form-item>
       <el-form-item label="输入格式">
         <el-input v-model="form.input_format" type="textarea" :rows="6" />

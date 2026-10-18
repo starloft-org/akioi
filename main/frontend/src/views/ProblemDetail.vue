@@ -26,11 +26,11 @@
           </div>
 
           <h3>题目描述</h3>
-          <div class="pre-block">{{ problem.description }}</div>
+          <div class="md-body" v-html="renderMarkdown(problem.description)"></div>
           <h3>输入格式</h3>
-          <div class="pre-block">{{ problem.input_format }}</div>
+          <div class="md-body" v-html="renderMarkdown(problem.input_format)"></div>
           <h3>输出格式</h3>
-          <div class="pre-block">{{ problem.output_format }}</div>
+          <div class="md-body" v-html="renderMarkdown(problem.output_format)"></div>
 
           <template v-if="problem.samples && problem.samples.length">
             <h3>样例</h3>
@@ -55,7 +55,7 @@
 
           <template v-if="problem.hint">
             <h3>提示</h3>
-            <div class="pre-block">{{ problem.hint }}</div>
+            <div class="md-body" v-html="renderMarkdown(problem.hint)"></div>
           </template>
         </div>
       </div>
@@ -119,6 +119,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useUserStore } from '@/store/user'
 import { LANGUAGES, formatDuration, formatMemory, formatTime, languageName } from '@/utils/format'
+import { renderMarkdown } from '@/utils/markdown'
 
 const store = useUserStore()
 const route = useRoute()

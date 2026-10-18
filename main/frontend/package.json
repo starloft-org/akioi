@@ -15,7 +15,9 @@
     "@codemirror/view": "^6.26.3",
     "axios": "^1.7.2",
     "codemirror": "^6.0.1",
+    "dompurify": "^3.4.17",
     "element-plus": "^2.7.5",
+    "markdown-it": "^15.0.3",
     "pinia": "^2.1.7",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2"

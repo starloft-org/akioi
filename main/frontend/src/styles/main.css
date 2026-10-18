@@ -196,6 +196,80 @@ a {
   padding-left: 24px;
 }
 
+/* Markdown 题面 */
+.md-body {
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.md-body > :first-child {
+  margin-top: 0;
+}
+
+.md-body > :last-child {
+  margin-bottom: 0;
+}
+
+.md-body code {
+  padding: 1px 5px;
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 13px;
+  background: #f2f3f5;
+  border-radius: 3px;
+}
+
+.md-body pre {
+  margin: 12px 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #fafafa;
+  border: 1px solid var(--akioi-border);
+  border-radius: var(--akioi-radius);
+}
+
+.md-body pre code {
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  background: none;
+}
+
+.md-body table {
+  width: 100%;
+  margin: 12px 0;
+  border-collapse: collapse;
+}
+
+.md-body th,
+.md-body td {
+  padding: 6px 10px;
+  text-align: left;
+  border: 1px solid var(--akioi-border);
+}
+
+.md-body th {
+  font-weight: 600;
+  background: #f7f8fa;
+}
+
+.md-body blockquote {
+  margin: 12px 0;
+  padding: 8px 12px;
+  color: var(--akioi-text-weak);
+  background: #f7f8fa;
+  border-left: 3px solid var(--akioi-border);
+}
+
+.md-body img {
+  max-width: 100%;
+}
+
+.md-body hr {
+  margin: 16px 0;
+  border: none;
+  border-top: 1px solid var(--akioi-border);
+}
+
 /* 后台外壳 */
 .admin-shell {
   height: 100vh;
