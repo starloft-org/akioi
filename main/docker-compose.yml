@@ -43,11 +43,11 @@ services:
       timeout: 5s
       retries: 10
 
-  server:
+  backend:
     build:
       context: ./backend
     image: akioi-backend:latest
-    container_name: akioi_server
+    container_name: akioi_backend
     restart: unless-stopped
     command: ["/app/server"]
     env_file: .env
@@ -81,4 +81,4 @@ services:
       # 并交给上层反向代理转发。
       - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - server
+      - backend
