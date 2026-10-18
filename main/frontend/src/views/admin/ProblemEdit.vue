@@ -2,6 +2,15 @@
   <div v-loading="loading" class="panel">
     <h3 class="panel__title">{{ isEdit ? '编辑题目' : '新建题目' }}</h3>
 
+    <el-alert
+      v-if="!isEdit"
+      type="info"
+      :closable="false"
+      show-icon
+      title="题面和测试数据分两步：保存后会自动进入测试数据上传页"
+      style="margin-bottom: 16px"
+    />
+
     <el-form :model="form" label-width="110px">
       <el-row :gutter="16">
         <el-col :span="12">
@@ -232,8 +241,16 @@ const handleSubmit = async () => {
   try {
     if (isEdit.value) {
       await adminUpdateProblem(problemId.value, buildPayload())
-    } else {
-      await adminCreateProblem(buildPayload())
+      ElMessage.success('保存成功')
+      router.push('/admin/problems')
+      return
+    }
+    const data = await adminCreateProblem(buildPayload())
+    const newId = data?.problem?.id
+    if (newId) {
+      ElMessage.success('题目已创建，接着上传测试数据')
+      router.push(`/admin/problems/${newId}/testdata`)
+      return
     }
     ElMessage.success('保存成功')
     router.push('/admin/problems')

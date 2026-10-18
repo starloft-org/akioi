@@ -1,6 +1,9 @@
 <template>
   <div class="panel">
-    <h3 class="panel__title">测试数据</h3>
+    <div class="testdata-head">
+      <h3 class="panel__title">测试数据</h3>
+      <el-button size="small" @click="router.push('/admin/problems')">返回题目列表</el-button>
+    </div>
     <p class="muted">题目 ID：{{ problemId }}　测试点数量：{{ items.length }}　总分：{{ totalScore }}</p>
 
     <el-alert
@@ -61,7 +64,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   adminDeleteTestdata,
@@ -73,6 +76,7 @@ import {
 import { formatFileSize } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const problemId = computed(() => Number(route.params.id))
 
 const loading = ref(false)
@@ -175,3 +179,16 @@ const clearTestdata = async () => {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.testdata-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.testdata-head .panel__title {
+  margin: 0;
+}
+</style>
