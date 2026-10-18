@@ -103,6 +103,8 @@ export const adminDeleteProblem = (id) => request.delete(`/api/admin/v1/problems
 
 export const adminListTestdata = (id) => request.get(`/api/admin/v1/problems/${id}/testdata`)
 export const adminSyncTestdata = (id) => request.post(`/api/admin/v1/problems/${id}/testdata/sync`)
+export const adminJudgeNodesStatus = () => request.get('/api/admin/v1/judges/status')
+export const adminJudgeSyncAll = () => request.post('/api/admin/v1/judges/sync-all', null, { timeout: 600000 })
 export const adminUploadTestdata = (id, files, scores) => {
   const form = new FormData()
   for (const f of files) {

@@ -317,3 +317,60 @@ func ParseIDs(raw string) []uint {
 	}
 	return ids
 }
+
+// NodeHealth 是一次节点健康检查的结果，供测评机管理页展示。
+type NodeHealth struct {
+	Endpoint     string `json:"endpoint"`
+	Reachable    bool   `json:"reachable"`
+	LatencyMS    int64  `json:"latency_ms"`
+	Error        string `json:"error"`
+	QueueLength  int64  `json:"queue_length"`
+	PendingJobs  int64  `json:"pending_jobs"`
+	DataProblems int    `json:"data_problems"`
+}
+
+// CheckNodes 依次探测全部评测节点的健康接口。
+func (s *JudgeService) CheckNodes(ctx context.Context) []NodeHealth {
+	nodes := s.settings.Current().JudgeNodeEndpoints
+	out := make([]NodeHealth, 0, len(nodes))
+	client := &http.Client{Timeout: 8 * time.Second}
+
+	for _, endpoint := range nodes {
+		nh := NodeHealth{Endpoint: endpoint}
+		start := time.Now()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			strings.TrimRight(endpoint, "/")+"/internal/v1/health", nil)
+		if err != nil {
+			nh.Error = err.Error()
+			out = append(out, nh)
+			continue
+		}
+		req.Header.Set("X-Sync-Secret", s.cfg.Judge.SyncSecret)
+		resp, err := client.Do(req)
+		nh.LatencyMS = time.Since(start).Milliseconds()
+		if err != nil {
+			nh.Error = err.Error()
+			out = append(out, nh)
+			continue
+		}
+		var body struct {
+			OK           bool  `json:"ok"`
+			QueueLength  int64 `json:"queue_length"`
+			PendingJobs  int64 `json:"pending_jobs"`
+			DataProblems int   `json:"data_problems"`
+		}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body)
+		_ = resp.Body.Close()
+		if decodeErr != nil || resp.StatusCode != http.StatusOK || !body.OK {
+			nh.Error = "节点返回异常"
+			out = append(out, nh)
+			continue
+		}
+		nh.Reachable = true
+		nh.QueueLength = body.QueueLength
+		nh.PendingJobs = body.PendingJobs
+		nh.DataProblems = body.DataProblems
+		out = append(out, nh)
+	}
+	return out
+}

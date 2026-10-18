@@ -38,6 +38,7 @@ func New(cfg *config.Config, db *gorm.DB, q *queue.Queue) *Server {
 	mux.HandleFunc("PUT /internal/v1/testdata/{id}", s.withSecret(s.putTestdata))
 	mux.HandleFunc("DELETE /internal/v1/testdata/{id}", s.withSecret(s.deleteTestdata))
 	mux.HandleFunc("POST /internal/v1/judge", s.withSecret(s.postJudge))
+	mux.HandleFunc("GET /internal/v1/health", s.withSecret(s.health))
 	s.srv = &http.Server{
 		Addr:              cfg.Judge.ListenAddr,
 		Handler:           mux,
@@ -135,6 +136,40 @@ func (s *Server) postJudge(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Judgef("已接收评测任务 submission=%d job=%d", task.SubmissionID, job.ID)
 	writeJSON(w, http.StatusOK, "")
+}
+
+// health 返回节点运行概况，供主站的测评机管理页展示。
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	queueLen, _ := s.queue.Length(r.Context())
+	var pending int64
+	_ = s.db.Model(&model.JudgeJob{}).
+		Where("status IN ?", []string{"pending", "running"}).
+		Count(&pending).Error
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":            true,
+		"queue_length":  queueLen,
+		"pending_jobs":  pending,
+		"data_problems": countDataProblems(s.cfg.Judge.TestdataDir),
+	})
+}
+
+// countDataProblems 统计测试数据目录下以数字命名的题目目录数量。
+func countDataProblems(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := strconv.Atoi(entry.Name()); err == nil {
+			count++
+		}
+	}
+	return count
 }
 
 func (s *Server) putTestdata(w http.ResponseWriter, r *http.Request) {

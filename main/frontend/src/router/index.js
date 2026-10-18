@@ -80,6 +80,11 @@ const routes = [
         component: () => import('@/views/admin/Submissions.vue')
       },
       {
+        path: 'judges',
+        name: 'admin-judges',
+        component: () => import('@/views/admin/Judges.vue')
+      },
+      {
         path: 'announcements',
         name: 'admin-announcements',
         component: () => import('@/views/admin/Announcements.vue')
