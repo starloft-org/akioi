@@ -73,12 +73,11 @@
 
     <el-dialog v-model="importVisible" title="导入题目" width="600px">
       <el-upload
+        v-model:file-list="importFiles"
         drag
         :auto-upload="false"
         :limit="1"
         accept=".zip"
-        :file-list="importFiles"
-        :on-change="handleImportChange"
       >
         <div class="el-upload__text">把题目包 zip 拖到这里，或<em>点击选择</em></div>
       </el-upload>
@@ -166,10 +165,6 @@ const removeProblem = async (row) => {
   }
   ElMessage.success('已删除')
   load()
-}
-
-const handleImportChange = (file) => {
-  importFiles.value = [file]
 }
 
 const handleImport = async () => {
