@@ -58,8 +58,9 @@ services:
       - ./data/testdata:/app/testdata
       - ./data/work:/app/work
     ports:
-      # 主站推送测试数据与评测任务使用；只对主站开放，不要暴露到公网
-      - "${JUDGE_LISTEN_PORT:-9100}:9100"
+      # 主站推送测试数据与评测任务使用。宿主机端口固定 9000，
+      # 主站侧把节点地址配成 http://<本品宿主机 IP>:9000 即可，同机、跨机一致。
+      - "${JUDGE_LISTEN_PORT:-9000}:9000"
     depends_on:
       mysql:
         condition: service_healthy

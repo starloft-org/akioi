@@ -155,7 +155,7 @@
                 v-model="judgeNodesText"
                 type="textarea"
                 :rows="4"
-                placeholder="每行一个节点，例如 http://10.0.0.11:9100；留空表示不推送"
+                placeholder="每行一个节点，例如 http://192.168.1.10:9000；留空表示不推送"
               />
             </el-form-item>
           </el-col>

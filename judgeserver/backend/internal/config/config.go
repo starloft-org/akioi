@@ -104,7 +104,7 @@ func Load() (*Config, error) {
 			CStd:              getEnv("C_STD", "c11"),
 			CFlags:            getEnv("C_FLAGS", "-O2"),
 
-			ListenAddr:    getEnv("JUDGE_LISTEN_ADDR", ":9100"),
+			ListenAddr:    getEnv("JUDGE_LISTEN_ADDR", ":9000"),
 			SyncSecret:    getEnv("JUDGE_SYNC_SECRET", ""),
 			MaxTestdataMB: getEnvInt("MAX_TESTDATA_MB", 512),
 		},

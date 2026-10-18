@@ -30,7 +30,7 @@ func TestNormalizeRuntimeSettingsRejectsInvalidValues(t *testing.T) {
 	}{
 		{"empty app name", func(s *RuntimeSettings) { s.AppName = "" }},
 		{"short sms interval", func(s *RuntimeSettings) { s.SMSSendIntervalSec = 10 }},
-		{"bad node url", func(s *RuntimeSettings) { s.JudgeNodeEndpoints = []string{"judge:9100"} }},
+		{"bad node url", func(s *RuntimeSettings) { s.JudgeNodeEndpoints = []string{"judge:9000"} }},
 		{"bad cors origin", func(s *RuntimeSettings) { s.CORSAllowOrigins = []string{"example.com"} }},
 		{"sms without templates", func(s *RuntimeSettings) { s.SMSEnabled = true }},
 		{"wechat without redirect", func(s *RuntimeSettings) { s.WeChatEnabled = true }},
