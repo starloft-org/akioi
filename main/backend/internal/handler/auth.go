@@ -261,7 +261,7 @@ func (h *Handler) WeChatURL(c *gin.Context) {
 		httpx.OK(c, gin.H{"enabled": false, "url": ""})
 		return
 	}
-	st := service.WeChatState{Purpose: "login", Redirect: c.Query("redirect")}
+	st := service.WeChatState{Purpose: "login", Redirect: c.Query("redirect"), From: c.DefaultQuery("from", "h5")}
 	if c.Query("purpose") == "bind" {
 		u := httpx.CurrentUser(c)
 		if u == nil {
@@ -370,7 +370,7 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 			UserID:   st.UserID,
 			Redirect: st.Redirect,
 		})
-		httpx.OK(c, gin.H{"bound": true, "redirect": st.Redirect})
+		httpx.OK(c, gin.H{"bound": true, "redirect": st.Redirect, "from": st.From})
 		return
 	}
 	u, err := h.WeChat.BindOrCreate(profile)
@@ -397,7 +397,7 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 		UserID:   u.ID,
 		Redirect: st.Redirect,
 	})
-	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": st.Redirect})
+	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": st.Redirect, "from": st.From})
 }
 
 func bearerOf(c *gin.Context) string {

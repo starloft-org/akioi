@@ -58,6 +58,7 @@ type WeChatState struct {
 	Purpose  string `json:"purpose"`  // login：扫码登录；bind：绑定到已登录账号
 	UserID   uint   `json:"user_id"`  // bind 时对应的站内用户
 	Redirect string `json:"redirect"` // 前端落点
+	From     string `json:"from"`     // pc：二维码扫码；h5：微信内直接授权
 }
 
 // SaveState 记录一次性 state，回调时校验。

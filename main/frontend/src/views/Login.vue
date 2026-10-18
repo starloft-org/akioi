@@ -32,7 +32,7 @@
         </el-link>
       </div>
       <div v-if="store.site.wechat_enabled" class="auth-wechat">
-        <el-button @click="wechatDialog.open()">微信扫码登录</el-button>
+        <el-button @click="handleWechat">{{ wechatLabel }}</el-button>
       </div>
       <WechatQrDialog ref="wechatDialog" purpose="login" @login="onWechatLogin" />
     </div>
@@ -40,10 +40,10 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { wechatCallback } from '@/api'
+import { getWechatUrl, wechatCallback } from '@/api'
 import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
 
@@ -55,6 +55,10 @@ const formRef = ref(null)
 const loading = ref(false)
 const wechatDialog = ref(null)
 const form = reactive({ account: '', password: '' })
+
+// 公众号授权只能微信内置浏览器打开，其余环境走二维码
+const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent)
+const wechatLabel = computed(() => (isWechatBrowser ? '微信登录' : '微信扫码登录'))
 
 const rules = {
   account: [{ required: true, message: '请输入手机号或用户名', trigger: 'blur' }],
@@ -106,6 +110,28 @@ const onWechatLogin = (data) => {
   }
   ElMessage.success('登录成功')
   router.replace(data.redirect || route.query.redirect || '/')
+}
+
+// 微信内直接跳转授权页，非微信环境弹出二维码
+const handleWechat = async () => {
+  if (!isWechatBrowser) {
+    wechatDialog.value.open()
+    return
+  }
+  try {
+    const data = await getWechatUrl({
+      purpose: 'login',
+      redirect: route.query.redirect || '/',
+      from: 'h5'
+    })
+    if (data?.enabled && data.url) {
+      window.location.href = data.url
+      return
+    }
+    ElMessage.warning('微信登录未启用')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  }
 }
 
 onMounted(() => {

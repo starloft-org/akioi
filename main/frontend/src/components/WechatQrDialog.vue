@@ -92,7 +92,8 @@ const start = async () => {
   try {
     const data = await getWechatUrl({
       purpose: props.purpose,
-      redirect: props.purpose === 'bind' ? '/profile' : '/'
+      redirect: props.purpose === 'bind' ? '/profile' : '/',
+      from: 'pc'
     })
     if (!data?.enabled || !data.url) {
       error.value = '微信登录未启用'

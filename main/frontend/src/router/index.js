@@ -37,6 +37,7 @@ const routes = [
     ]
   },
   { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
+  { path: '/auth/wechat', name: 'wechat-callback', component: () => import('@/views/WechatCallback.vue') },
   { path: '/register', name: 'register', component: () => import('@/views/Register.vue') },
   { path: '/forgot-password', name: 'forgot-password', component: () => import('@/views/ForgotPassword.vue') },
   {

@@ -64,7 +64,7 @@
             {{ store.wechatBound ? '已绑定，可用微信扫码登录' : '未绑定，绑定后可用微信扫码直接登录' }}
           </div>
         </div>
-        <el-button v-if="!store.wechatBound" type="primary" plain @click="wechatDialog.open()">
+        <el-button v-if="!store.wechatBound" type="primary" plain @click="handleBindWechat">
           绑定微信
         </el-button>
         <el-button v-else :loading="unbinding" @click="handleUnbindWechat">解除绑定</el-button>
@@ -78,7 +78,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changePassword, unbindWechat, updateMe, uploadAvatar, wechatCallback } from '@/api'
+import { changePassword, getWechatUrl, unbindWechat, updateMe, uploadAvatar, wechatCallback } from '@/api'
 import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
 
@@ -191,6 +191,26 @@ const handleChangePassword = async () => {
 const onWechatBound = () => {
   store.wechatBound = true
   ElMessage.success('微信绑定成功')
+}
+
+const isWechatBrowser = /MicroMessenger/i.test(navigator.userAgent)
+
+// 微信内直接跳转授权，其余环境弹二维码
+const handleBindWechat = async () => {
+  if (!isWechatBrowser) {
+    wechatDialog.value.open()
+    return
+  }
+  try {
+    const data = await getWechatUrl({ purpose: 'bind', redirect: '/profile', from: 'h5' })
+    if (data?.enabled && data.url) {
+      window.location.href = data.url
+      return
+    }
+    ElMessage.warning('微信登录未启用')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  }
 }
 
 const handleUnbindWechat = async () => {
