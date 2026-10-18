@@ -10,10 +10,9 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Task 是下发给评测进程的任务，Token 用于保证结果回写的幂等性。
+// Task 是下发给评测进程的任务，只携带本地任务 ID。
 type Task struct {
-	SubmissionID uint   `json:"submission_id"`
-	Token        string `json:"token"`
+	JobID uint `json:"job_id"`
 }
 
 var ErrEmpty = errors.New("队列为空")

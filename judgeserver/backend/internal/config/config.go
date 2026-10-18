@@ -9,8 +9,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// DBName 为固定库名，与主站 docker-compose 的 MYSQL_DATABASE 保持一致。
-const DBName = "akioi"
+// 评测节点使用独立数据库，默认库名与主站区分开。
+const DefaultDBName = "akioi_judge"
 
 // JudgeConfig 为评测沙箱、队列与资源限制相关配置。
 type JudgeConfig struct {
@@ -34,16 +34,18 @@ type JudgeConfig struct {
 	CStd              string
 	CFlags            string
 
-	// 控制面：接收主站推送的测试数据
+	// 控制面：接收主站推送的测试数据与评测任务
 	ListenAddr    string
 	SyncSecret    string
 	MaxTestdataMB int
 }
 
-// Config 为评测节点配置，仅含连接主站与执行评测所需的项。
+// Config 为评测节点配置。数据库与 Redis 都是节点自带的实例，
+// 只有回传评测结果时才访问主站。
 type Config struct {
 	DBHost        string
 	DBPort        int
+	DBName        string
 	DBUser        string
 	DBPassword    string
 	DBMaxOpenConn int
@@ -52,6 +54,9 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
+
+	// MainBaseURL 是主站地址，用于回传评测结果，如 http://host.docker.internal
+	MainBaseURL string
 
 	Judge JudgeConfig
 
@@ -66,6 +71,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		DBHost:        getEnv("DB_HOST", "127.0.0.1"),
 		DBPort:        getEnvInt("DB_PORT", 3306),
+		DBName:        getEnv("DB_NAME", DefaultDBName),
 		DBUser:        getEnv("DB_USER", "root"),
 		DBPassword:    getEnv("DB_PASSWORD", ""),
 		DBMaxOpenConn: getEnvInt("DB_MAX_OPEN_CONNS", 20),
@@ -74,6 +80,8 @@ func Load() (*Config, error) {
 		RedisAddr:     getEnv("REDIS_ADDR", "127.0.0.1:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		RedisDB:       getEnvInt("REDIS_DB", 0),
+
+		MainBaseURL: strings.TrimRight(getEnv("MAIN_BASE_URL", ""), "/"),
 
 		Judge: JudgeConfig{
 			Concurrency:       getEnvInt("JUDGE_CONCURRENCY", 2),
@@ -115,11 +123,17 @@ func (c *Config) validate() error {
 	if c.DBPassword == "" {
 		return fmt.Errorf("DB_PASSWORD 未配置")
 	}
+	if c.DBName == "" {
+		c.DBName = DefaultDBName
+	}
 	if c.RedisAddr == "" {
 		return fmt.Errorf("REDIS_ADDR 未配置")
 	}
 	if c.Judge.Concurrency < 1 {
 		c.Judge.Concurrency = 1
+	}
+	if c.MainBaseURL == "" {
+		return fmt.Errorf("MAIN_BASE_URL 未配置，评测结果无法回传主站")
 	}
 	return nil
 }

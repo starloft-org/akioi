@@ -48,6 +48,8 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 	{
 		api.GET("/site", h.SiteInfo)
 		api.GET("/languages", h.ListLanguages)
+		// 评测节点回传结果，使用同步密钥鉴权，不挂用户鉴权中间件
+		api.POST("/internal/judgements", h.InternalJudgement)
 		api.GET("/announcements", h.ListAnnouncements)
 		api.GET("/rankings", h.GlobalRanking)
 

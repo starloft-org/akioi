@@ -1,15 +1,18 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"akioi/internal/config"
 	"akioi/internal/model"
-	"akioi/internal/queue"
 	"akioi/internal/redis"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -129,10 +132,109 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 		UpdateColumn("submit_count", gorm.Expr("submit_count + 1")).Error; err != nil {
 		return nil, err
 	}
-	if err := queue.New(s.rdb, s.cfg.Judge.QueueKey).Push(ctx, queue.Task{SubmissionID: sub.ID, Token: token}); err != nil {
-		return nil, fmt.Errorf("投递评测任务失败: %w", err)
+	if err := s.dispatch(ctx, &sub, &problem); err != nil {
+		// 没有节点接收任务时直接标记为系统错误，避免提交一直挂在等待评测。
+		_ = s.db.Model(&model.Submission{}).Where("id = ?", sub.ID).Updates(map[string]any{
+			"status":        model.StatusSystemError,
+			"judge_message": "评测节点不可用: " + err.Error(),
+			"judged_at":     time.Now(),
+		}).Error
 	}
 	return &sub, nil
+}
+
+// dispatchTask 是下发给评测节点的完整任务，评测所需数据全部自带。
+type dispatchTask struct {
+	SubmissionID  uint           `json:"submission_id"`
+	JudgeToken    string         `json:"judge_token"`
+	ProblemID     uint           `json:"problem_id"`
+	Language      string         `json:"language"`
+	Code          string         `json:"code"`
+	TimeLimitMS   int            `json:"time_limit_ms"`
+	MemoryLimitMB int            `json:"memory_limit_mb"`
+	CompareMode   string         `json:"compare_mode"`
+	FloatEps      float64        `json:"float_eps"`
+	Testcases     []dispatchCase `json:"testcases"`
+}
+
+type dispatchCase struct {
+	Index int `json:"index"`
+	Score int `json:"score"`
+}
+
+// JudgeResultPayload 是评测节点回传的结果。
+type JudgeResultPayload struct {
+	SubmissionID uint                   `json:"submission_id"`
+	JudgeToken   string                 `json:"judge_token"`
+	Status       string                 `json:"status"`
+	Score        int                    `json:"score"`
+	TimeMS       int                    `json:"time_ms"`
+	MemoryKB     int                    `json:"memory_kb"`
+	CompileError string                 `json:"compile_error"`
+	JudgeMessage string                 `json:"judge_message"`
+	Results      []model.TestcaseResult `json:"testcase_results"`
+}
+
+// dispatch 把任务推给任一可用节点；节点按配置顺序尝试，第一个接收即成功。
+func (s *JudgeService) dispatch(ctx context.Context, sub *model.Submission, prob *model.Problem) error {
+	nodes := s.settings.Current().JudgeNodeEndpoints
+	if len(nodes) == 0 {
+		return errors.New("未配置评测节点")
+	}
+
+	var cases []model.Testcase
+	if err := s.db.Where("problem_id = ?", prob.ID).Order("case_index asc").Find(&cases).Error; err != nil {
+		return err
+	}
+	items := make([]dispatchCase, 0, len(cases))
+	for _, tc := range cases {
+		items = append(items, dispatchCase{Index: tc.Index, Score: tc.Score})
+	}
+
+	task := dispatchTask{
+		SubmissionID:  sub.ID,
+		JudgeToken:    sub.JudgeToken,
+		ProblemID:     prob.ID,
+		Language:      sub.Language,
+		Code:          sub.Code,
+		TimeLimitMS:   prob.TimeLimitMS,
+		MemoryLimitMB: prob.MemoryLimitMB,
+		CompareMode:   prob.CompareMode,
+		FloatEps:      prob.FloatEps,
+		Testcases:     items,
+	}
+	body, err := json.Marshal(task)
+	if err != nil {
+		return err
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	var lastErr error
+	for _, endpoint := range nodes {
+		url := strings.TrimRight(endpoint, "/") + "/internal/v1/judge"
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Sync-Secret", s.cfg.Judge.SyncSecret)
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return nil
+		}
+		lastErr = fmt.Errorf("节点 %s 返回 %d", endpoint, resp.StatusCode)
+	}
+	if lastErr == nil {
+		lastErr = errors.New("没有可用节点")
+	}
+	return lastErr
 }
 
 // Rejudge 重置指定提交并重新投递评测任务，返回成功投递的数量。
@@ -140,9 +242,16 @@ func (s *JudgeService) Rejudge(ctx context.Context, ids []uint) (int, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	q := queue.New(s.rdb, s.cfg.Judge.QueueKey)
 	count := 0
 	for _, id := range ids {
+		var sub model.Submission
+		if err := s.db.First(&sub, id).Error; err != nil {
+			continue
+		}
+		var prob model.Problem
+		if err := s.db.First(&prob, sub.ProblemID).Error; err != nil {
+			continue
+		}
 		token, err := randomHex(16)
 		if err != nil {
 			return count, err
@@ -164,8 +273,9 @@ func (s *JudgeService) Rejudge(ctx context.Context, ids []uint) (int, error) {
 		if res.RowsAffected == 0 {
 			continue
 		}
-		if err := q.Push(ctx, queue.Task{SubmissionID: id, Token: token}); err != nil {
-			return count, err
+		sub.JudgeToken = token
+		if err := s.dispatch(ctx, &sub, &prob); err != nil {
+			continue
 		}
 		count++
 	}

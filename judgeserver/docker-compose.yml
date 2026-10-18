@@ -1,10 +1,42 @@
-# 评测节点：可部署在独立机器上，通过 .env 指向主站的 MySQL 与 Redis（主站见 ../main）。
+# 评测节点：自带 MySQL 与 Redis，不再访问主站的数据库与队列。
+# 与主站之间只有 HTTP：接收测试数据与评测任务，回传评测结果。
 # 首次部署：
-#   1. cp .env.example .env 并填写 DB_HOST / DB_PASSWORD / REDIS_ADDR / REDIS_PASSWORD / JUDGE_SYNC_SECRET / HOST_TESTDATA_DIR / HOST_WORK_DIR
+#   1. cp .env.example .env 并填写 DB_PASSWORD / REDIS_PASSWORD / MAIN_BASE_URL / JUDGE_SYNC_SECRET / HOST_TESTDATA_DIR / HOST_WORK_DIR
 #   2. docker compose --profile sandbox build sandbox    # 构建判题沙箱镜像 akioi-sandbox:latest
-#   3. docker compose up -d --build                      # 启动 judge
-# 判题沙箱镜像不是常驻服务，只用于给 judge 提供隔离运行环境，因此放在 sandbox profile 下。
+#   3. docker compose up -d --build
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: akioi_judge_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-akioi_judge}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: akioi_judge_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   judge:
     build:
       context: ./backend
@@ -13,8 +45,11 @@ services:
     restart: unless-stopped
     user: root
     env_file: .env
-    # 与主站同机部署时用 host.docker.internal 访问主站，主站的 MySQL / Redis 需绑定 0.0.0.0
-    # （DB_BIND_ADDR / REDIS_BIND_ADDR）或宿主机内网 IP；跨机部署直接填主站内网 IP。
+    environment:
+      # 覆盖 .env 里的连接地址，指向本机这套容器
+      DB_HOST: mysql
+      REDIS_ADDR: redis:6379
+    # 只在回传评测结果时访问主站，走宿主机网关
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -23,8 +58,13 @@ services:
       - ./data/testdata:/app/testdata
       - ./data/work:/app/work
     ports:
-      # 主站推送测试数据使用；只对主站开放，不要暴露到公网
+      # 主站推送测试数据与评测任务使用；只对主站开放，不要暴露到公网
       - "${JUDGE_LISTEN_PORT:-9100}:9100"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   sandbox:
     image: akioi-sandbox:latest

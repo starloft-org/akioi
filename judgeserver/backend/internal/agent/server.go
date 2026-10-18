@@ -18,19 +18,26 @@ import (
 
 	"akioi/internal/config"
 	"akioi/internal/logger"
+	"akioi/internal/model"
+	"akioi/internal/queue"
+
+	"gorm.io/gorm"
 )
 
-// Server 监听主站推送测试数据的请求。
+// Server 监听主站推送的测试数据与评测任务。
 type Server struct {
-	cfg *config.Config
-	srv *http.Server
+	cfg   *config.Config
+	db    *gorm.DB
+	queue *queue.Queue
+	srv   *http.Server
 }
 
-func New(cfg *config.Config) *Server {
-	s := &Server{cfg: cfg}
+func New(cfg *config.Config, db *gorm.DB, q *queue.Queue) *Server {
+	s := &Server{cfg: cfg, db: db, queue: q}
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /internal/v1/testdata/{id}", s.withSecret(s.putTestdata))
 	mux.HandleFunc("DELETE /internal/v1/testdata/{id}", s.withSecret(s.deleteTestdata))
+	mux.HandleFunc("POST /internal/v1/judge", s.withSecret(s.postJudge))
 	s.srv = &http.Server{
 		Addr:              cfg.Judge.ListenAddr,
 		Handler:           mux,
@@ -67,6 +74,69 @@ func (s *Server) withSecret(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // putTestdata 用请求体中的数据包整体替换某题的测试数据。
+// postJudge 接收主站下发的评测任务：写入本地任务表并推入队列。
+func (s *Server) postJudge(w http.ResponseWriter, r *http.Request) {
+	var task model.JudgeTask
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&task); err != nil {
+		writeJSON(w, http.StatusBadRequest, "评测任务格式错误")
+		return
+	}
+	if task.SubmissionID == 0 || task.JudgeToken == "" {
+		writeJSON(w, http.StatusBadRequest, "评测任务缺少必要字段")
+		return
+	}
+	payload, err := json.Marshal(task)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, "序列化任务失败")
+		return
+	}
+
+	job := model.JudgeJob{
+		SubmissionID: task.SubmissionID,
+		JudgeToken:   task.JudgeToken,
+		Payload:      string(payload),
+		Status:       "pending",
+	}
+
+	var existing model.JudgeJob
+	err = s.db.Where("submission_id = ?", task.SubmissionID).First(&existing).Error
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		if err := s.db.Create(&job).Error; err != nil {
+			logger.Errorf("保存评测任务失败 submission=%d: %v", task.SubmissionID, err)
+			writeJSON(w, http.StatusInternalServerError, "保存任务失败")
+			return
+		}
+	case err != nil:
+		writeJSON(w, http.StatusInternalServerError, "查询任务失败")
+		return
+	default:
+		if existing.JudgeToken == task.JudgeToken && existing.Status != "failed" {
+			// 同一任务重复下发，已经在队列或正在评测
+			writeJSON(w, http.StatusOK, "")
+			return
+		}
+		existing.JudgeToken = task.JudgeToken
+		existing.Payload = string(payload)
+		existing.Status = "pending"
+		existing.Result = ""
+		existing.Synced = false
+		if err := s.db.Save(&existing).Error; err != nil {
+			writeJSON(w, http.StatusInternalServerError, "更新任务失败")
+			return
+		}
+		job = existing
+	}
+
+	if err := s.queue.Push(r.Context(), queue.Task{JobID: job.ID}); err != nil {
+		logger.Errorf("投递本地队列失败 job=%d: %v", job.ID, err)
+		writeJSON(w, http.StatusInternalServerError, "任务入队失败")
+		return
+	}
+	logger.Judgef("已接收评测任务 submission=%d job=%d", task.SubmissionID, job.ID)
+	writeJSON(w, http.StatusOK, "")
+}
+
 func (s *Server) putTestdata(w http.ResponseWriter, r *http.Request) {
 	problemID, ok := pathProblemID(w, r)
 	if !ok {
