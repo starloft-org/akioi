@@ -1,10 +1,23 @@
 :root {
-  --akioi-primary: #1a6cf5;
+  /* 品牌主色：与 StarLoft 站点保持一致（腾讯云风格青色） */
+  --akioi-primary: #1cd5c7;
+  --akioi-primary-hover: #15c5ba;
+  --akioi-primary-light: #dff8f5;
+
   --akioi-text: #1f2329;
   --akioi-text-weak: #646a73;
   --akioi-border: #e5e6eb;
-  --akioi-bg: #f5f6f7;
+  --akioi-bg: #f5f7fa;
   --akioi-radius: 4px;
+
+  /* 同步 Element Plus 主色，让按钮、链接、标签与品牌色同源 */
+  --el-color-primary: #1cd5c7;
+  --el-color-primary-light-3: #60e2d8;
+  --el-color-primary-light-5: #8eeae3;
+  --el-color-primary-light-7: #bbf2ee;
+  --el-color-primary-light-8: #d2f7f4;
+  --el-color-primary-light-9: #e8fbf9;
+  --el-color-primary-dark-2: #17aa9f;
 }
 
 * {
