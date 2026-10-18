@@ -13,17 +13,15 @@ services:
     restart: unless-stopped
     user: root
     env_file: .env
-    # 与主站同机部署时用 host.docker.internal 访问主站的 MySQL / Redis；跨机部署直接填主站内网 IP
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    # 使用宿主机网络：同机部署时可通过 127.0.0.1 访问主站发布在回环地址上的 MySQL / Redis，
+    # 跨机部署时 .env 的 DB_HOST / REDIS_ADDR 填主站内网 IP 即可。
+    # judge 通过 docker run 创建的沙箱容器仍使用 --network none，不受此设置影响。
+    network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data/logs:/app/logs
       - ./data/testdata:/app/testdata
       - ./data/work:/app/work
-    ports:
-      # 主站推送测试数据使用；只对主站开放，不要暴露到公网
-      - "${JUDGE_LISTEN_PORT:-9100}:9100"
 
   sandbox:
     image: akioi-sandbox:latest

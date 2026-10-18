@@ -29,7 +29,7 @@ alwaysApply: true
 - 后端仅在容器内网暴露 `8080`（`expose`，不映射宿主端口）；对外 TLS 终止与域名分发由宿主机/1Panel Nginx 反代到前端容器端口，需透传 `Host` 头与真实 IP（`X-Real-IP`/`X-Forwarded-For`）。
 - 反代到后端必须用「变量 + 无 URI 的 proxy_pass」：`proxy_pass http://$backend_endpoint;`（在 `proxy_pass` 里写 URI 会截断剩余路径）；变量与 `resolver 127.0.0.11` 必须保留（运行期解析 compose 服务名，避免 DNS 未就绪启动失败）。
 - **判题通过 docker-outside-of-docker 实现**：`judge` 挂载 `/var/run/docker.sock` 与本机同路径的 `judgeserver/data/testdata`、`judgeserver/data/work`，用 `docker run` 创建一次性沙箱容器；因此 `HOST_TESTDATA_DIR`/`HOST_WORK_DIR` 必须配成本机绝对路径，否则沙箱挂载的是不存在的路径。`docker.sock` 只给 `judge`，不给 `server`。
-- **跨机分布式部署**：评测节点通过 `.env` 的 `DB_HOST`/`REDIS_ADDR` 连接主站；与主站同机部署填 `host.docker.internal`，跨机填主站内网 IP。主站的 MySQL/Redis 默认只绑 `127.0.0.1`（`DB_BIND_ADDR`/`REDIS_BIND_ADDR`），跨机部署时改为内网 IP 并用防火墙把来源限制为评测机，禁止暴露到公网。
+- **跨机分布式部署**：评测节点通过 `.env` 的 `DB_HOST`/`REDIS_ADDR` 连接主站；与主站同机部署填 `127.0.0.1`（`judge` 使用宿主机网络），跨机填主站内网 IP。主站的 MySQL/Redis 默认只绑 `127.0.0.1`（`DB_BIND_ADDR`/`REDIS_BIND_ADDR`），跨机部署时改为内网 IP 并用防火墙把来源限制为评测机，禁止暴露到公网。主站 `server` 容器需访问宿主机端口推送测试数据，compose 中已为它配置 `host.docker.internal:host-gateway`。
 - **测试数据分发**：测试数据落文件系统，主站改动后按 `JUDGE_NODE_ENDPOINTS` 的顺序**依次**推送到各评测节点，单个节点失败只记录并继续，接口响应返回 `sync_failed` 节点列表供前端提示；推送把 zip 打到临时文件后流式上传，不整包进内存。节点侧先写临时目录再改名替换，避免留下半个数据包；节点未配置 `JUDGE_SYNC_SECRET` 时不监听接收接口。
 - 数据持久化到各自目录下的 `data/`：主站 `main/data/`（`mysql`、`redis`、`logs`、`testdata`、`uploads`），评测节点 `judgeserver/data/`（`logs`、`testdata`、`work`），全部 gitignore；容器以 root 运行，bind mount 目录由 Docker 自动创建即可写。
 

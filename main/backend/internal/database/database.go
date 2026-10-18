@@ -82,8 +82,8 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 	}
 	username := getEnvDefault("ADMIN_INIT_USERNAME", "admin")
 	password := config.EnvOr("ADMIN_INIT_PASSWORD", "")
-	if len(password) < 12 {
-		return fmt.Errorf("首次启动时必须在 .env 配置至少 12 位的 ADMIN_INIT_PASSWORD")
+	if len(password) < 8 || len(password) > 64 {
+		return fmt.Errorf("首次启动时必须在 .env 配置 8 到 64 位的 ADMIN_INIT_PASSWORD")
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
