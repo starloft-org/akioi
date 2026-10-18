@@ -58,30 +58,34 @@ func SupportedLanguages() []map[string]string {
 	}
 }
 
-// 难度（自建五级体系，与前端 DIFFICULTIES 保持一致）
+// 难度（沿用洛谷的七级体系，与前端 DIFFICULTIES 顺序一致）
 const (
-	DifficultyEntry     = "入门"
-	DifficultyEasy      = "简单"
-	DifficultyMedium    = "中等"
-	DifficultyHard      = "困难"
-	DifficultyChallenge = "挑战"
+	DifficultyEntry        = "入门"
+	DifficultyBasic        = "普及-"
+	DifficultyIntermediate = "普及/提高-"
+	DifficultyAdvanced     = "普及+/提高"
+	DifficultyHard         = "提高+/省选-"
+	DifficultyExpert       = "省选/NOI-"
+	DifficultyMaster       = "NOI/NOI+/CTSC"
 )
 
 // DifficultyPoints 是各难度的默认积分，题目未显式指定积分时使用。
 var DifficultyPoints = map[string]int{
-	DifficultyEntry:     10,
-	DifficultyEasy:      25,
-	DifficultyMedium:    50,
-	DifficultyHard:      75,
-	DifficultyChallenge: 100,
+	DifficultyEntry:        10,
+	DifficultyBasic:        20,
+	DifficultyIntermediate: 30,
+	DifficultyAdvanced:     45,
+	DifficultyHard:         60,
+	DifficultyExpert:       80,
+	DifficultyMaster:       100,
 }
 
-// DefaultPoints 返回难度对应的默认积分，难度为空或不在体系内时按中等处理。
+// DefaultPoints 返回难度对应的默认积分，难度为空或不在体系内时按中档处理。
 func DefaultPoints(difficulty string) int {
 	if points, ok := DifficultyPoints[difficulty]; ok {
 		return points
 	}
-	return DifficultyPoints[DifficultyMedium]
+	return DifficultyPoints[DifficultyAdvanced]
 }
 
 // 比赛状态（按当前时间与起止时间计算）

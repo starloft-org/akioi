@@ -80,9 +80,7 @@
             </el-table-column>
             <el-table-column label="难度" width="96">
               <template #default="{ row }">
-                <el-tag v-if="row.difficulty" :type="difficultyType(row.difficulty)" size="small">
-                  {{ row.difficulty }}
-                </el-tag>
+                <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
                 <span v-else class="muted">—</span>
               </template>
             </el-table-column>
@@ -157,8 +155,8 @@
       </el-col>
     </el-row>
 
-    <el-dialog v-model="dialogVisible" :title="current?.title" width="640px">
-      <div class="pre-block">{{ current?.content }}</div>
+    <el-dialog v-model="dialogVisible" :title="current?.title" width="720px">
+      <div class="md-body announcement-body" v-html="mdRender ? mdRender(current?.content) : ''"></div>
     </el-dialog>
   </div>
 </template>
@@ -168,7 +166,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAnnouncements, listContests, listProblems, listRankings } from '@/api'
 import { useUserStore } from '@/store/user'
-import { DIFFICULTIES, contestStatusText, contestStatusType, formatTime } from '@/utils/format'
+import { contestStatusText, contestStatusType, formatTime } from '@/utils/format'
+import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const store = useUserStore()
 const router = useRouter()
@@ -228,13 +227,6 @@ const durationText = (row) => {
   return `${Math.round(hours / 24)} 天`
 }
 
-const DIFFICULTY_TYPES = ['info', 'success', 'primary', 'warning', 'danger']
-
-const difficultyType = (value) => {
-  const idx = DIFFICULTIES.indexOf(value)
-  return idx === -1 ? 'info' : DIFFICULTY_TYPES[idx]
-}
-
 const acRate = (row) => {
   const total = row.submit_count || 0
   if (!total) {
@@ -250,7 +242,14 @@ const formatPoints = (value) => {
 
 const rankClass = (index) => (index < 3 ? `rank-no--${index + 1}` : '')
 
-const openAnnouncement = (item) => {
+const mdRender = ref(null)
+
+// 公告正文可能带公式，markdown 渲染器按需加载，避免拖慢首页首屏。
+const openAnnouncement = async (item) => {
+  if (!mdRender.value) {
+    const mod = await import('@/utils/markdown')
+    mdRender.value = mod.renderMarkdown
+  }
   current.value = item
   dialogVisible.value = true
 }

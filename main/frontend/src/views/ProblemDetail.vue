@@ -11,7 +11,7 @@
             <span>时间限制 {{ problem.time_limit_ms }} ms</span>
             <span>内存限制 {{ problem.memory_limit_mb }} MB</span>
             <span>积分 {{ problem.points }}</span>
-            <el-tag v-if="problem.difficulty" size="small">{{ problem.difficulty }}</el-tag>
+            <DifficultyTag v-if="problem.difficulty" :difficulty="problem.difficulty" />
             <el-tag v-if="problem.contest_only" type="warning" size="small">比赛专用</el-tag>
             <span>通过率 {{ rateText(problem.acceptance_rate) }}</span>
             <span>提交 {{ problem.submit_count }} · 通过 {{ problem.accepted_count }}</span>
@@ -116,6 +116,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createSubmission, getProblem, listSubmissions } from '@/api'
 import CodeEditor from '@/components/CodeEditor.vue'
+import DifficultyTag from '@/components/DifficultyTag.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useUserStore } from '@/store/user'
 import { LANGUAGES, formatDuration, formatMemory, formatTime, languageName } from '@/utils/format'

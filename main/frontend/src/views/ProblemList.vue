@@ -48,7 +48,7 @@
       </el-table-column>
       <el-table-column label="难度" width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.difficulty" size="small">{{ row.difficulty }}</el-tag>
+          <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
         </template>
       </el-table-column>
       <el-table-column prop="points" label="积分" width="80" />
@@ -99,6 +99,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { listProblems } from '@/api'
 import { DIFFICULTIES } from '@/utils/format'
+import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const loading = ref(true)
 const items = ref([])

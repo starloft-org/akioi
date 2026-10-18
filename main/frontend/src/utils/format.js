@@ -24,19 +24,42 @@ export const LANGUAGES = [
 export const languageName = (key) =>
   LANGUAGES.find((item) => item.key === key)?.name || key || '-'
 
-export const DIFFICULTIES = ['入门', '简单', '中等', '困难', '挑战']
+export const DIFFICULTIES = [
+  '入门',
+  '普及-',
+  '普及/提高-',
+  '普及+/提高',
+  '提高+/省选-',
+  '省选/NOI-',
+  'NOI/NOI+/CTSC'
+]
 
 // 各难度的默认积分，与后端 model.DifficultyPoints 保持一致。
 export const DIFFICULTY_POINTS = {
   '入门': 10,
-  '简单': 25,
-  '中等': 50,
-  '困难': 75,
-  '挑战': 100
+  '普及-': 20,
+  '普及/提高-': 30,
+  '普及+/提高': 45,
+  '提高+/省选-': 60,
+  '省选/NOI-': 80,
+  'NOI/NOI+/CTSC': 100
 }
 
-// defaultPointsOf 返回难度对应的默认积分，难度为空或未知时按中等处理。
-export const defaultPointsOf = (difficulty) => DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS['中等']
+// 难度配色沿用洛谷的七色阶梯。
+export const DIFFICULTY_COLORS = {
+  '入门': '#fe4c61',
+  '普及-': '#f39c11',
+  '普及/提高-': '#ffc116',
+  '普及+/提高': '#52c41a',
+  '提高+/省选-': '#3498db',
+  '省选/NOI-': '#9d3dcf',
+  'NOI/NOI+/CTSC': '#0e1d69'
+}
+
+export const difficultyColor = (difficulty) => DIFFICULTY_COLORS[difficulty] || '#86909c'
+
+// defaultPointsOf 返回难度对应的默认积分，难度为空或未知时按中档处理。
+export const defaultPointsOf = (difficulty) => DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS['普及+/提高']
 
 export const COMPARE_MODES = [
   { value: 'default', label: '忽略行尾空格与末尾空行' },

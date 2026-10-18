@@ -22,7 +22,12 @@
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="display_id" label="题号" width="100" />
       <el-table-column prop="title" label="标题" min-width="180" />
-      <el-table-column prop="difficulty" label="难度" width="100" />
+      <el-table-column label="难度" width="140">
+        <template #default="{ row }">
+          <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="points" label="积分" width="80" />
       <el-table-column label="标签" min-width="160">
         <template #default="{ row }">
@@ -72,6 +77,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminDeleteProblem, adminListProblems } from '@/api'
+import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const router = useRouter()
 const loading = ref(false)

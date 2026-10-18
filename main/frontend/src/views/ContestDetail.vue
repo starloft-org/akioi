@@ -53,7 +53,7 @@
           </el-table-column>
           <el-table-column label="难度" width="100">
             <template #default="{ row }">
-              <el-tag v-if="row.difficulty" size="small">{{ row.difficulty }}</el-tag>
+              <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
             </template>
           </el-table-column>
           <el-table-column label="通过/提交" width="120">
@@ -75,6 +75,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getContest, registerContest } from '@/api'
 import { useUserStore } from '@/store/user'
 import { contestStatusText, contestStatusType, formatTime } from '@/utils/format'
+import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const store = useUserStore()
 const route = useRoute()
