@@ -93,7 +93,8 @@ const handleLogin = async () => {
 const handleWechat = async () => {
   wechatLoading.value = true
   try {
-    const data = await getWechatUrl(window.location.href)
+    // state 里存的是登录成功后要回到的页面，不能传登录页自身，否则回调后原地打转
+    const data = await getWechatUrl(route.query.redirect || '/')
     if (data?.enabled && data.url) {
       window.location.href = data.url
       return
