@@ -47,8 +47,6 @@ type Config struct {
 
 	JWTSecret string
 
-	RegisterInviteCode string
-
 	WeChat WeChatConfig
 	SMS    SMSConfig
 
@@ -80,8 +78,6 @@ func Load() (*Config, error) {
 		RedisDB:       getEnvInt("REDIS_DB", 0),
 
 		JWTSecret: getEnv("JWT_SECRET", ""),
-
-		RegisterInviteCode: getEnv("REGISTER_INVITE_CODE", ""),
 
 		WeChat: WeChatConfig{
 			AppID:     getEnv("WECHAT_APPID", ""),
@@ -146,4 +142,3 @@ func getEnvInt(key string, def int) int {
 	}
 	return n
 }
-

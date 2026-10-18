@@ -8,7 +8,6 @@ export const useUserStore = defineStore('user', {
     site: {
       app_name: 'AKIOI',
       register_enabled: true,
-      register_invite_code_required: false,
       wechat_enabled: false,
       sms_enabled: false
     },

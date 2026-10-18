@@ -16,7 +16,6 @@ func (h *Handler) AdminGetSettings(c *gin.Context) {
 			"sms_credentials_configured":    h.Cfg.SMS.APIKey != "" && h.Cfg.SMS.APISecret != "",
 			"wechat_credentials_configured": h.Cfg.WeChat.AppID != "" && h.Cfg.WeChat.AppSecret != "",
 			"judge_sync_secret_configured":  h.Cfg.Judge.SyncSecret != "",
-			"invite_code_configured":        h.Cfg.RegisterInviteCode != "",
 		},
 	})
 }

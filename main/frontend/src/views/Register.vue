@@ -25,9 +25,6 @@
         <el-form-item label="昵称" prop="nickname">
           <el-input v-model="form.nickname" placeholder="选填，默认与用户名相同" />
         </el-form-item>
-        <el-form-item v-if="store.site.register_invite_code_required" label="邀请码" prop="invite_code">
-          <el-input v-model="form.invite_code" placeholder="请输入邀请码" />
-        </el-form-item>
         <el-button type="primary" class="auth-submit" :loading="loading" @click="handleRegister">注册</el-button>
       </el-form>
       <div class="auth-links">
@@ -52,7 +49,7 @@ const loading = ref(false)
 const sending = ref(false)
 const countdown = ref(0)
 let timer = null
-const form = reactive({ username: '', phone: '', sms_code: '', password: '', nickname: '', invite_code: '' })
+const form = reactive({ username: '', phone: '', sms_code: '', password: '', nickname: '' })
 
 const rules = {
   username: [
@@ -72,8 +69,7 @@ const rules = {
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 6, max: 64, message: '密码长度需在 6 到 64 个字符之间', trigger: 'blur' }
   ],
-  nickname: [{ max: 32, message: '昵称长度不能超过 32 个字符', trigger: 'blur' }],
-  invite_code: [{ required: true, message: '请输入邀请码', trigger: 'blur' }]
+  nickname: [{ max: 32, message: '昵称长度不能超过 32 个字符', trigger: 'blur' }]
 }
 
 const startCountdown = (seconds = 60) => {
@@ -117,8 +113,7 @@ const handleRegister = async () => {
       phone: form.phone,
       sms_code: form.sms_code,
       password: form.password,
-      nickname: form.nickname,
-      invite_code: form.invite_code
+      nickname: form.nickname
     })
     ElMessage.success('注册成功')
     router.replace('/')

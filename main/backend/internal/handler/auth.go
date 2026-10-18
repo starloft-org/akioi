@@ -15,15 +15,14 @@ import (
 )
 
 type registerRequest struct {
-	Username   string `json:"username"`
-	Phone      string `json:"phone"`
-	SMSCode    string `json:"sms_code"`
-	Password   string `json:"password"`
-	Nickname   string `json:"nickname"`
-	InviteCode string `json:"invite_code"`
+	Username string `json:"username"`
+	Phone    string `json:"phone"`
+	SMSCode  string `json:"sms_code"`
+	Password string `json:"password"`
+	Nickname string `json:"nickname"`
 }
 
-// Register 开放注册，受数据库注册开关与环境变量邀请码控制。
+// Register 开放注册，仅受数据库注册开关与短信服务状态控制。
 func (h *Handler) Register(c *gin.Context) {
 	if !h.Settings.Current().RegisterEnabled || !h.SMS.Enabled() {
 		httpx.Forbidden(c, "当前未开放注册")
@@ -48,10 +47,6 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 	if !service.ValidPhone(req.Phone) {
 		httpx.BadRequest(c, "请输入有效的中国大陆手机号")
-		return
-	}
-	if h.Cfg.RegisterInviteCode != "" && req.InviteCode != h.Cfg.RegisterInviteCode {
-		httpx.Forbidden(c, "邀请码不正确")
 		return
 	}
 

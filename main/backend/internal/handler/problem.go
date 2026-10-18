@@ -190,12 +190,11 @@ func (h *Handler) ListLanguages(c *gin.Context) {
 func (h *Handler) SiteInfo(c *gin.Context) {
 	settings := h.Settings.Current()
 	httpx.OK(c, gin.H{
-		"app_name":                      settings.AppName,
-		"register_enabled":              settings.RegisterEnabled && h.SMS.Enabled(),
-		"register_invite_code_required": h.Cfg.RegisterInviteCode != "",
-		"wechat_enabled":                h.WeChat.Enabled(),
-		"sms_enabled":                   h.SMS.Enabled(),
-		"languages":                     model.SupportedLanguages(),
+		"app_name":         settings.AppName,
+		"register_enabled": settings.RegisterEnabled && h.SMS.Enabled(),
+		"wechat_enabled":   h.WeChat.Enabled(),
+		"sms_enabled":      h.SMS.Enabled(),
+		"languages":        model.SupportedLanguages(),
 	})
 }
 

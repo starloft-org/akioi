@@ -26,7 +26,6 @@
           <el-col :xs="24" :md="12">
             <el-form-item label="开放注册">
               <el-switch v-model="form.register_enabled" />
-              <secret-tag label="邀请码" :configured="secretStatus.invite_code_configured" />
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
