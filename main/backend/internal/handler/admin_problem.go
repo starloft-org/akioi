@@ -601,6 +601,36 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 	})
 }
 
+// AdminSyncTestdata 主动把某题的测试数据推送到全部评测节点，用于节点恢复后的补推送。
+func (h *Handler) AdminSyncTestdata(c *gin.Context) {
+	id, ok := httpx.PathID(c, "id")
+	if !ok {
+		return
+	}
+	var p model.Problem
+	if err := h.DB.First(&p, id).Error; err != nil {
+		httpx.NotFound(c, "题目不存在")
+		return
+	}
+	if p.TestcaseCount == 0 {
+		httpx.BadRequest(c, "该题还没有测试数据")
+		return
+	}
+	if len(h.Settings.Current().JudgeNodeEndpoints) == 0 {
+		httpx.BadRequest(c, "未配置评测节点，请先在系统设置中添加")
+		return
+	}
+	failed := h.Testdata.SyncToNodes(syncContext(c), p.ID)
+	if u := httpx.CurrentUser(c); u != nil {
+		logger.Adminf("管理员 %s 手动推送题目 %d 测试数据，%d 个节点失败", u.Username, p.ID, len(failed))
+	}
+	if len(failed) > 0 {
+		httpx.OK(c, gin.H{"synced": false, "sync_failed": failed})
+		return
+	}
+	httpx.OK(c, gin.H{"synced": true, "sync_failed": []string{}})
+}
+
 // AdminListTestdata 返回某题的测试点清单。
 func (h *Handler) AdminListTestdata(c *gin.Context) {
 	id, ok := httpx.PathID(c, "id")

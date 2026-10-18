@@ -102,6 +102,7 @@ export const adminUpdateProblem = (id, data) => request.put(`/api/admin/v1/probl
 export const adminDeleteProblem = (id) => request.delete(`/api/admin/v1/problems/${id}`)
 
 export const adminListTestdata = (id) => request.get(`/api/admin/v1/problems/${id}/testdata`)
+export const adminSyncTestdata = (id) => request.post(`/api/admin/v1/problems/${id}/testdata/sync`)
 export const adminUploadTestdata = (id, files, scores) => {
   const form = new FormData()
   for (const f of files) {

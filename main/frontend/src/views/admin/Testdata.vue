@@ -56,6 +56,9 @@
     </el-table>
 
     <div class="toolbar" style="margin-top: 16px">
+      <el-button type="primary" plain :loading="syncing" :disabled="!items.length" @click="handleSync">
+        推送到评测节点
+      </el-button>
       <el-button @click="downloadPackage">下载数据包</el-button>
       <el-button :disabled="!items.length" @click="clearTestdata">清空测试数据</el-button>
     </div>
@@ -70,6 +73,7 @@ import {
   adminDeleteTestdata,
   adminDownloadTestdata,
   adminListTestdata,
+  adminSyncTestdata,
   adminUploadTestdata,
   saveBlob
 } from '@/api'
@@ -81,6 +85,7 @@ const problemId = computed(() => Number(route.params.id))
 
 const loading = ref(false)
 const uploading = ref(false)
+const syncing = ref(false)
 const items = ref([])
 const totalScore = ref(0)
 const fileList = ref([])
@@ -156,6 +161,24 @@ const downloadPackage = async () => {
     saveBlob(blob, `problem-${problemId.value}-testdata.zip`)
   } catch (e) {
     // 错误提示已由请求层处理
+  }
+}
+
+// handleSync 主动把测试数据推送到全部评测节点，用于节点上线后的补推送。
+const handleSync = async () => {
+  syncing.value = true
+  try {
+    const data = await adminSyncTestdata(problemId.value)
+    const failed = data?.sync_failed || []
+    if (failed.length) {
+      ElMessage.warning(`以下评测节点同步失败：${failed.join('、')}`)
+    } else {
+      ElMessage.success('已推送到全部评测节点')
+    }
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    syncing.value = false
   }
 }
 

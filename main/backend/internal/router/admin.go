@@ -35,6 +35,7 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		problems.DELETE("/:id", h.AdminDeleteProblem)
 		problems.GET("/:id/testdata", h.AdminListTestdata)
 		problems.POST("/:id/testdata", h.AdminUploadTestdata)
+		problems.POST("/:id/testdata/sync", h.AdminSyncTestdata)
 		problems.DELETE("/:id/testdata", h.AdminDeleteTestdata)
 		problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
 	}
