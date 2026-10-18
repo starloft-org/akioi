@@ -110,7 +110,7 @@
       </el-row>
       <el-button size="small" style="margin-top: 8px" @click="removeSample(index)">删除样例</el-button>
     </div>
-    <el-button size="small" @click="addSample">添加样例</el-button>
+    <el-button class="sample-add" type="primary" plain @click="addSample">+ 添加样例</el-button>
 
     <div class="toolbar" style="margin-top: 24px">
       <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
@@ -250,3 +250,11 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.sample-add {
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+}
+</style>
