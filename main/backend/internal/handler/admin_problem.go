@@ -200,7 +200,12 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	if req.FloatEps != nil {
 		floatEps = *req.FloatEps
 	}
-	points := 100
+	difficulty := ""
+	if req.Difficulty != nil {
+		difficulty = strings.TrimSpace(*req.Difficulty)
+	}
+	// 积分默认跟随难度，请求里显式给了积分则以请求为准。
+	points := model.DefaultPoints(difficulty)
 	if req.Points != nil {
 		if *req.Points < 0 || *req.Points > 100000 {
 			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
@@ -259,9 +264,7 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	if req.Hint != nil {
 		p.Hint = *req.Hint
 	}
-	if req.Difficulty != nil {
-		p.Difficulty = strings.TrimSpace(*req.Difficulty)
-	}
+	p.Difficulty = difficulty
 	if req.Source != nil {
 		p.Source = strings.TrimSpace(*req.Source)
 	}

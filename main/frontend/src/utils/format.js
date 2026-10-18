@@ -26,6 +26,18 @@ export const languageName = (key) =>
 
 export const DIFFICULTIES = ['入门', '简单', '中等', '困难', '挑战']
 
+// 各难度的默认积分，与后端 model.DifficultyPoints 保持一致。
+export const DIFFICULTY_POINTS = {
+  '入门': 10,
+  '简单': 25,
+  '中等': 50,
+  '困难': 75,
+  '挑战': 100
+}
+
+// defaultPointsOf 返回难度对应的默认积分，难度为空或未知时按中等处理。
+export const defaultPointsOf = (difficulty) => DIFFICULTY_POINTS[difficulty] ?? DIFFICULTY_POINTS['中等']
+
 export const COMPARE_MODES = [
   { value: 'default', label: '忽略行尾空格与末尾空行' },
   { value: 'exact', label: '严格比对' },

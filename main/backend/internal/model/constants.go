@@ -67,6 +67,23 @@ const (
 	DifficultyChallenge = "挑战"
 )
 
+// DifficultyPoints 是各难度的默认积分，题目未显式指定积分时使用。
+var DifficultyPoints = map[string]int{
+	DifficultyEntry:     10,
+	DifficultyEasy:      25,
+	DifficultyMedium:    50,
+	DifficultyHard:      75,
+	DifficultyChallenge: 100,
+}
+
+// DefaultPoints 返回难度对应的默认积分，难度为空或不在体系内时按中等处理。
+func DefaultPoints(difficulty string) int {
+	if points, ok := DifficultyPoints[difficulty]; ok {
+		return points
+	}
+	return DifficultyPoints[DifficultyMedium]
+}
+
 // 比赛状态（按当前时间与起止时间计算）
 const (
 	ContestStatusPending = "pending"

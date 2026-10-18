@@ -25,7 +25,13 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="难度">
-            <el-select v-model="form.difficulty" clearable placeholder="选择难度" style="width: 100%">
+            <el-select
+              v-model="form.difficulty"
+              clearable
+              placeholder="选择难度"
+              style="width: 100%"
+              @change="handleDifficultyChange"
+            >
               <el-option v-for="item in DIFFICULTIES" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
@@ -61,6 +67,7 @@
         <el-col :span="12">
           <el-form-item label="排行榜积分">
             <el-input-number v-model="form.points" :min="0" :max="100000" />
+            <span class="form-hint">随难度自动设置，可手动调整</span>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -136,7 +143,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminCreateProblem, adminGetProblem, adminUpdateProblem } from '@/api'
-import { COMPARE_MODES, DIFFICULTIES } from '@/utils/format'
+import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,7 +167,7 @@ const form = reactive({
   difficulty: '',
   tags: [],
   source: '',
-  points: 100,
+  points: 50,
   visibility: 1,
   contest_only: false,
   compare_mode: 'default',
@@ -206,6 +213,13 @@ const addSample = () => {
 
 const removeSample = (index) => {
   form.samples.splice(index, 1)
+}
+
+// 选择难度时带出该难度的默认积分，之后仍可手动调整。
+const handleDifficultyChange = (value) => {
+  if (value) {
+    form.points = defaultPointsOf(value)
+  }
 }
 
 const buildPayload = () => ({
@@ -273,5 +287,11 @@ onMounted(() => {
   width: 100%;
   height: 36px;
   margin-top: 4px;
+}
+
+.form-hint {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--akioi-text-weak);
 }
 </style>
