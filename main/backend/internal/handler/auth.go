@@ -249,25 +249,57 @@ func (h *Handler) Me(c *gin.Context) {
 	if u == nil {
 		return
 	}
-	httpx.OK(c, gin.H{"user": model.NewPrivateUser(u)})
+	httpx.OK(c, gin.H{
+		"user":         model.NewPrivateUser(u),
+		"wechat_bound": h.WeChat.Bound(u.ID),
+	})
 }
 
-// WeChatURL 返回微信扫码登录地址；未启用时 enabled 为 false。
+// WeChatURL 返回微信扫码地址；purpose=bind 时生成绑定用的地址，需要已登录。
 func (h *Handler) WeChatURL(c *gin.Context) {
 	if !h.WeChat.Enabled() {
 		httpx.OK(c, gin.H{"enabled": false, "url": ""})
 		return
+	}
+	st := service.WeChatState{Purpose: "login", Redirect: c.Query("redirect")}
+	if c.Query("purpose") == "bind" {
+		u := httpx.CurrentUser(c)
+		if u == nil {
+			httpx.Unauthorized(c, "请先登录")
+			return
+		}
+		st.Purpose = "bind"
+		st.UserID = u.ID
 	}
 	state, err := randomState()
 	if err != nil {
 		httpx.ServerError(c, "生成登录状态失败")
 		return
 	}
-	if err := h.WeChat.SaveState(c.Request.Context(), state, c.Query("redirect")); err != nil {
+	if err := h.WeChat.SaveState(c.Request.Context(), state, st); err != nil {
 		httpx.ServerError(c, "生成登录状态失败")
 		return
 	}
 	httpx.OK(c, gin.H{"enabled": true, "url": h.WeChat.AuthorizeURL(state), "state": state})
+}
+
+// WeChatUnbind 解除当前账号的微信绑定。
+func (h *Handler) WeChatUnbind(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	if err := h.WeChat.Unbind(u.ID); err != nil {
+		if errors.Is(err, service.ErrWechatNotBound) {
+			httpx.BadRequest(c, err.Error())
+			return
+		}
+		logger.Errorf("解除微信绑定失败 user=%d: %v", u.ID, err)
+		httpx.ServerError(c, "解除绑定失败")
+		return
+	}
+	logger.Businessf("用户 %d 解除微信绑定", u.ID)
+	httpx.OK(c, gin.H{"bound": false})
 }
 
 // WeChatCallback 处理微信回调：换取资料、绑定或创建账号并签发登录凭证。
@@ -281,15 +313,30 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 		httpx.BadRequest(c, "缺少授权码")
 		return
 	}
-	redirect, ok := h.WeChat.ConsumeState(c.Request.Context(), c.Query("state"))
+	st, ok := h.WeChat.ConsumeState(c.Request.Context(), c.Query("state"))
 	if !ok {
 		httpx.BadRequest(c, "登录状态已失效，请重新发起")
 		return
 	}
 	profile, err := h.WeChat.Exchange(c.Request.Context(), code)
 	if err != nil {
-		logger.Errorf("微信登录换取资料失败: %v", err)
-		httpx.ServerError(c, "微信登录失败")
+		logger.Errorf("微信授权换取资料失败: %v", err)
+		httpx.ServerError(c, "微信授权失败")
+		return
+	}
+	// 已登录用户发起的是绑定流程，不再创建新账号。
+	if st.Purpose == "bind" {
+		if err := h.WeChat.BindTo(st.UserID, profile); err != nil {
+			if errors.Is(err, service.ErrWechatBoundToOther) || errors.Is(err, service.ErrWechatAlreadyBound) {
+				httpx.Conflict(c, err.Error())
+				return
+			}
+			logger.Errorf("微信绑定失败 user=%d: %v", st.UserID, err)
+			httpx.ServerError(c, "微信绑定失败")
+			return
+		}
+		logger.Businessf("用户 %d 绑定微信成功", st.UserID)
+		httpx.OK(c, gin.H{"bound": true, "redirect": st.Redirect})
 		return
 	}
 	u, err := h.WeChat.BindOrCreate(profile)
@@ -310,7 +357,7 @@ func (h *Handler) WeChatCallback(c *gin.Context) {
 	now := time.Now()
 	h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("last_login_at", now)
 	logger.Businessf("微信登录成功 username=%s ip=%s", u.Username, c.ClientIP())
-	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": redirect})
+	httpx.OK(c, gin.H{"token": token, "user": model.NewPrivateUser(u), "redirect": st.Redirect})
 }
 
 func bearerOf(c *gin.Context) string {

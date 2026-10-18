@@ -54,22 +54,43 @@
         </el-form-item>
       </el-form>
     </div>
+
+    <div v-if="store.site.wechat_enabled" class="panel">
+      <h3 class="panel__title">第三方账号</h3>
+      <div class="bind-row">
+        <div>
+          <div class="bind-name">微信</div>
+          <div class="muted">
+            {{ store.wechatBound ? '已绑定，可用微信扫码登录' : '未绑定，绑定后可用微信扫码直接登录' }}
+          </div>
+        </div>
+        <el-button v-if="!store.wechatBound" type="primary" plain :loading="binding" @click="handleBindWechat">
+          绑定微信
+        </el-button>
+        <el-button v-else :loading="unbinding" @click="handleUnbindWechat">解除绑定</el-button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { changePassword, updateMe, uploadAvatar } from '@/api'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { changePassword, getWechatUrl, unbindWechat, updateMe, uploadAvatar, wechatCallback } from '@/api'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
+const route = useRoute()
+const router = useRouter()
 
 const profileFormRef = ref(null)
 const passwordFormRef = ref(null)
 const saving = ref(false)
 const changing = ref(false)
 const avatarLoading = ref(false)
+const binding = ref(false)
+const unbinding = ref(false)
 
 const form = reactive({ nickname: '', signature: '', school: '', grade: '' })
 const passwordForm = reactive({ old_password: '', new_password: '', confirm: '' })
@@ -165,12 +186,68 @@ const handleChangePassword = async () => {
   }
 }
 
+const handleBindWechat = async () => {
+  binding.value = true
+  try {
+    const data = await getWechatUrl({ redirect: '/profile', purpose: 'bind' })
+    if (data?.enabled && data.url) {
+      window.location.href = data.url
+      return
+    }
+    ElMessage.warning('微信登录未启用')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    binding.value = false
+  }
+}
+
+const handleUnbindWechat = async () => {
+  try {
+    await ElMessageBox.confirm('解除后将不能再用微信扫码登录该账号，确定继续？', '解除微信绑定', {
+      confirmButtonText: '解除绑定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch (e) {
+    return
+  }
+  unbinding.value = true
+  try {
+    await unbindWechat()
+    store.wechatBound = false
+    ElMessage.success('已解除微信绑定')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    unbinding.value = false
+  }
+}
+
+// 微信授权完成后会回到本页并带上 code 与 state，这里完成绑定
+const handleWechatCallback = async () => {
+  try {
+    const data = await wechatCallback({ code: route.query.code, state: route.query.state })
+    if (data?.bound) {
+      store.wechatBound = true
+      ElMessage.success('微信绑定成功')
+    }
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    router.replace('/profile')
+  }
+}
+
 onMounted(() => {
   const user = store.user || {}
   form.nickname = user.nickname || ''
   form.signature = user.signature || ''
   form.school = user.school || ''
   form.grade = user.grade || ''
+  if (route.query.code && route.query.state) {
+    handleWechatCallback()
+  }
 })
 </script>
 
@@ -180,5 +257,18 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.bind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.bind-name {
+  margin-bottom: 2px;
+  font-weight: 600;
 }
 </style>

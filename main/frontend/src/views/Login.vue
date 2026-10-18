@@ -59,10 +59,16 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
-// 微信回调携带 code 与 state，换取凭证后跳转
+// 微信回调携带 code 与 state：登录流程换 token，绑定流程只确认绑定结果
 const handleWechatCallback = async () => {
   try {
     const data = await wechatCallback({ code: route.query.code, state: route.query.state })
+    if (data?.bound) {
+      ElMessage.success('微信绑定成功')
+      await store.loadMe()
+      router.replace(data.redirect || '/profile')
+      return
+    }
     store.setToken(data.token)
     router.replace(data.redirect || '/')
   } catch (e) {

@@ -5,6 +5,7 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem('akioi_token') || '',
     user: null,
+    wechatBound: false,
     site: {
       app_name: 'AKIOI',
       register_enabled: true,
@@ -40,10 +41,12 @@ export const useUserStore = defineStore('user', {
       try {
         const data = await api.getMe()
         this.user = data.user
+        this.wechatBound = !!data.wechat_bound
         return this.user
       } catch (e) {
         this.setToken('')
         this.user = null
+        this.wechatBound = false
         return null
       }
     },

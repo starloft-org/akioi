@@ -59,8 +59,9 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			authGroup.POST("/password/reset", h.ResetPassword)
 			authGroup.POST("/logout", required, h.Logout)
 			authGroup.GET("/me", required, h.Me)
-			authGroup.GET("/wechat/url", h.WeChatURL)
+			authGroup.GET("/wechat/url", optional, h.WeChatURL)
 			authGroup.GET("/wechat/callback", h.WeChatCallback)
+			authGroup.DELETE("/wechat/binding", required, h.WeChatUnbind)
 		}
 
 		problems := api.Group("/problems")

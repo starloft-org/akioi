@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,15 @@ const (
 	wechatStateTTL     = 5 * time.Minute
 )
 
+var (
+	// ErrWechatBoundToOther 表示该微信已被其他站内账号占用。
+	ErrWechatBoundToOther = errors.New("该微信已绑定其他账号")
+	// ErrWechatAlreadyBound 表示当前账号已经绑定过微信。
+	ErrWechatAlreadyBound = errors.New("当前账号已绑定微信，请先解除绑定")
+	// ErrWechatNotBound 表示当前账号没有微信绑定。
+	ErrWechatNotBound = errors.New("当前账号未绑定微信")
+)
+
 // WeChatService 实现微信扫码登录：授权跳转、换取 openid、绑定或创建站内用户。
 type WeChatService struct {
 	cfg      *config.Config
@@ -42,23 +52,38 @@ func (s *WeChatService) Enabled() bool {
 	return s.settings.Current().WeChatEnabled && s.cfg.WeChat.AppID != "" && s.cfg.WeChat.AppSecret != ""
 }
 
-// SaveState 记录一次性 state，回调时校验。
-func (s *WeChatService) SaveState(ctx context.Context, state, redirect string) error {
-	return s.rdb.Set(ctx, redis.KeyWeChatStatePrefix+state, redirect, wechatStateTTL).Err()
+// WeChatState 是随 state 一起保存在 Redis 里的一次性上下文。
+type WeChatState struct {
+	Purpose  string `json:"purpose"`  // login：扫码登录；bind：绑定到已登录账号
+	UserID   uint   `json:"user_id"`  // bind 时对应的站内用户
+	Redirect string `json:"redirect"` // 前端落点
 }
 
-// ConsumeState 校验并删除 state，返回发起登录时携带的跳转地址。
-func (s *WeChatService) ConsumeState(ctx context.Context, state string) (string, bool) {
+// SaveState 记录一次性 state，回调时校验。
+func (s *WeChatService) SaveState(ctx context.Context, state string, st WeChatState) error {
+	payload, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	return s.rdb.Set(ctx, redis.KeyWeChatStatePrefix+state, payload, wechatStateTTL).Err()
+}
+
+// ConsumeState 校验并删除 state，返回发起时的上下文。
+func (s *WeChatService) ConsumeState(ctx context.Context, state string) (WeChatState, bool) {
+	var st WeChatState
 	if state == "" {
-		return "", false
+		return st, false
 	}
 	key := redis.KeyWeChatStatePrefix + state
-	redirect, err := s.rdb.Get(ctx, key).Result()
+	raw, err := s.rdb.Get(ctx, key).Result()
 	if err != nil {
-		return "", false
+		return st, false
 	}
 	s.rdb.Del(ctx, key)
-	return redirect, true
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		return st, false
+	}
+	return st, true
 }
 
 func (s *WeChatService) AuthorizeURL(state string) string {
@@ -187,6 +212,56 @@ func (s *WeChatService) BindOrCreate(p *wechatProfile) (*model.User, error) {
 		return nil, err
 	}
 	return created, nil
+}
+
+// BindTo 把微信账号绑定到指定站内用户。
+func (s *WeChatService) BindTo(userID uint, p *wechatProfile) error {
+	var count int64
+	if err := s.db.Model(&model.OAuthBinding{}).
+		Where("provider = ? AND open_id = ? AND user_id <> ?", wechatProvider, p.OpenID, userID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrWechatBoundToOther
+	}
+	if err := s.db.Model(&model.OAuthBinding{}).
+		Where("provider = ? AND user_id = ?", wechatProvider, userID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrWechatAlreadyBound
+	}
+	return s.db.Create(&model.OAuthBinding{
+		Provider: wechatProvider,
+		OpenID:   p.OpenID,
+		UnionID:  p.UnionID,
+		UserID:   userID,
+	}).Error
+}
+
+// Unbind 解除指定用户的微信绑定。
+func (s *WeChatService) Unbind(userID uint) error {
+	res := s.db.Where("provider = ? AND user_id = ?", wechatProvider, userID).Delete(&model.OAuthBinding{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrWechatNotBound
+	}
+	return nil
+}
+
+// Bound 判断用户是否已绑定微信。
+func (s *WeChatService) Bound(userID uint) bool {
+	var count int64
+	if err := s.db.Model(&model.OAuthBinding{}).
+		Where("provider = ? AND user_id = ?", wechatProvider, userID).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 func (s *WeChatService) getJSON(ctx context.Context, endpoint string, out any) error {

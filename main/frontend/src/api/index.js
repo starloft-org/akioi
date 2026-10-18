@@ -12,9 +12,12 @@ export const sendSmsCode = (data) => request.post('/api/v1/auth/sms/send', data)
 export const resetPasswordBySms = (data) => request.post('/api/v1/auth/password/reset', data)
 export const logout = () => request.post('/api/v1/auth/logout')
 export const getMe = () => request.get('/api/v1/auth/me')
-export const getWechatUrl = (redirect) =>
-  request.get('/api/v1/auth/wechat/url', { params: { redirect } })
+export const getWechatUrl = (params) =>
+  request.get('/api/v1/auth/wechat/url', {
+    params: typeof params === 'string' ? { redirect: params } : params
+  })
 export const wechatCallback = (params) => request.get('/api/v1/auth/wechat/callback', { params })
+export const unbindWechat = () => request.delete('/api/v1/auth/wechat/binding')
 
 // 题库
 export const listProblems = (params) => request.get('/api/v1/problems', { params })
