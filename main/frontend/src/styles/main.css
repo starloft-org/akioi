@@ -4,11 +4,16 @@
   --akioi-primary-hover: #15c5ba;
   --akioi-primary-light: #dff8f5;
 
-  --akioi-text: #1f2329;
-  --akioi-text-weak: #646a73;
+  /* 正文与辅助文字：腾讯云中性灰阶，不使用纯黑 */
+  --akioi-text: #4e5969;
+  --akioi-text-weak: #86909c;
   --akioi-border: #e5e6eb;
   --akioi-bg: #f5f7fa;
   --akioi-radius: 4px;
+
+  /* Element Plus 默认正文色偏黑（#303133），一并收敛到灰阶 */
+  --el-text-color-primary: #4e5969;
+  --el-text-color-regular: #5a6270;
 
   /* 同步 Element Plus 主色，让按钮、链接、标签与品牌色同源 */
   --el-color-primary: #1cd5c7;
