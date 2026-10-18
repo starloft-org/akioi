@@ -18,8 +18,8 @@ services:
     volumes:
       - ./data/mysql:/var/lib/mysql
     ports:
-      # 同机部署的评测节点使用宿主机网络，可直连 127.0.0.1，无需修改此处；
-      # 跨机部署时把 DB_BIND_ADDR 改为主站内网 IP，并用防火墙把来源限制为评测机。
+      # 同机部署的评测节点从容器内经 host.docker.internal 访问，DB_BIND_ADDR 需设为 0.0.0.0
+      # 或宿主机内网 IP；跨机部署同样改为内网 IP，并用防火墙把来源限制为评测机。
       - "${DB_BIND_ADDR:-127.0.0.1}:3306:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
@@ -35,7 +35,7 @@ services:
     volumes:
       - ./data/redis:/data
     ports:
-      # 同 MySQL，默认只绑本机回环；跨机部署时改 REDIS_BIND_ADDR 为内网 IP。
+      # 同 MySQL：同机评测节点需经宿主机访问，改 REDIS_BIND_ADDR 为 0.0.0.0 或内网 IP。
       - "${REDIS_BIND_ADDR:-127.0.0.1}:6379:6379"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping"]
