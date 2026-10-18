@@ -204,11 +204,15 @@ const handleBindWechat = async () => {
 
 const handleUnbindWechat = async () => {
   try {
-    await ElMessageBox.confirm('解除后将不能再用微信扫码登录该账号，确定继续？', '解除微信绑定', {
-      confirmButtonText: '解除绑定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+    await ElMessageBox.confirm(
+      '解除后将不能再用微信扫码登录。若该账号由微信创建且尚未设置密码，解绑后可能无法登录，请先绑定手机号或修改密码。',
+      '解除微信绑定',
+      {
+        confirmButtonText: '解除绑定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
   } catch (e) {
     return
   }
