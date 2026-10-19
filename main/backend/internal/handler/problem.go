@@ -190,12 +190,21 @@ func (h *Handler) ListLanguages(c *gin.Context) {
 func (h *Handler) SiteInfo(c *gin.Context) {
 	settings := h.Settings.Current()
 	httpx.OK(c, gin.H{
-		"app_name": settings.AppName,
-		// 注册入口只由后台开关决定；短信未配置时允许进入注册页，由提交接口返回具体错误。
+		"app_name":         settings.AppName,
+		// 注册入口由后台开关与渠道状态共同决定：两个渠道都未开放时不支持注册。
 		"register_enabled": settings.RegisterEnabled,
-		"wechat_enabled":   h.WeChat.Enabled(),
-		"sms_enabled":      h.SMS.Enabled(),
-		"languages":        model.SupportedLanguages(),
+		"register_channels": gin.H{
+			"sms":   h.SMS.Enabled(),
+			"email": h.Email.Enabled(),
+		},
+		"reset_channels": gin.H{
+			"sms":   h.SMS.Enabled(),
+			"email": h.Email.Enabled(),
+		},
+		"wechat_enabled": h.WeChat.Enabled(),
+		"sms_enabled":    h.SMS.Enabled(),
+		"email_enabled":  h.Email.Enabled(),
+		"languages":      model.SupportedLanguages(),
 	})
 }
 

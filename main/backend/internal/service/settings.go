@@ -25,6 +25,7 @@ type RuntimeSettings struct {
 	WeChatEnabled        bool     `json:"wechat_enabled"`
 	WeChatRedirectURI    string   `json:"wechat_redirect_uri"`
 	SMSEnabled           bool     `json:"sms_enabled"`
+	EmailEnabled         bool     `json:"email_enabled"`
 	SMSAPIBaseURL        string   `json:"sms_api_base_url"`
 	SMSRegisterTemplate  string   `json:"sms_register_template_id"`
 	SMSResetTemplate     string   `json:"sms_reset_template_id"`
@@ -48,6 +49,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		RegisterEnabled:      true,
 		WeChatEnabled:        false,
 		SMSEnabled:           false,
+		EmailEnabled:         false,
 		SMSAPIBaseURL:        "https://api.starloft.cn/v2",
 		SMSCodeTTLMinutes:    5,
 		SMSSendIntervalSec:   60,

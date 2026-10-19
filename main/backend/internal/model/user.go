@@ -10,6 +10,7 @@ type User struct {
 	Username     string     `gorm:"size:32;uniqueIndex;not null" json:"username"`
 	PasswordHash string     `gorm:"size:100;not null" json:"-"`
 	Phone        *string    `gorm:"size:20;uniqueIndex" json:"-"`
+	Email        *string    `gorm:"size:255;uniqueIndex" json:"-"`
 	Nickname     string     `gorm:"size:32" json:"nickname"`
 	Signature    string     `gorm:"size:255" json:"signature"`
 	School       string     `gorm:"size:64" json:"school"`

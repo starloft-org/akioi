@@ -44,6 +44,24 @@
     </div>
 
     <div class="panel">
+      <h3 class="panel__title">邮件注册与密码重置</h3>
+      <el-form :model="form" label-width="150px">
+        <el-row :gutter="24">
+          <el-col :span="24">
+            <el-form-item label="启用邮件服务">
+              <el-switch v-model="form.email_enabled" />
+              <secret-tag label="SMTP 密钥" :configured="secretStatus.smtp_credentials_configured" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <p class="muted settings-note">
+          SMTP 服务器、端口、账号与发件人在 .env 中配置（SMTP_HOST / SMTP_PORT / SMTP_USERNAME / SMTP_PASSWORD / SMTP_FROM），
+          修改后需重启服务生效。短信与邮件都未开放时，站点不支持注册。
+        </p>
+      </el-form>
+    </div>
+
+    <div class="panel">
       <h3 class="panel__title">短信注册与密码重置</h3>
       <el-form :model="form" label-width="150px">
         <el-row :gutter="24">

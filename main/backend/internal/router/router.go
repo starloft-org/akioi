@@ -58,6 +58,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			authGroup.POST("/register", h.Register)
 			authGroup.POST("/login", h.Login)
 			authGroup.POST("/sms/send", h.SendSMSCode)
+			authGroup.POST("/email/send", h.SendEmailCode)
 			authGroup.POST("/password/reset", h.ResetPassword)
 			authGroup.POST("/logout", required, h.Logout)
 			authGroup.GET("/me", required, h.Me)

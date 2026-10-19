@@ -13,14 +13,27 @@ import (
 const DBName = "akioi"
 
 type WeChatConfig struct {
+	// 公众号：微信内置浏览器的网页授权（snsapi_userinfo）
 	AppID     string
 	AppSecret string
+	// 开放平台网站应用：PC 扫码登录（snsapi_login），未配置时不提供扫码登录
+	OpenAppID     string
+	OpenAppSecret string
 }
 
 // SMSConfig 仅保存 StarLoft 的密钥；可热更新的业务参数保存在数据库中。
 type SMSConfig struct {
 	APIKey    string
 	APISecret string
+}
+
+// SMTPConfig 是邮件发送的连接配置，凭据保存在 .env，不进数据库。
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	Username string
+	Password string
+	From     string
 }
 
 // JudgeConfig 为主站侧评测相关配置：投递队列、测试数据存储与评测节点同步。
@@ -49,6 +62,7 @@ type Config struct {
 
 	WeChat WeChatConfig
 	SMS    SMSConfig
+	SMTP   SMTPConfig
 
 	Judge JudgeConfig
 
@@ -80,12 +94,21 @@ func Load() (*Config, error) {
 		JWTSecret: getEnv("JWT_SECRET", ""),
 
 		WeChat: WeChatConfig{
-			AppID:     getEnv("WECHAT_APPID", ""),
-			AppSecret: getEnv("WECHAT_APPSECRET", ""),
+			AppID:         getEnv("WECHAT_APPID", ""),
+			AppSecret:     getEnv("WECHAT_APPSECRET", ""),
+			OpenAppID:     getEnv("WECHAT_OPEN_APPID", ""),
+			OpenAppSecret: getEnv("WECHAT_OPEN_APPSECRET", ""),
 		},
 		SMS: SMSConfig{
 			APIKey:    getEnv("SMS_API_KEY", ""),
 			APISecret: getEnv("SMS_API_SECRET", ""),
+		},
+		SMTP: SMTPConfig{
+			Host:     getEnv("SMTP_HOST", ""),
+			Port:     getEnvInt("SMTP_PORT", 465),
+			Username: getEnv("SMTP_USERNAME", ""),
+			Password: getEnv("SMTP_PASSWORD", ""),
+			From:     getEnv("SMTP_FROM", ""),
 		},
 
 		Judge: JudgeConfig{
