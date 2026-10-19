@@ -74,9 +74,13 @@ func (h *Handler) CreateSubmission(c *gin.Context) {
 }
 
 // ListSubmissions 返回提交列表；普通用户只能查看自己的提交。
-// ListSubmissions 是公开的全站评测记录；登录用户可用 mine=1 只看自己的。
+// ListSubmissions 需要登录后查看；登录后可浏览全站记录，mine=1 只看自己的。
 func (h *Handler) ListSubmissions(c *gin.Context) {
-	items, total, page, pageSize, err := h.querySubmissions(c, httpx.CurrentUser(c), 0)
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	items, total, page, pageSize, err := h.querySubmissions(c, u, 0)
 	if err != nil {
 		httpx.ServerError(c, "查询提交失败")
 		return
@@ -84,8 +88,12 @@ func (h *Handler) ListSubmissions(c *gin.Context) {
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
 }
 
-// GetSubmission 返回提交详情；源码仅本人或管理员可见，其他人可看基本信息。
+// GetSubmission 需要登录；源码仅本人或管理员可见，其他人可看基本信息。
 func (h *Handler) GetSubmission(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
 		return
@@ -95,11 +103,8 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 		httpx.NotFound(c, "提交不存在")
 		return
 	}
-	var isSelf, isAdmin bool
-	if u := httpx.CurrentUser(c); u != nil {
-		isAdmin = u.IsAdmin()
-		isSelf = sub.UserID == u.ID
-	}
+	isAdmin := u.IsAdmin()
+	isSelf := sub.UserID == u.ID
 	// 比赛结束前，提交详情仅本人与管理员可见
 	if sub.ContestID > 0 && !isAdmin && !isSelf && !h.contestRevealed(sub.ContestID) {
 		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")

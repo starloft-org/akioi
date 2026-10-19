@@ -9,7 +9,7 @@
       <el-select v-model="query.language" placeholder="语言" clearable style="width: 130px">
         <el-option v-for="item in LANGUAGES" :key="item.key" :label="item.name" :value="item.key" />
       </el-select>
-      <el-checkbox v-if="store.isLogin" v-model="mineOnly" label="只看我的" @change="applyFilter" />
+      <el-checkbox v-model="mineOnly" label="只看我的" @change="applyFilter" />
       <el-button type="primary" @click="applyFilter">筛选</el-button>
       <el-button @click="resetFilter">重置</el-button>
     </div>
@@ -62,6 +62,11 @@
         @current-change="load"
         @size-change="handleSizeChange"
       />
+    </div>
+
+    <div v-if="!store.isLogin" class="login-tip">
+      <span class="muted">查看评测记录前请先登录</span>
+      <el-button type="primary" @click="goLogin">登录</el-button>
     </div>
   </div>
 </template>
@@ -136,5 +141,19 @@ const resetFilter = () => {
   load()
 }
 
-onMounted(load)
+onMounted(() => {
+  // 未登录时不发请求，页面底部展示登录引导
+  if (store.isLogin) {
+    load()
+  }
+})
 </script>
+
+<style scoped>
+.login-tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+</style>
