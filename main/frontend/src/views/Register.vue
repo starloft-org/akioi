@@ -21,6 +21,10 @@
           </el-radio-group>
         </el-form-item>
 
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="form.username" maxlength="20" placeholder="4-20 位字母、数字、_ 或 -" />
+        </el-form-item>
+
         <el-form-item v-if="channel === 'sms'" label="手机号" prop="phone">
           <el-input v-model="form.phone" maxlength="11" placeholder="中国大陆手机号" />
         </el-form-item>
@@ -95,8 +99,8 @@ watch([smsOK, emailOK], () => {
 const rules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 20, message: '用户名长度需在 3 到 20 个字符之间', trigger: 'blur' },
-    { pattern: /^[A-Za-z0-9_-]+$/, message: '只能包含字母、数字、下划线与短横线', trigger: 'blur' }
+    { pattern: /^[A-Za-z0-9_-]+$/, message: '只能包含字母、数字、下划线与短横线', trigger: 'blur' },
+    { min: 4, max: 20, message: '用户名长度需在 4 到 20 个字符之间', trigger: 'blur' }
   ],
   phone: [
     { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -168,7 +172,7 @@ const handleRegister = async () => {
   loading.value = true
   try {
     const payload = {
-      username: form.username,
+      username: form.username.trim(),
       channel: channel.value,
       password: form.password,
       nickname: form.nickname

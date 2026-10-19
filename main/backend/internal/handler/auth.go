@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"akioi/internal/httpx"
 	"akioi/internal/logger"
@@ -554,15 +555,19 @@ func bearerOf(c *gin.Context) string {
 }
 
 func validateUsername(name string) error {
-	if len(name) < 3 || len(name) > 20 {
-		return errString("用户名长度需在 3 到 20 个字符之间")
-	}
+	// 先校验字符合法性：全角字母、中文等会被拦在这里，
+	// 否则多字节字符会让字节长度超标，报出误导性的"长度"错误。
 	for _, r := range name {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
 		default:
 			return errString("用户名只能包含字母、数字、下划线与短横线")
 		}
+	}
+	// 按 Unicode 字符数而非字节数统计，与提示文案的"字符"语义一致
+	n := utf8.RuneCountInString(name)
+	if n < 4 || n > 20 {
+		return errString("用户名长度需在 4 到 20 个字符之间")
 	}
 	return nil
 }
