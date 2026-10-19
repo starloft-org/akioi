@@ -52,7 +52,9 @@
       </el-table-column>
       <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="rejudge(row)">重测</el-button>
+          <el-button size="small" type="warning" plain :loading="rejudgingId === row.id" @click="rejudge(row)">
+            重测
+          </el-button>
           <el-button size="small" @click="openSubmission(row.id)">查看源码</el-button>
         </template>
       </el-table-column>
@@ -87,7 +89,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminBatchRejudge, adminListSubmissions, adminRejudgeSubmission } from '@/api'
 import {
   JUDGE_STATUS,
@@ -117,6 +119,7 @@ const filters = reactive({
 
 const batchVisible = ref(false)
 const batchLoading = ref(false)
+const rejudgingId = ref(null)
 const batchMode = ref('problem')
 const batchValue = ref('')
 
@@ -167,11 +170,23 @@ const openUser = (id) => {
 
 const rejudge = async (row) => {
   try {
+    await ElMessageBox.confirm(
+      `将重置提交 #${row.id} 的评测结果并重新投递测评，确定继续？`,
+      '重新测评',
+      { type: 'warning', confirmButtonText: '重新测评', cancelButtonText: '取消' }
+    )
+  } catch (e) {
+    return
+  }
+  rejudgingId.value = row.id
+  try {
     await adminRejudgeSubmission(row.id)
     ElMessage.success('已提交重测任务')
     load()
   } catch (e) {
     // 错误提示已由请求层处理
+  } finally {
+    rejudgingId.value = null
   }
 }
 
