@@ -11,7 +11,7 @@ const routes = [
     children: [
       { path: '', name: 'home', component: () => import('@/views/Home.vue') },
       { path: 'problems', name: 'problems', component: () => import('@/views/ProblemList.vue') },
-      { path: 'problems/:id', name: 'problem-detail', component: () => import('@/views/ProblemDetail.vue') },
+      { path: 'problems/:id', name: 'problem-detail', component: () => import('@/views/ProblemDetail.vue'), meta: { wide: true } },
       { path: 'problems/:id/solutions', name: 'solutions', component: () => import('@/views/SolutionList.vue') },
       { path: 'solutions/:id', name: 'solution-detail', component: () => import('@/views/SolutionDetail.vue') },
       { path: 'ranking', name: 'ranking', component: () => import('@/views/Ranking.vue') },

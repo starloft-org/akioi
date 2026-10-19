@@ -31,7 +31,7 @@
       </div>
     </header>
 
-    <main class="app-main">
+    <main class="app-main" :class="{ 'app-main--wide': route.meta.wide }">
       <router-view />
     </main>
 
@@ -43,12 +43,13 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
 const router = useRouter()
+const route = useRoute()
 const site = computed(() => store.site)
 
 onMounted(async () => {

@@ -1,7 +1,7 @@
 <template>
-  <div v-loading="loading">
+  <div v-loading="loading" class="problem-layout">
     <template v-if="problem">
-      <div class="panel">
+      <div class="problem-pane panel">
         <div class="problem-statement">
           <h1 class="problem-title">
             <span class="mono">{{ problem.display_id }}</span>
@@ -60,51 +60,53 @@
         </div>
       </div>
 
-      <div class="panel">
-        <h3 class="panel__title">提交代码</h3>
-        <template v-if="store.isLogin">
-          <div class="toolbar">
-            <el-select v-model="language" style="width: 140px">
-              <el-option v-for="item in languageOptions" :key="item.key" :label="item.name" :value="item.key" />
-            </el-select>
-            <span class="muted">按 Ctrl + Enter 可快速提交</span>
+      <div class="submit-pane">
+        <div class="panel">
+          <h3 class="panel__title">提交代码</h3>
+          <template v-if="store.isLogin">
+            <div class="toolbar">
+              <el-select v-model="language" style="width: 140px">
+                <el-option v-for="item in languageOptions" :key="item.key" :label="item.name" :value="item.key" />
+              </el-select>
+              <span class="muted">按 Ctrl + Enter 可快速提交</span>
+            </div>
+            <CodeEditor v-model="code" :language="language" @submit="handleSubmit" />
+            <div class="submit-bar">
+              <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
+            </div>
+          </template>
+          <div v-else class="submit-login">
+            <span class="muted">请先登录后再提交代码</span>
+            <el-button type="primary" @click="goLogin">登录</el-button>
           </div>
-          <CodeEditor v-model="code" :language="language" @submit="handleSubmit" />
-          <div class="submit-bar">
-            <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
-          </div>
-        </template>
-        <div v-else class="submit-login">
-          <span class="muted">请先登录后再提交代码</span>
-          <el-button type="primary" @click="goLogin">登录</el-button>
         </div>
-      </div>
 
-      <div v-if="store.isLogin" class="panel">
-        <h3 class="panel__title">我的提交记录</h3>
-        <el-empty v-if="!myLoading && mySubmissions.length === 0" description="暂无提交记录" />
-        <el-table v-else v-loading="myLoading" :data="mySubmissions" size="small">
-          <el-table-column label="状态" width="140">
-            <template #default="{ row }">
-              <StatusTag :status="row.status" />
-            </template>
-          </el-table-column>
-          <el-table-column label="得分" width="80" prop="score" />
-          <el-table-column label="耗时" width="100">
-            <template #default="{ row }">{{ formatDuration(row.time_ms) }}</template>
-          </el-table-column>
-          <el-table-column label="内存" width="100">
-            <template #default="{ row }">{{ formatMemory(row.memory_kb) }}</template>
-          </el-table-column>
-          <el-table-column label="语言" width="90">
-            <template #default="{ row }">{{ languageName(row.language) }}</template>
-          </el-table-column>
-          <el-table-column label="提交时间" min-width="160">
-            <template #default="{ row }">
-              <router-link :to="`/submissions/${row.id}`">{{ formatTime(row.created_at) }}</router-link>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div v-if="store.isLogin" class="panel">
+          <h3 class="panel__title">我的提交记录</h3>
+          <el-empty v-if="!myLoading && mySubmissions.length === 0" description="暂无提交记录" />
+          <el-table v-else v-loading="myLoading" :data="mySubmissions" size="small">
+            <el-table-column label="状态" width="140">
+              <template #default="{ row }">
+                <StatusTag :status="row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column label="得分" width="80" prop="score" />
+            <el-table-column label="耗时" width="100">
+              <template #default="{ row }">{{ formatDuration(row.time_ms) }}</template>
+            </el-table-column>
+            <el-table-column label="内存" width="100">
+              <template #default="{ row }">{{ formatMemory(row.memory_kb) }}</template>
+            </el-table-column>
+            <el-table-column label="语言" width="90">
+              <template #default="{ row }">{{ languageName(row.language) }}</template>
+            </el-table-column>
+            <el-table-column label="提交时间" min-width="160">
+              <template #default="{ row }">
+                <router-link :to="`/submissions/${row.id}`">{{ formatTime(row.created_at) }}</router-link>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </div>
     </template>
   </div>
@@ -204,6 +206,35 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 左右分栏：题面与编译器各自独立滚动 */
+.problem-layout {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  /* 56px 顶部导航 + 上下各 16px 内边距 */
+  height: calc(100vh - 56px - 32px);
+  min-height: 480px;
+}
+
+.problem-pane {
+  flex: 0 0 42%;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.submit-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.submit-pane .panel {
+  flex-shrink: 0;
+}
+
 .problem-title {
   margin: 0 0 8px;
   font-size: 20px;
@@ -260,5 +291,22 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* 窄屏（移动端/小窗）时退回上下堆叠 */
+@media (max-width: 960px) {
+  .problem-layout {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .problem-pane {
+    flex: none;
+    overflow-y: visible;
+  }
+
+  .submit-pane {
+    overflow-y: visible;
+  }
 }
 </style>

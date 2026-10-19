@@ -120,6 +120,11 @@ a {
   padding: 16px;
 }
 
+/* 评测等需要左右分栏的页面放宽到接近全屏，避免题面被压得过窄 */
+.app-main--wide {
+  max-width: 1600px;
+}
+
 .app-footer {
   padding: 16px;
   text-align: center;
