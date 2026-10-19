@@ -7,7 +7,10 @@
 
     <template v-else>
       <div v-loading="loading" class="panel">
-        <h3 class="panel__title">评测详情</h3>
+        <h3 class="panel__title">
+          评测详情
+          <span v-if="isJudging" class="polling-hint">评测中，结果自动刷新</span>
+        </h3>
         <template v-if="submission">
           <el-descriptions :column="3" border>
             <el-descriptions-item label="状态">
@@ -73,7 +76,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getSubmission } from '@/api'
 import CodeEditor from '@/components/CodeEditor.vue'
@@ -95,12 +98,42 @@ const judgeMessage = ref('')
 
 const submissionId = computed(() => route.params.id)
 
+// 评测未结束时的轮询间隔
+const POLL_INTERVAL_MS = 2000
+let pollTimer = null
+
+// 提交处于等待评测或评测中时，页面自动轮询结果，无需手动刷新
+const isJudging = computed(() => {
+  const status = submission.value?.status
+  return status === 'Pending' || status === 'Judging'
+})
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+const startPolling = () => {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    await load(true)
+    if (!isJudging.value) {
+      stopPolling()
+    }
+  }, POLL_INTERVAL_MS)
+}
+
 const goLogin = () => {
   router.push({ path: '/login', query: { redirect: route.fullPath } })
 }
 
-const load = async () => {
-  loading.value = true
+// silent 为 true 时不显示 loading 遮罩，避免轮询期间页面闪烁
+const load = async (silent = false) => {
+  if (!silent) {
+    loading.value = true
+  }
   try {
     const data = await getSubmission(submissionId.value)
     submission.value = data.submission || null
@@ -110,17 +143,27 @@ const load = async () => {
     compileError.value = data.compile_error || ''
     judgeMessage.value = data.judge_message || ''
   } catch (e) {
-    submission.value = null
+    if (!silent) {
+      submission.value = null
+    }
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
   }
 }
 
-onMounted(() => {
-  if (store.isLogin) {
-    load()
+onMounted(async () => {
+  if (!store.isLogin) {
+    return
+  }
+  await load()
+  if (isJudging.value) {
+    startPolling()
   }
 })
+
+onUnmounted(stopPolling)
 </script>
 
 <style scoped>
@@ -129,6 +172,35 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   padding: 24px 0;
+}
+
+/* 评测中的自动刷新提示，带一个呼吸小圆点 */
+.polling-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--akioi-primary);
+}
+
+.polling-hint::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--akioi-primary);
+  animation: poll-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes poll-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .section-title {

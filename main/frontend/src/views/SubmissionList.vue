@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { listSubmissions } from '@/api'
 import StatusTag from '@/components/StatusTag.vue'
 import { useUserStore } from '@/store/user'
@@ -99,8 +99,45 @@ const statusOptions = [
   { label: '输出超限', value: 'OutputLimitExceeded' }
 ]
 
-const load = async () => {
-  loading.value = true
+// 列表里存在未评测的提交时自动刷新，评测全部结束后停止
+const hasJudging = computed(() =>
+  items.value.some((item) => item.status === 'Pending' || item.status === 'Judging')
+)
+
+const LIST_POLL_INTERVAL_MS = 5000
+let pollTimer = null
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+const startPolling = () => {
+  if (pollTimer) {
+    return
+  }
+  pollTimer = setInterval(async () => {
+    await load(true)
+    if (!hasJudging.value) {
+      stopPolling()
+    }
+  }, LIST_POLL_INTERVAL_MS)
+}
+
+const syncPolling = () => {
+  if (hasJudging.value) {
+    startPolling()
+  } else {
+    stopPolling()
+  }
+}
+
+const load = async (silent = false) => {
+  if (!silent) {
+    loading.value = true
+  }
   try {
     const params = { page: query.page, page_size: query.page_size }
     if (query.status) {
@@ -116,10 +153,15 @@ const load = async () => {
     items.value = data.items || []
     total.value = data.total || 0
   } catch (e) {
-    items.value = []
-    total.value = 0
+    if (!silent) {
+      items.value = []
+      total.value = 0
+    }
   } finally {
-    loading.value = false
+    if (!silent) {
+      loading.value = false
+    }
+    syncPolling()
   }
 }
 
@@ -147,6 +189,8 @@ onMounted(() => {
     load()
   }
 })
+
+onBeforeUnmount(stopPolling)
 </script>
 
 <style scoped>
