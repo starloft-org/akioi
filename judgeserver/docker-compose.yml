@@ -1,9 +1,8 @@
 # 评测节点：自带 MySQL 与 Redis，不再访问主站的数据库与队列。
 # 与主站之间只有 HTTP：接收测试数据与评测任务，回传评测结果。
-# 首次部署：
+# 部署：
 #   1. cp .env.example .env 并填写 DB_PASSWORD / REDIS_PASSWORD / MAIN_BASE_URL / JUDGE_SYNC_SECRET / HOST_TESTDATA_DIR / HOST_WORK_DIR
-#   2. docker compose --profile sandbox build sandbox    # 构建判题沙箱镜像 akioi-sandbox:latest
-#   3. docker compose up -d --build
+#   2. docker compose up -d --build    # 一条命令完成全部：先构建沙箱镜像，等健康检查通过后启动 judge
 services:
   mysql:
     image: mysql:8.0
@@ -63,12 +62,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # 等沙箱镜像构建完成（sandbox 容器只负责提供镜像，跑完 /bin/true 即退出）
+      sandbox:
+        condition: service_completed_successfully
 
+  # 判题沙箱镜像的构建载体：judge 用它给选手代码提供隔离运行环境。
+  # 容器本身不常驻，Exited (0) 是正常状态；镜像内容变化时重新 up -d --build 即可。
   sandbox:
     image: akioi-sandbox:latest
     build:
       context: ./sandbox
-    profiles:
-      - sandbox
     entrypoint:
       - /bin/true
