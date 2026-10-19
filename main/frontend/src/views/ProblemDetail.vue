@@ -244,8 +244,17 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* 元信息做成胶囊标签，视觉上与题面正文分层 */
+.problem-meta > span:not(.el-tag) {
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #f7f8fa;
+  color: var(--akioi-text-weak);
+  font-variant-numeric: tabular-nums;
 }
 
 .problem-tags {

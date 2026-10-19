@@ -36,23 +36,46 @@
     </div>
 
     <el-table v-loading="loading" :data="items" size="small">
-      <el-table-column label="题号" width="110">
+      <el-table-column width="44" align="center">
+        <template #default="{ row }">
+          <span
+            class="status-dot"
+            :class="row.my_status || 'todo'"
+            :title="statusText(row.my_status)"
+          ></span>
+        </template>
+      </el-table-column>
+      <el-table-column label="题号" width="100">
         <template #default="{ row }">
           <router-link class="mono" :to="`/problems/${row.id}`">{{ row.display_id }}</router-link>
         </template>
       </el-table-column>
       <el-table-column label="标题" min-width="220">
         <template #default="{ row }">
-          <router-link :to="`/problems/${row.id}`">{{ row.title }}</router-link>
+          <router-link class="problem-link" :to="`/problems/${row.id}`">{{ row.title }}</router-link>
         </template>
       </el-table-column>
-      <el-table-column label="难度" width="100">
+      <el-table-column label="难度" width="110">
         <template #default="{ row }">
           <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
         </template>
       </el-table-column>
-      <el-table-column prop="points" label="积分" width="80" />
-      <el-table-column label="标签" min-width="180">
+      <el-table-column label="通过率" width="150">
+        <template #default="{ row }">
+          <div class="rate-cell">
+            <div class="rate-bar">
+              <span :style="{ width: rateWidth(row.acceptance_rate) }"></span>
+            </div>
+            <span class="rate-text">{{ rateText(row.acceptance_rate) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="提交 / 通过人数" width="140" align="right">
+        <template #default="{ row }">
+          <span class="tabular">{{ row.submit_count }} / {{ row.accepted_count }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="标签" min-width="170">
         <template #default="{ row }">
           <el-tag
             v-for="tag in row.tags"
@@ -66,19 +89,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="通过率" width="100">
-        <template #default="{ row }">{{ rateText(row.acceptance_rate) }}</template>
-      </el-table-column>
-      <el-table-column label="提交/通过" width="120">
-        <template #default="{ row }">{{ row.submit_count }} / {{ row.accepted_count }}</template>
-      </el-table-column>
-      <el-table-column label="我的状态" width="110">
-        <template #default="{ row }">
-          <el-tag v-if="row.my_status === 'solved'" type="success" size="small">已通过</el-tag>
-          <el-tag v-else-if="row.my_status === 'attempted'" type="warning" size="small">尝试过</el-tag>
-          <span v-else class="muted">-</span>
-        </template>
-      </el-table-column>
+      <el-table-column label="积分" width="76" align="right" prop="points" />
     </el-table>
 
     <div class="pagination-bar">
@@ -116,6 +127,15 @@ const query = reactive({
 })
 
 const rateText = (value) => `${Number(value || 0).toFixed(1)}%`
+
+// 通过率进度条宽度：至少保留 2% 以显示颜色
+const rateWidth = (value) => `${Math.max(2, Math.min(100, Number(value || 0)))}%`
+
+const statusText = (status) => {
+  if (status === 'solved') return '已通过'
+  if (status === 'attempted') return '尝试过'
+  return '未作答'
+}
 
 const buildParams = () => {
   const params = { page: query.page, page_size: query.page_size }
@@ -184,5 +204,59 @@ onMounted(load)
 .tag-click {
   margin-right: 4px;
   cursor: pointer;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dcdfe6;
+}
+
+.status-dot.solved {
+  background: #00b42a;
+}
+
+.status-dot.attempted {
+  background: #ff7d00;
+}
+
+.problem-link {
+  font-weight: 500;
+}
+
+.rate-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #f2f3f5;
+  overflow: hidden;
+}
+
+.rate-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--akioi-primary);
+}
+
+.rate-text {
+  width: 46px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--akioi-text-weak);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular {
+  color: var(--akioi-text-weak);
+  font-variant-numeric: tabular-nums;
 }
 </style>

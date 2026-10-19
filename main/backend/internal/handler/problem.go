@@ -74,6 +74,12 @@ func (h *Handler) ListProblems(c *gin.Context) {
 		return
 	}
 
+	ids := make([]uint, 0, len(problems))
+	for i := range problems {
+		ids = append(ids, problems[i].ID)
+	}
+	submitters := h.distinctSubmitters(ids)
+
 	items := make([]problemItem, 0, len(problems))
 	for i := range problems {
 		p := &problems[i]
@@ -89,7 +95,8 @@ func (h *Handler) ListProblems(c *gin.Context) {
 			MemoryLimitMB:  p.MemoryLimitMB,
 			SubmitCount:    p.SubmitCount,
 			AcceptedCount:  p.AcceptedCount,
-			AcceptanceRate: rate(p.AcceptedCount, p.SubmitCount),
+			// 通过率 = 通过人数 / 提交过的人数，两者都按去重用户统计
+			AcceptanceRate: rate(p.AcceptedCount, submitters[p.ID]),
 			CreatedAt:      p.CreatedAt,
 		}
 		if solvedSet[p.ID] {
@@ -130,7 +137,8 @@ func (h *Handler) GetProblem(c *gin.Context) {
 		MemoryLimitMB:  p.MemoryLimitMB,
 		SubmitCount:    p.SubmitCount,
 		AcceptedCount:  p.AcceptedCount,
-		AcceptanceRate: rate(p.AcceptedCount, p.SubmitCount),
+		// 通过率 = 通过人数 / 提交过的人数
+		AcceptanceRate: rate(p.AcceptedCount, h.distinctSubmitters([]uint{p.ID})[p.ID]),
 		CreatedAt:      p.CreatedAt,
 	}
 	if u := httpx.CurrentUser(c); u != nil {
@@ -258,6 +266,30 @@ func rate(accepted, total int) float64 {
 		return 0
 	}
 	return float64(accepted) * 100 / float64(total)
+}
+
+// distinctSubmitters 统计一批题目的提交人数（按用户去重），用于计算通过率。
+func (h *Handler) distinctSubmitters(ids []uint) map[uint]int {
+	out := make(map[uint]int, len(ids))
+	if len(ids) == 0 {
+		return out
+	}
+	type row struct {
+		ProblemID uint
+		Users     int
+	}
+	var rows []row
+	if err := h.DB.Model(&model.Submission{}).
+		Select("problem_id, COUNT(DISTINCT user_id) AS users").
+		Where("problem_id IN ?", ids).
+		Group("problem_id").
+		Scan(&rows).Error; err != nil {
+		return out
+	}
+	for _, r := range rows {
+		out[r.ProblemID] = r.Users
+	}
+	return out
 }
 
 func totalScore(p *model.Problem) int {

@@ -10,7 +10,14 @@
   --akioi-text-weak: #86909c;
   --akioi-border: #e5e6eb;
   --akioi-bg: #f5f7fa;
-  --akioi-radius: 4px;
+  --akioi-radius: 8px;
+
+  /* 统一 Element 组件圆角与表格观感 */
+  --el-border-radius-base: 6px;
+  --el-table-border-color: transparent;
+  --el-table-header-bg-color: #f7f8fa;
+  --el-table-header-text-color: #4e5969;
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--akioi-primary) 5%, white);
 
   /* Element Plus 默认正文色偏黑（#303133），一并收敛到灰阶 */
   --el-text-color-primary: #4e5969;
@@ -94,12 +101,40 @@ a {
 }
 
 .app-nav a {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 56px;
   color: var(--akioi-text);
 }
 
 .app-nav a.router-link-active {
   color: var(--akioi-primary);
   font-weight: 600;
+}
+
+/* 当前栏目用一条细指示条标出，避免只靠颜色区分 */
+.app-nav a.router-link-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--akioi-primary);
+}
+
+/* 表格：紧凑行高、表头淡底、无竖线 */
+.el-table th.el-table__cell {
+  font-weight: 600;
+}
+
+.el-table .el-table__cell {
+  padding: 9px 0;
+}
+
+.el-table__inner-wrapper::before {
+  display: none;
 }
 
 .app-header__right {
@@ -137,7 +172,8 @@ a {
   background: #fff;
   border: 1px solid var(--akioi-border);
   border-radius: var(--akioi-radius);
-  padding: 16px;
+  box-shadow: 0 1px 2px rgba(29, 33, 41, 0.04);
+  padding: 20px;
 }
 
 .panel + .panel {
