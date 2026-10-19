@@ -98,10 +98,9 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			comments.DELETE("/:id", required, h.DeleteComment)
 		}
 
-		submissions := api.Group("/submissions")
-		submissions.Use(required)
+		submissions := api.Group("/submissions", optional)
 		{
-			submissions.POST("", h.CreateSubmission)
+			submissions.POST("", required, h.CreateSubmission)
 			submissions.GET("", h.ListSubmissions)
 			submissions.GET("/:id", h.GetSubmission)
 		}

@@ -74,12 +74,9 @@ func (h *Handler) CreateSubmission(c *gin.Context) {
 }
 
 // ListSubmissions 返回提交列表；普通用户只能查看自己的提交。
+// ListSubmissions 是公开的全站评测记录；登录用户可用 mine=1 只看自己的。
 func (h *Handler) ListSubmissions(c *gin.Context) {
-	u := httpx.MustUser(c)
-	if u == nil {
-		return
-	}
-	items, total, page, pageSize, err := h.querySubmissions(c, u, 0)
+	items, total, page, pageSize, err := h.querySubmissions(c, httpx.CurrentUser(c), 0)
 	if err != nil {
 		httpx.ServerError(c, "查询提交失败")
 		return
@@ -87,12 +84,8 @@ func (h *Handler) ListSubmissions(c *gin.Context) {
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
 }
 
-// GetSubmission 返回提交详情；源码仅本人或管理员可见。
+// GetSubmission 返回提交详情；源码仅本人或管理员可见，其他人可看基本信息。
 func (h *Handler) GetSubmission(c *gin.Context) {
-	u := httpx.MustUser(c)
-	if u == nil {
-		return
-	}
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
 		return
@@ -102,18 +95,19 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 		httpx.NotFound(c, "提交不存在")
 		return
 	}
-	isAdmin := u.IsAdmin()
-	if sub.UserID != u.ID && !isAdmin {
-		httpx.Forbidden(c, "无权查看该提交")
-		return
+	var isSelf, isAdmin bool
+	if u := httpx.CurrentUser(c); u != nil {
+		isAdmin = u.IsAdmin()
+		isSelf = sub.UserID == u.ID
 	}
-	if sub.ContestID > 0 && !isAdmin && !h.contestRevealed(sub.ContestID) {
+	// 比赛结束前，提交详情仅本人与管理员可见
+	if sub.ContestID > 0 && !isAdmin && !isSelf && !h.contestRevealed(sub.ContestID) {
 		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
 		return
 	}
 
 	items := h.decorateSubmissions([]model.Submission{sub})
-	canSeeCode := isAdmin || sub.UserID == u.ID
+	canSeeCode := isSelf || isAdmin
 	data := gin.H{
 		"submission":       items[0],
 		"code_visible":     canSeeCode,
@@ -155,13 +149,20 @@ func (h *Handler) querySubmissions(c *gin.Context, u *model.User, contestID uint
 		query = query.Where("status = ?", status)
 	}
 
-	isAdmin := u.IsAdmin()
+	isAdmin := u != nil && u.IsAdmin()
 	uid := httpx.QueryUint(c, "user_id")
-	if !isAdmin {
-		// 普通用户仅能查看本人提交，避免比赛期间泄露他人成绩。
+	if isAdmin {
+		if uid > 0 {
+			query = query.Where("user_id = ?", uid)
+		}
+	} else if u != nil && c.Query("mine") == "1" {
+		// 登录用户可筛选只看自己的提交
 		query = query.Where("user_id = ?", u.ID)
-	} else if uid > 0 {
-		query = query.Where("user_id = ?", uid)
+	}
+	if !isAdmin {
+		// 比赛结束前的提交不公开，避免泄露比赛成绩
+		query = query.Where("contest_id = 0 OR contest_id IN (?)",
+			h.DB.Model(&model.Contest{}).Select("id").Where("end_at < ?", time.Now()))
 	}
 
 	var total int64
