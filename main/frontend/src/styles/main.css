@@ -1,8 +1,9 @@
 :root {
-  /* 品牌主色：与 StarLoft 站点保持一致（腾讯云风格青色） */
+  /* 品牌主色：默认为品牌青，可由后台「主题色」设置动态覆盖 */
   --akioi-primary: #1cd5c7;
-  --akioi-primary-hover: #15c5ba;
-  --akioi-primary-light: #dff8f5;
+  /* 衍生色全部由 color-mix 从主色计算，改主色一处即可全站生效 */
+  --akioi-primary-hover: color-mix(in srgb, var(--akioi-primary) 92%, black);
+  --akioi-primary-light: color-mix(in srgb, var(--akioi-primary) 12%, white);
 
   /* 正文与辅助文字：腾讯云中性灰阶，不使用纯黑 */
   --akioi-text: #4e5969;
@@ -16,13 +17,13 @@
   --el-text-color-regular: #5a6270;
 
   /* 同步 Element Plus 主色，让按钮、链接、标签与品牌色同源 */
-  --el-color-primary: #1cd5c7;
-  --el-color-primary-light-3: #60e2d8;
-  --el-color-primary-light-5: #8eeae3;
-  --el-color-primary-light-7: #bbf2ee;
-  --el-color-primary-light-8: #d2f7f4;
-  --el-color-primary-light-9: #e8fbf9;
-  --el-color-primary-dark-2: #17aa9f;
+  --el-color-primary: var(--akioi-primary);
+  --el-color-primary-light-3: color-mix(in srgb, var(--akioi-primary) 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--akioi-primary) 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--akioi-primary) 30%, white);
+  --el-color-primary-light-8: color-mix(in srgb, var(--akioi-primary) 20%, white);
+  --el-color-primary-light-9: color-mix(in srgb, var(--akioi-primary) 10%, white);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--akioi-primary) 80%, black);
 }
 
 * {

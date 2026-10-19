@@ -24,6 +24,12 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
+            <el-form-item label="主题色">
+              <el-color-picker v-model="form.theme_color" :predefine="predefineColors" />
+              <span class="unit">影响全站按钮、链接与品牌色</span>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
             <el-form-item label="开放注册">
               <el-switch v-model="form.register_enabled" />
             </el-form-item>
@@ -206,7 +212,7 @@ const SecretTag = defineComponent({
 })
 
 const defaults = {
-  app_name: 'AKIOI', jwt_ttl_hours: 168, register_enabled: true,
+  app_name: 'AKIOI', theme_color: '#1CD5C7', jwt_ttl_hours: 168, register_enabled: true,
   wechat_enabled: false, wechat_redirect_uri: '', sms_enabled: false,
   sms_api_base_url: 'https://api.starloft.cn/v2', sms_register_template_id: '',
   sms_reset_template_id: '', sms_code_ttl_minutes: 5, sms_send_interval_sec: 60,
@@ -220,6 +226,8 @@ const loading = ref(false)
 const saving = ref(false)
 const form = reactive({ ...defaults })
 const secretStatus = reactive({})
+// 常用主题色预设，供快捷选择
+const predefineColors = ['#1CD5C7', '#409EFF', '#5470C6', '#00A870', '#F7BA1E', '#F54A45', '#7B61FF', '#34495E']
 const judgeNodesText = ref('')
 const corsText = ref('')
 

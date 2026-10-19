@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -15,12 +16,16 @@ import (
 	"gorm.io/gorm"
 )
 
+// themeColorPattern 校验六位十六进制颜色值（#RRGGBB）。
+var themeColorPattern = regexp.MustCompile(`^#[0-9A-F]{6}$`)
+
 const runtimeSettingsKey = "runtime"
 
 // RuntimeSettings 是可在后台修改并立即生效的非敏感业务设置。
 type RuntimeSettings struct {
 	AppName              string   `json:"app_name"`
-	JWTTTLHours           int      `json:"jwt_ttl_hours"`
+	ThemeColor           string   `json:"theme_color"`
+	JWTTTLHours          int      `json:"jwt_ttl_hours"`
 	RegisterEnabled      bool     `json:"register_enabled"`
 	WeChatEnabled        bool     `json:"wechat_enabled"`
 	WeChatRedirectURI    string   `json:"wechat_redirect_uri"`
@@ -45,6 +50,7 @@ type RuntimeSettings struct {
 func DefaultRuntimeSettings() RuntimeSettings {
 	return RuntimeSettings{
 		AppName:              "AKIOI",
+		ThemeColor:           "#1CD5C7",
 		JWTTTLHours:           168,
 		RegisterEnabled:      true,
 		WeChatEnabled:        false,
@@ -150,6 +156,13 @@ func NormalizeRuntimeSettings(s RuntimeSettings) (RuntimeSettings, error) {
 	s.AppName = strings.TrimSpace(s.AppName)
 	if s.AppName == "" || len([]rune(s.AppName)) > 64 {
 		return s, fmt.Errorf("站点名称长度必须为 1 到 64 个字符")
+	}
+	s.ThemeColor = strings.ToUpper(strings.TrimSpace(s.ThemeColor))
+	if s.ThemeColor == "" {
+		s.ThemeColor = DefaultRuntimeSettings().ThemeColor
+	}
+	if !themeColorPattern.MatchString(s.ThemeColor) {
+		return s, fmt.Errorf("主题色格式不正确，应形如 #1CD5C7")
 	}
 	if s.JWTTTLHours < 1 || s.JWTTTLHours > 8760 {
 		return s, fmt.Errorf("登录有效期必须为 1 到 8760 小时")
