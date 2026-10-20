@@ -30,17 +30,11 @@
         </el-button>
       </el-form>
       <div class="auth-links">
-        <el-link
-          v-if="store.site.register_enabled"
-          type="primary"
-          :underline="false"
-          @click="router.push('/register')"
-        >
-          注册账号
-        </el-link>
-        <el-link type="primary" :underline="false" @click="router.push('/forgot-password')">
-          忘记密码
-        </el-link>
+        <template v-if="store.site.register_enabled">
+          <span class="muted">还没有账号？</span>
+          <el-link type="primary" :underline="false" @click="router.push('/register')">注册账号</el-link>
+        </template>
+        <el-link type="primary" :underline="false" @click="router.push('/forgot-password')">忘记密码</el-link>
       </div>
       <div v-if="store.site.wechat_enabled" class="wechat-login">
         <div class="wechat-divider"><span>其他登录方式</span></div>
@@ -202,8 +196,12 @@ onMounted(() => {
 }
 
 .auth-links {
-  margin-top: 12px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 13px;
 }
 
 /* 其他登录方式：分隔线 + 微信绿图标按钮 */
