@@ -2,25 +2,30 @@
   <el-dialog
     v-model="visible"
     :title="title"
-    width="340px"
+    width="420px"
+    align-center
     :close-on-click-modal="false"
     @closed="cleanup"
   >
-    <div class="qr-body">
-      <el-skeleton v-if="loading" :rows="4" animated />
-      <template v-else-if="error">
-        <el-empty :description="error" :image-size="72" />
-        <el-button size="small" @click="start">重新生成</el-button>
-      </template>
-      <template v-else>
-        <canvas ref="canvasRef" class="qr-canvas"></canvas>
-        <p class="qr-tip">{{ tip }}</p>
-        <p class="qr-hint">{{ hint }}</p>
-      </template>
+    <div class="qr-wrap">
+      <div class="qr-box">
+        <el-skeleton v-if="loading" :rows="2" animated class="qr-skeleton" />
+        <div v-else-if="error" class="qr-expired">
+          <p>{{ error }}</p>
+          <el-button size="small" type="primary" @click="start">刷新二维码</el-button>
+        </div>
+        <canvas v-else ref="canvasRef" class="qr-canvas"></canvas>
+      </div>
+      <p class="qr-tip">
+        <template v-if="purpose === 'bind'">
+          请用微信「扫一扫」扫描二维码，扫码授权后即完成绑定。
+        </template>
+        <template v-else>
+          请用微信「扫一扫」扫描二维码，在手机上确认授权后，本页面将自动登录。
+        </template>
+      </p>
+      <p v-if="!loading && !error" class="qr-status">等待扫码…</p>
     </div>
-    <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
-    </template>
   </el-dialog>
 </template>
 
@@ -44,9 +49,7 @@ const canvasRef = ref(null)
 let timer = null
 let deadline = 0
 
-const title = computed(() => (props.purpose === 'bind' ? '绑定微信' : '微信登录'))
-const tip = computed(() => (props.purpose === 'bind' ? '请用微信扫码完成绑定' : '请用微信扫码登录'))
-const hint = '二维码 5 分钟内有效，扫码后在微信里确认授权'
+const title = computed(() => (props.purpose === 'bind' ? '微信扫码绑定' : '微信扫码登录'))
 
 const stopTimer = () => {
   if (timer) {
@@ -106,7 +109,7 @@ const start = async () => {
     if (!canvasRef.value) {
       await new Promise((resolve) => setTimeout(resolve, 120))
     }
-    await QRCode.toCanvas(canvasRef.value, data.url, { width: 240, margin: 1 })
+    await QRCode.toCanvas(canvasRef.value, data.url, { width: 196, margin: 1 })
     deadline = Date.now() + 5 * 60 * 1000
     stopTimer()
     timer = setInterval(poll, 2000)
@@ -128,27 +131,55 @@ onBeforeUnmount(stopTimer)
 </script>
 
 <style scoped>
-.qr-body {
+.qr-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  min-height: 200px;
+}
+
+/* 二维码外框：与 StarLoft 一致，二维码居中留白 */
+.qr-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 220px;
+  height: 220px;
+  border: 1px solid var(--akioi-border);
+  border-radius: 8px;
+  background: #fff;
 }
 
 .qr-canvas {
-  width: 240px;
-  height: 240px;
+  width: 196px;
+  height: 196px;
+}
+
+.qr-skeleton {
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.qr-expired {
+  text-align: center;
+  font-size: 13px;
+  color: var(--akioi-text-weak);
+}
+
+.qr-expired p {
+  margin: 0 0 10px;
 }
 
 .qr-tip {
-  margin: 4px 0 0;
+  margin: 14px 0 0;
   font-size: 13px;
-  font-weight: 600;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--akioi-text-weak);
 }
 
-.qr-hint {
-  margin: 0;
+.qr-status {
+  margin-top: 6px;
   font-size: 12px;
   color: var(--akioi-text-weak);
 }

@@ -4,19 +4,30 @@
       <div class="auth-brand">{{ store.site.app_name }}</div>
       <div class="auth-sub">信息学奥赛在线评测系统</div>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item label="账号" prop="account">
-          <el-input v-model="form.account" placeholder="手机号或用户名" @keyup.enter="handleLogin" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
+        <el-form-item prop="account">
           <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            placeholder="请输入密码"
+            v-model="form.account"
+            size="large"
+            placeholder="手机号或用户名"
+            :prefix-icon="UserIcon"
+            clearable
             @keyup.enter="handleLogin"
           />
         </el-form-item>
-        <el-button type="primary" class="auth-submit" :loading="loading" @click="handleLogin">登录</el-button>
+        <el-form-item prop="password">
+          <el-input
+            v-model="form.password"
+            size="large"
+            type="password"
+            show-password
+            placeholder="请输入密码"
+            :prefix-icon="LockIcon"
+            @keyup.enter="handleLogin"
+          />
+        </el-form-item>
+        <el-button type="primary" size="large" class="auth-submit" :loading="loading" @click="handleLogin">
+          登录
+        </el-button>
       </el-form>
       <div class="auth-links">
         <el-link
@@ -31,8 +42,15 @@
           忘记密码
         </el-link>
       </div>
-      <div v-if="store.site.wechat_enabled" class="auth-wechat">
-        <el-button @click="handleWechat">{{ wechatLabel }}</el-button>
+      <div v-if="store.site.wechat_enabled" class="wechat-login">
+        <div class="wechat-divider"><span>其他登录方式</span></div>
+        <el-button class="wechat-btn" size="large" @click="handleWechat">
+          <svg class="wechat-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+            <path d="M8.7 3C4.6 3 1.3 5.8 1.3 9.2c0 1.9 1.1 3.6 2.8 4.8l-.7 2.1 2.4-1.2c.9.3 1.9.4 2.9.4h.4a5.6 5.6 0 0 1-.2-1.5c0-3.2 3.1-5.8 6.9-5.8h.6C15.7 5.2 12.5 3 8.7 3Zm-2.4 3.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm4.8 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
+            <path d="M22.7 14.1c0-2.8-2.8-5.1-6.2-5.1s-6.2 2.3-6.2 5.1 2.8 5.1 6.2 5.1c.8 0 1.5-.1 2.2-.3l1.9 1-.5-1.7c1.6-.9 2.6-2.4 2.6-4.1Zm-8.2-1.5a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Zm4 0a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Z" />
+          </svg>
+          {{ wechatLabel }}
+        </el-button>
       </div>
       <WechatQrDialog ref="wechatDialog" purpose="login" @login="onWechatLogin" />
     </div>
@@ -43,9 +61,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Lock, User } from '@element-plus/icons-vue'
 import { getWechatUrl, wechatCallback } from '@/api'
 import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
+
+// 输入框前缀图标用组件常量，模板里直接绑定
+const UserIcon = User
+const LockIcon = Lock
 
 const store = useUserStore()
 const router = useRouter()
@@ -181,6 +204,37 @@ onMounted(() => {
 .auth-links {
   margin-top: 12px;
   text-align: center;
+}
+
+/* 其他登录方式：分隔线 + 微信绿图标按钮 */
+.wechat-login {
+  margin-top: 4px;
+}
+
+.wechat-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  font-size: 12px;
+  color: var(--akioi-text-weak);
+}
+
+.wechat-divider::before,
+.wechat-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--akioi-border);
+}
+
+.wechat-btn {
+  width: 100%;
+}
+
+.wechat-icon {
+  margin-right: 8px;
+  color: #07c160;
 }
 
 .auth-wechat {
