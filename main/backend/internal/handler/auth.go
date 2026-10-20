@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,10 +11,32 @@ import (
 	"akioi/internal/httpx"
 	"akioi/internal/logger"
 	"akioi/internal/model"
+	rediskeys "akioi/internal/redis"
 	"akioi/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+// codeIPSendInterval 是同一 IP 两次发送验证码之间的最小间隔，
+// 只限制发送动作，不影响验证与提交。60 秒与前端倒计时一致。
+const codeIPSendInterval = 60 * time.Second
+
+// acquireIPCooldown 按来源 IP 占用发送冷却；返回的 release 用于在发送失败时回滚，
+// 避免一次失败（如短信服务异常）让用户 60 秒内无法重试。
+// ok 为 false 表示该 IP 仍在冷却中。
+func (h *Handler) acquireIPCooldown(c *gin.Context) (release func(), ok bool, err error) {
+	key := rediskeys.KeyCodeIPCooldownPrefix + c.ClientIP()
+	set, err := h.RDB.SetNX(c.Request.Context(), key, "1", codeIPSendInterval).Result()
+	if err != nil {
+		return nil, false, err
+	}
+	if !set {
+		return nil, false, nil
+	}
+	return func() {
+		_ = h.RDB.Del(context.Background(), key).Err()
+	}, true, nil
+}
 
 type registerRequest struct {
 	Username string `json:"username"`
@@ -238,7 +261,18 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 		httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
 		return
 	}
+	release, acquired, cooldownErr := h.acquireIPCooldown(c)
+	if cooldownErr != nil {
+		logger.Errorf("写入验证码 IP 限流失败 ip=%s err=%v", c.ClientIP(), cooldownErr)
+		httpx.ServerError(c, "验证码发送失败")
+		return
+	}
+	if !acquired {
+		httpx.TooMany(c, httpx.CodeTooManyRequest, "验证码发送过于频繁，请稍后再试")
+		return
+	}
 	if err := h.SMS.SendCode(c.Request.Context(), req.Phone, req.Purpose); err != nil {
+		release()
 		if errors.Is(err, service.ErrSMSTooFrequent) {
 			httpx.TooMany(c, httpx.CodeTooManyRequest, err.Error())
 			return
@@ -294,7 +328,18 @@ func (h *Handler) SendEmailCode(c *gin.Context) {
 		httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
 		return
 	}
+	release, acquired, cooldownErr := h.acquireIPCooldown(c)
+	if cooldownErr != nil {
+		logger.Errorf("写入验证码 IP 限流失败 ip=%s err=%v", c.ClientIP(), cooldownErr)
+		httpx.ServerError(c, "验证码发送失败")
+		return
+	}
+	if !acquired {
+		httpx.TooMany(c, httpx.CodeTooManyRequest, "验证码发送过于频繁，请稍后再试")
+		return
+	}
 	if err := h.Email.SendCode(c.Request.Context(), req.Email, req.Purpose); err != nil {
+		release()
 		if errors.Is(err, service.ErrEmailTooFrequent) {
 			httpx.TooMany(c, httpx.CodeTooManyRequest, err.Error())
 			return

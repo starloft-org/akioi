@@ -20,6 +20,8 @@ const (
 	KeySMSCodePrefix      = "akioi:sms:code:"
 	KeySMSCooldownPrefix  = "akioi:sms:cooldown:"
 	KeySMSAttemptsPrefix  = "akioi:sms:attempts:"
+	// KeyCodeIPCooldownPrefix 按来源 IP 限制验证码发送频率，键后接 IP
+	KeyCodeIPCooldownPrefix = "akioi:code:ip:"
 	// KeyJudgeRunningPrefix 记录在线评测任务，用于统计运行中数量。
 	KeyJudgeRunningPrefix = "akioi:judge:running:"
 )
