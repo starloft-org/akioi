@@ -6,7 +6,10 @@ WORKDIR /app
 ENV NPM_CONFIG_REGISTRY=https://mirrors.cloud.tencent.com/npm/
 
 COPY package*.json ./
-RUN npm install --prefer-offline --no-audit --no-fund
+# 把 npm 下载缓存挂到 BuildKit 缓存：改 package.json 后重建复用已下载的 tarball，
+# 不必再从零拉一遍依赖（首次构建仍有网络成本）
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --prefer-offline --no-audit --no-fund
 
 COPY . ./
 RUN npm run build
