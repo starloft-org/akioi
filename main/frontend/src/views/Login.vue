@@ -113,7 +113,10 @@ const handleLogin = async () => {
   try {
     captcha = await verifyCaptcha('account')
   } catch (e) {
-    ElMessage.warning(e.message || '已取消人机验证')
+    // 用户主动取消时提示；配置/网络错误已由请求层统一提示
+    if (e?.message === '已取消人机验证') {
+      ElMessage.warning(e.message)
+    }
     return
   }
   loading.value = true

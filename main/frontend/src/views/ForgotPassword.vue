@@ -133,8 +133,8 @@ const sendCode = async () => {
     }
     startCountdown()
   } catch (e) {
-    // 人机验证取消/失败给出提示，其余错误由请求层统一处理
-    if (e?.message?.includes('人机验证') || e?.message?.includes('取消')) {
+    // 仅用户主动取消时提示；配置/网络错误已由请求层统一提示
+    if (e?.message === '已取消人机验证') {
       ElMessage.warning(e.message)
     }
   } finally {

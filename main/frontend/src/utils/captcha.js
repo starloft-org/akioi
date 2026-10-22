@@ -48,16 +48,11 @@ function loadScript(url) {
 /**
  * verifyCaptcha 弹出人机验证，返回 { ticket, randstr }。
  * 后端未开启人机验证时返回空票据，调用方可照常提交。
- * 用户主动关闭验证时 reject（调用方直接中止本次操作即可）。
+ * 配置拉取失败（后端已开启但验证码平台不可用）、用户主动关闭验证时 reject，
+ * 调用方应提示并中止本次操作。
  */
 export async function verifyCaptcha(scene = 'account') {
-  let cfg
-  try {
-    cfg = await loadConfig(scene)
-  } catch (e) {
-    // 配置拉取失败时不阻断业务，交由服务端判定
-    return { ticket: '', randstr: '' }
-  }
+  const cfg = await loadConfig(scene)
   if (!cfg?.enabled || !cfg?.captcha_app_id) {
     return { ticket: '', randstr: '' }
   }

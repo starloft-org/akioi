@@ -35,7 +35,9 @@ const (
 
 var (
 	// ErrCaptchaInvalid 表示票据校验未通过（过期、重复使用、答案不匹配等）。
-	ErrCaptchaInvalid = errors.New("人机验证未通过，请重试")
+	ErrCaptchaInvalid = errors.New("人机验证未通过，请重新完成验证")
+	// ErrCaptchaMissing 表示请求未携带人机验证结果，多为前端未加载验证码组件。
+	ErrCaptchaMissing = errors.New("请先完成人机验证；若页面未出现验证框，请刷新页面后重试")
 	// ErrCaptchaUnavailable 表示验证码平台不可用或额度不足。
 	ErrCaptchaUnavailable = errors.New("人机验证服务暂不可用，请稍后再试")
 	// ErrCaptchaNotEnabled 表示后端未开启人机验证。
@@ -169,7 +171,7 @@ func (s *CaptchaService) Verify(ctx context.Context, scene, ticket, randstr, ip 
 	ticket = strings.TrimSpace(ticket)
 	randstr = strings.TrimSpace(randstr)
 	if ticket == "" || randstr == "" {
-		return ErrCaptchaInvalid
+		return ErrCaptchaMissing
 	}
 	if scene == "" {
 		scene = CaptchaSceneAccount
@@ -234,6 +236,8 @@ func (s *CaptchaService) Verify(ctx context.Context, scene, ticket, randstr, ip 
 }
 
 // sign 按平台规则写入鉴权头：API Key + HMAC-SHA256 签名。
+// 必须与短信服务一致携带 X-Sign-Version / X-Timestamp / X-Nonce，
+// 否则平台会以「unsupported sign version」直接拒绝。
 func (s *CaptchaService) sign(req *http.Request, method, path, rawQuery string, body []byte) error {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	nonce, err := randomHex(16)
@@ -243,5 +247,8 @@ func (s *CaptchaService) sign(req *http.Request, method, path, rawQuery string, 
 	sign := starLoftSign(method, path, rawQuery, timestamp, nonce, body, s.apiSecret())
 	req.Header.Set("X-Api-Key", s.apiKey())
 	req.Header.Set("X-Sign", sign)
+	req.Header.Set("X-Sign-Version", "hmac_sha256_v2")
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Nonce", nonce)
 	return nil
 }
