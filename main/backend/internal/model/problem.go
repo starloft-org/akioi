@@ -34,6 +34,8 @@ type Problem struct {
 	SubmitCount   int       `gorm:"not null;default:0" json:"submit_count"`
 	AcceptedCount int       `gorm:"not null;default:0" json:"accepted_count"`
 	CreatedBy     uint      `gorm:"index" json:"created_by"`
+	// TeamID 归属团队；0 表示公共题目，团队题目仅该团队成员可见。
+	TeamID        uint      `gorm:"index;not null;default:0" json:"team_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

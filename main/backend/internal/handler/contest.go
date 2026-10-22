@@ -34,6 +34,16 @@ func (h *Handler) ListContests(c *gin.Context) {
 	now := time.Now()
 
 	query := h.DB.Model(&model.Contest{})
+	// 团队比赛仅成员可见
+	if cu := httpx.CurrentUser(c); cu == nil {
+		query = query.Where("team_id = 0")
+	} else if !cu.IsAdmin() {
+		if ids := h.myTeamIDs(cu.ID); len(ids) > 0 {
+			query = query.Where("(team_id = 0 OR team_id IN ?)", ids)
+		} else {
+			query = query.Where("team_id = 0")
+		}
+	}
 	switch strings.TrimSpace(c.Query("status")) {
 	case model.ContestStatusPending:
 		query = query.Where("start_at > ?", now)
@@ -75,6 +85,19 @@ func (h *Handler) ListContests(c *gin.Context) {
 }
 
 // GetContest 返回比赛详情与题目列表。
+// guardTeamContest 团队比赛的相关数据（详情、榜单、提交）仅成员与管理员可访问。
+func (h *Handler) guardTeamContest(c *gin.Context, contest *model.Contest) bool {
+	if contest.TeamID == 0 {
+		return true
+	}
+	u := httpx.CurrentUser(c)
+	if u == nil || (!u.IsAdmin() && !h.isTeamMember(u.ID, contest.TeamID)) {
+		httpx.NotFound(c, "比赛不存在")
+		return false
+	}
+	return true
+}
+
 func (h *Handler) GetContest(c *gin.Context) {
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
@@ -83,6 +106,10 @@ func (h *Handler) GetContest(c *gin.Context) {
 	var contest model.Contest
 	if err := h.DB.First(&contest, id).Error; err != nil {
 		httpx.NotFound(c, "比赛不存在")
+		return
+	}
+	// 团队比赛仅成员与管理员可见
+	if !h.guardTeamContest(c, &contest) {
 		return
 	}
 	now := time.Now()
@@ -199,6 +226,19 @@ func (h *Handler) RegisterContest(c *gin.Context) {
 	}
 	var req registerContestRequest
 	_ = c.ShouldBindJSON(&req)
+	// 团队比赛仅团队成员可报名
+	if contest.TeamID > 0 {
+		var memberCount int64
+		if err := h.DB.Model(&model.TeamMember{}).
+			Where("team_id = ? AND user_id = ?", contest.TeamID, u.ID).Count(&memberCount).Error; err != nil {
+			httpx.ServerError(c, "报名失败")
+			return
+		}
+		if memberCount == 0 {
+			httpx.Forbidden(c, "仅团队成员可报名该比赛")
+			return
+		}
+	}
 	if contest.Password != "" && req.Password != contest.Password {
 		httpx.BadRequest(c, "比赛口令不正确")
 		return
@@ -227,6 +267,9 @@ func (h *Handler) ContestRank(c *gin.Context) {
 		httpx.NotFound(c, "比赛不存在")
 		return
 	}
+	if !h.guardTeamContest(c, &contest) {
+		return
+	}
 	u := httpx.CurrentUser(c)
 	now := time.Now()
 	revealAll := (u != nil && u.IsAdmin()) || !now.Before(contest.EndAt)
@@ -253,6 +296,9 @@ func (h *Handler) ContestRankCSV(c *gin.Context) {
 	var contest model.Contest
 	if err := h.DB.First(&contest, id).Error; err != nil {
 		httpx.NotFound(c, "比赛不存在")
+		return
+	}
+	if !h.guardTeamContest(c, &contest) {
 		return
 	}
 	u := httpx.CurrentUser(c)
@@ -303,6 +349,9 @@ func (h *Handler) ContestSubmissions(c *gin.Context) {
 	var contest model.Contest
 	if err := h.DB.First(&contest, id).Error; err != nil {
 		httpx.NotFound(c, "比赛不存在")
+		return
+	}
+	if !h.guardTeamContest(c, &contest) {
 		return
 	}
 	if u.IsAdmin() || !time.Now().Before(contest.EndAt) {

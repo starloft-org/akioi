@@ -55,6 +55,13 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
+          <el-form-item label="归属团队">
+            <el-select v-model="form.team_id" clearable placeholder="公共题目（不属于团队）" style="width: 100%">
+              <el-option v-for="item in teams" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
           <el-form-item label="时限（ms）">
             <el-input-number v-model="form.time_limit_ms" :min="100" :max="30000" :step="100" />
           </el-form-item>
@@ -147,7 +154,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { adminCreateProblem, adminGetProblem, adminUpdateProblem } from '@/api'
+import { adminCreateProblem, adminGetProblem, adminUpdateProblem, listTeams } from '@/api'
 import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
 
 const route = useRoute()
@@ -176,8 +183,16 @@ const form = reactive({
   visibility: 1,
   contest_only: false,
   compare_mode: 'default',
-  float_eps: 0.000001
+  float_eps: 0.000001,
+  team_id: null
 })
+
+// 团队下拉：题目可归属某个团队，归团队后仅成员可见
+const teams = ref([])
+const loadTeams = async () => {
+  const data = await listTeams({ page: 1, page_size: 100 }).catch(() => ({ items: [] }))
+  teams.value = data.items || []
+}
 
 const loadProblem = async () => {
   loading.value = true
@@ -205,6 +220,7 @@ const loadProblem = async () => {
     form.contest_only = !!p.contest_only
     form.compare_mode = p.compare_mode || 'default'
     form.float_eps = p.float_eps ?? 0.000001
+    form.team_id = p.team_id || null
   } catch (e) {
     // 错误提示已由请求层处理
   } finally {
@@ -249,7 +265,8 @@ const buildPayload = () => ({
   visibility: form.visibility,
   contest_only: form.contest_only,
   compare_mode: form.compare_mode,
-  float_eps: form.float_eps
+  float_eps: form.float_eps,
+  team_id: form.team_id || 0
 })
 
 const handleSubmit = async () => {
@@ -282,6 +299,7 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
+  loadTeams()
   if (isEdit.value) {
     loadProblem()
   }

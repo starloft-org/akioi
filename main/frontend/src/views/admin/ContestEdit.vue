@@ -45,6 +45,13 @@
             <el-switch v-model="form.register_required" />
           </el-form-item>
         </el-col>
+        <el-col :span="12">
+          <el-form-item label="归属团队">
+            <el-select v-model="form.team_id" clearable placeholder="公开比赛（不属于团队）" style="width: 100%">
+              <el-option v-for="item in teams" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
         <el-col :span="24">
           <el-form-item label="描述">
             <el-input v-model="form.description" type="textarea" :rows="4" />
@@ -122,7 +129,8 @@ import {
   adminGetContest,
   adminListProblems,
   adminSetContestProblems,
-  adminUpdateContest
+  adminUpdateContest,
+  listTeams
 } from '@/api'
 import { toLocalInput } from '@/utils/format'
 
@@ -130,6 +138,14 @@ const route = useRoute()
 const router = useRouter()
 
 const contestId = ref(route.params.id ? Number(route.params.id) : null)
+
+// 团队下拉：比赛可归属某个团队，归团队后仅成员可见
+const teams = ref([])
+const loadTeams = async () => {
+  const data = await listTeams({ page: 1, page_size: 100 }).catch(() => ({ items: [] }))
+  teams.value = data.items || []
+}
+loadTeams()
 const isEdit = computed(() => !!contestId.value)
 
 const loading = ref(false)
@@ -147,7 +163,8 @@ const form = reactive({
   end_at: '',
   freeze_minutes: 0,
   password: '',
-  register_required: false
+  register_required: false,
+  team_id: null
 })
 
 const loadContest = async (id) => {
@@ -162,6 +179,7 @@ const loadContest = async (id) => {
     form.freeze_minutes = contest.freeze_minutes ?? 0
     form.password = ''
     form.register_required = !!contest.register_required
+    form.team_id = contest.team_id || null
     selectedProblems.value = (data.problems || []).map((item) => ({
       problem_id: item.problem_id,
       display_id: item.display_id || '',
@@ -193,7 +211,8 @@ const buildPayload = () => ({
   end_at: form.end_at ? new Date(form.end_at).toISOString() : null,
   freeze_minutes: form.freeze_minutes,
   password: form.password,
-  register_required: form.register_required
+  register_required: form.register_required,
+  team_id: form.team_id || 0
 })
 
 const handleSave = async () => {

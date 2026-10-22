@@ -157,3 +157,22 @@ export const adminDeleteAnnouncement = (id) =>
   request.delete(`/api/admin/v1/announcements/${id}`)
 
 export const adminGetLogs = (params) => request.get('/api/admin/v1/logs', { params })
+
+// 团队
+export const listTeams = (params) => request.get('/api/v1/teams', { params })
+export const getTeam = (id) => request.get(`/api/v1/teams/${id}`)
+export const createTeam = (data) => request.post('/api/v1/teams', data)
+export const updateTeam = (id, data) => request.put(`/api/v1/teams/${id}`, data)
+export const listTeamMembers = (id) => request.get(`/api/v1/teams/${id}/members`)
+export const removeTeamMember = (id, uid) => request.delete(`/api/v1/teams/${id}/members/${uid}`)
+export const applyTeam = (id, data) => request.post(`/api/v1/teams/${id}/applications`, data)
+export const listTeamApplications = (id, params) =>
+  request.get(`/api/v1/teams/${id}/applications`, { params })
+export const reviewTeamApplication = (id, aid, data) =>
+  request.post(`/api/v1/teams/${id}/applications/${aid}/review`, data)
+export const listTeamProblems = (id) => request.get(`/api/v1/teams/${id}/problems`)
+export const listTeamContests = (id) => request.get(`/api/v1/teams/${id}/contests`)
+export const listTeamSets = (id) => request.get(`/api/v1/teams/${id}/sets`)
+export const createTeamSet = (id, data) => request.post(`/api/v1/teams/${id}/sets`, data)
+export const updateTeamSet = (id, sid, data) => request.put(`/api/v1/teams/${id}/sets/${sid}`, data)
+export const deleteTeamSet = (id, sid) => request.delete(`/api/v1/teams/${id}/sets/${sid}`)

@@ -66,6 +66,17 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 	if err := s.db.First(&problem, in.ProblemID).Error; err != nil {
 		return nil, errors.New("题目不存在")
 	}
+	// 团队题目：仅所属团队成员可提交
+	if problem.TeamID > 0 {
+		var teamCount int64
+		if err := s.db.Model(&model.TeamMember{}).
+			Where("team_id = ? AND user_id = ?", problem.TeamID, in.UserID).Count(&teamCount).Error; err != nil {
+			return nil, err
+		}
+		if teamCount == 0 {
+			return nil, ErrProblemNotVisible
+		}
+	}
 
 	now := time.Now()
 	if in.ContestID > 0 {

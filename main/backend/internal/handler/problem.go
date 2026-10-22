@@ -47,6 +47,18 @@ func (h *Handler) ListProblems(c *gin.Context) {
 	}
 
 	user := httpx.CurrentUser(c)
+	// 团队题目仅所在团队成员可见，管理员可见全部
+	switch {
+	case user != nil && user.IsAdmin():
+	case user != nil:
+		if ids := h.myTeamIDs(user.ID); len(ids) > 0 {
+			query = query.Where("(team_id = 0 OR team_id IN ?)", ids)
+		} else {
+			query = query.Where("team_id = 0")
+		}
+	default:
+		query = query.Where("team_id = 0")
+	}
 	statusFilter := strings.TrimSpace(c.Query("status"))
 	var solvedSet, triedSet map[uint]bool
 	if user != nil {
@@ -218,6 +230,14 @@ func (h *Handler) SiteInfo(c *gin.Context) {
 }
 
 func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
+	// 团队题目：仅所属团队成员与管理员可见
+	if p.TeamID > 0 {
+		u := httpx.CurrentUser(c)
+		if u == nil {
+			return false
+		}
+		return u.IsAdmin() || h.isTeamMember(u.ID, p.TeamID)
+	}
 	if p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly {
 		return true
 	}

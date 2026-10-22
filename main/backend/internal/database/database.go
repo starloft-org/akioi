@@ -63,6 +63,10 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Discussion{},
 		&model.DiscussionComment{},
 		&model.SystemSetting{},
+		&model.Team{},
+		&model.TeamMember{},
+		&model.TeamApplication{},
+		&model.TeamProblemSet{},
 	); err != nil {
 		return err
 	}

@@ -108,6 +108,25 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			submissions.GET("/:id", h.GetSubmission)
 		}
 
+		teams := api.Group("/teams")
+		{
+			teams.GET("", optional, h.ListTeams)
+			teams.GET("/:id", optional, h.GetTeam)
+			teams.POST("", required, h.CreateTeam)
+			teams.PUT("/:id", required, h.UpdateTeam)
+			teams.GET("/:id/members", required, h.ListTeamMembers)
+			teams.DELETE("/:id/members/:uid", required, h.RemoveTeamMember)
+			teams.POST("/:id/applications", required, h.ApplyTeam)
+			teams.GET("/:id/applications", required, h.ListTeamApplications)
+			teams.POST("/:id/applications/:aid/review", required, h.ReviewTeamApplication)
+			teams.GET("/:id/problems", required, h.ListTeamProblems)
+			teams.GET("/:id/contests", required, h.ListTeamContests)
+			teams.GET("/:id/sets", required, h.ListTeamSets)
+			teams.POST("/:id/sets", required, h.CreateTeamSet)
+			teams.PUT("/:id/sets/:sid", required, h.UpdateTeamSet)
+			teams.DELETE("/:id/sets/:sid", required, h.DeleteTeamSet)
+		}
+
 		contests := api.Group("/contests")
 		{
 			contests.GET("", optional, h.ListContests)

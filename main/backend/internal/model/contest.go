@@ -12,6 +12,8 @@ type Contest struct {
 	Password         string    `gorm:"size:64" json:"-"`
 	RegisterRequired bool      `gorm:"not null;default:false" json:"register_required"`
 	CreatedBy        uint      `gorm:"index" json:"created_by"`
+	// TeamID 归属团队；0 表示公开比赛，团队比赛仅该团队成员可见。
+	TeamID           uint      `gorm:"index;not null;default:0" json:"team_id"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

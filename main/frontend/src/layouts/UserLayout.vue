@@ -9,6 +9,7 @@
         <nav class="app-nav">
           <router-link to="/problems">题库</router-link>
           <router-link to="/contests">比赛</router-link>
+          <router-link to="/teams">团队</router-link>
           <router-link to="/ranking">排行榜</router-link>
           <router-link to="/discussions">讨论</router-link>
           <router-link to="/submissions">评测记录</router-link>

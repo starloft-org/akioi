@@ -120,6 +120,7 @@ func adminProblemDetail(p *model.Problem) gin.H {
 		"data_hash":       p.DataHash,
 		"created_at":      p.CreatedAt,
 		"updated_at":      p.UpdatedAt,
+		"team_id":         p.TeamID,
 	}
 }
 
@@ -141,6 +142,8 @@ type adminProblemRequest struct {
 	ContestOnly   *bool           `json:"contest_only"`
 	CompareMode   *string         `json:"compare_mode"`
 	FloatEps      *float64        `json:"float_eps"`
+	// TeamID 归属团队；0 或空表示公共题目
+	TeamID        *uint           `json:"team_id"`
 }
 
 // AdminCreateProblem 创建题目，题号为空时自动生成。
@@ -261,6 +264,18 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		p.SetTags(*req.Tags)
 	} else {
 		p.SetTags(nil)
+	}
+	if req.TeamID != nil && *req.TeamID > 0 {
+		var teamCount int64
+		if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
+			httpx.ServerError(c, "创建题目失败")
+			return
+		}
+		if teamCount == 0 {
+			httpx.BadRequest(c, "归属团队不存在")
+			return
+		}
+		p.TeamID = *req.TeamID
 	}
 
 	if err := h.DB.Create(&p).Error; err != nil {
@@ -383,6 +398,21 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	}
 	if req.FloatEps != nil {
 		updates["float_eps"] = *req.FloatEps
+	}
+	// 归属团队：传 0 表示移出团队，变为公共题目
+	if req.TeamID != nil {
+		if *req.TeamID > 0 {
+			var teamCount int64
+			if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
+				httpx.ServerError(c, "更新题目失败")
+				return
+			}
+			if teamCount == 0 {
+				httpx.BadRequest(c, "归属团队不存在")
+				return
+			}
+		}
+		updates["team_id"] = *req.TeamID
 	}
 
 	if len(updates) > 0 {

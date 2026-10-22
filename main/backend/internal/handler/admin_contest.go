@@ -134,6 +134,7 @@ func (h *Handler) AdminGetContest(c *gin.Context) {
 			"end_at":            contest.EndAt,
 			"freeze_minutes":    contest.FreezeMinutes,
 			"register_required": contest.RegisterRequired,
+			"team_id":           contest.TeamID,
 			"needs_password":    contest.Password != "",
 			"status":            contest.Status(time.Now()),
 		},
@@ -181,6 +182,8 @@ type adminContestRequest struct {
 	FreezeMinutes    *int    `json:"freeze_minutes"`
 	Password         *string `json:"password"`
 	RegisterRequired *bool   `json:"register_required"`
+	// TeamID 归属团队；0 或空表示公开比赛
+	TeamID           *uint   `json:"team_id"`
 }
 
 // parseTime 解析 RFC3339 或 "2006-01-02 15:04:05" 两种时间格式。
@@ -255,6 +258,18 @@ func (h *Handler) AdminCreateContest(c *gin.Context) {
 	if req.RegisterRequired != nil {
 		contest.RegisterRequired = *req.RegisterRequired
 	}
+	if req.TeamID != nil && *req.TeamID > 0 {
+		var teamCount int64
+		if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
+			httpx.ServerError(c, "创建比赛失败")
+			return
+		}
+		if teamCount == 0 {
+			httpx.BadRequest(c, "归属团队不存在")
+			return
+		}
+		contest.TeamID = *req.TeamID
+	}
 
 	if err := h.DB.Create(&contest).Error; err != nil {
 		httpx.ServerError(c, "创建比赛失败")
@@ -327,6 +342,21 @@ func (h *Handler) AdminUpdateContest(c *gin.Context) {
 	}
 	if req.RegisterRequired != nil {
 		updates["register_required"] = *req.RegisterRequired
+	}
+	// 归属团队：传 0 表示移出团队，变为公开比赛
+	if req.TeamID != nil {
+		if *req.TeamID > 0 {
+			var teamCount int64
+			if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
+				httpx.ServerError(c, "更新比赛失败")
+				return
+			}
+			if teamCount == 0 {
+				httpx.BadRequest(c, "归属团队不存在")
+				return
+			}
+		}
+		updates["team_id"] = *req.TeamID
 	}
 
 	if len(updates) > 0 {
