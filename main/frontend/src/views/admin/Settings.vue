@@ -50,6 +50,20 @@
     </div>
 
     <div class="panel">
+      <h3 class="panel__title">人机验证码</h3>
+      <el-form :model="form" label-width="150px">
+        <el-form-item label="启用行为验证码">
+          <el-switch v-model="form.captcha_enabled" />
+          <secret-tag label="验证码密钥" :configured="secretStatus.captcha_credentials_configured" />
+        </el-form-item>
+        <p class="muted settings-note">
+          启用后在登录、发送短信/邮件验证码时弹出滑动拼图验证。API 密钥在 .env 配置（CAPTCHA_API_KEY /
+          CAPTCHA_API_SECRET），留空时复用短信密钥；验证码应用 ID 与 JS 地址由平台按场景自动下发。
+        </p>
+      </el-form>
+    </div>
+
+    <div class="panel">
       <h3 class="panel__title">邮件注册与密码重置</h3>
       <el-form :model="form" label-width="150px">
         <el-row :gutter="24">
@@ -213,6 +227,7 @@ const SecretTag = defineComponent({
 
 const defaults = {
   app_name: 'AKIOI', theme_color: '#1CD5C7', jwt_ttl_hours: 168, register_enabled: true,
+  captcha_enabled: false,
   wechat_enabled: false, wechat_redirect_uri: '', sms_enabled: false,
   sms_api_base_url: 'https://api.starloft.cn/v2', sms_register_template_id: '',
   sms_reset_template_id: '', sms_code_ttl_minutes: 5, sms_send_interval_sec: 60,

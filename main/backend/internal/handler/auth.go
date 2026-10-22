@@ -179,15 +179,21 @@ func (h *Handler) Register(c *gin.Context) {
 }
 
 type loginRequest struct {
-	Account  string `json:"account"`
-	Username string `json:"username"` // 兼容旧客户端
-	Password string `json:"password"`
+	Account         string `json:"account"`
+	Username        string `json:"username"` // 兼容旧客户端
+	Password        string `json:"password"`
+	CaptchaTicket   string `json:"captcha_ticket"`
+	CaptchaRandstr  string `json:"captcha_randstr"`
 }
 
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+	// 登录前做人机验证，拦截脚本撞库
+	if !h.verifyCaptcha(c, service.CaptchaSceneAccount, req.CaptchaTicket, req.CaptchaRandstr) {
 		return
 	}
 	account := strings.TrimSpace(req.Account)
@@ -222,8 +228,10 @@ func (h *Handler) Login(c *gin.Context) {
 }
 
 type sendSMSCodeRequest struct {
-	Phone   string `json:"phone"`
-	Purpose string `json:"purpose"`
+	Phone          string `json:"phone"`
+	Purpose        string `json:"purpose"`
+	CaptchaTicket  string `json:"captcha_ticket"`
+	CaptchaRandstr string `json:"captcha_randstr"`
 }
 
 // SendSMSCode 为注册或密码重置发送验证码，不提供短信登录用途。
@@ -261,6 +269,10 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 		httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
 		return
 	}
+	// 发送前做人机验证，拦截脚本批量刷验证码；放在 IP 冷却之前，失败不占用冷却
+	if !h.verifyCaptcha(c, service.CaptchaSceneSMS, req.CaptchaTicket, req.CaptchaRandstr) {
+		return
+	}
 	release, acquired, cooldownErr := h.acquireIPCooldown(c)
 	if cooldownErr != nil {
 		logger.Errorf("写入验证码 IP 限流失败 ip=%s err=%v", c.ClientIP(), cooldownErr)
@@ -289,8 +301,10 @@ func (h *Handler) SendSMSCode(c *gin.Context) {
 }
 
 type sendEmailCodeRequest struct {
-	Email   string `json:"email"`
-	Purpose string `json:"purpose"`
+	Email          string `json:"email"`
+	Purpose        string `json:"purpose"`
+	CaptchaTicket  string `json:"captcha_ticket"`
+	CaptchaRandstr string `json:"captcha_randstr"`
 }
 
 // SendEmailCode 为注册或密码重置发送邮件验证码。
@@ -326,6 +340,10 @@ func (h *Handler) SendEmailCode(c *gin.Context) {
 	if req.Purpose == service.EmailPurposeResetPassword && count == 0 {
 		// 保持与成功请求一致的响应，避免枚举已注册邮箱。
 		httpx.OK(c, gin.H{"expires_in": settings.SMSCodeTTLMinutes * 60})
+		return
+	}
+	// 发送前做人机验证，拦截脚本批量刷验证码；放在 IP 冷却之前，失败不占用冷却
+	if !h.verifyCaptcha(c, service.CaptchaSceneSMS, req.CaptchaTicket, req.CaptchaRandstr) {
 		return
 	}
 	release, acquired, cooldownErr := h.acquireIPCooldown(c)

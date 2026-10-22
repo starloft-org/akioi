@@ -57,6 +57,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import { getWechatUrl, wechatCallback } from '@/api'
+import { verifyCaptcha } from '@/utils/captcha'
 import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
 
@@ -107,9 +108,22 @@ const handleLogin = async () => {
   if (!valid) {
     return
   }
+  // 登录前做人机验证，拦截脚本撞库；后端未开启时票据为空、照常提交
+  let captcha
+  try {
+    captcha = await verifyCaptcha('account')
+  } catch (e) {
+    ElMessage.warning(e.message || '已取消人机验证')
+    return
+  }
   loading.value = true
   try {
-    await store.login({ account: form.account, password: form.password })
+    await store.login({
+      account: form.account,
+      password: form.password,
+      captcha_ticket: captcha.ticket,
+      captcha_randstr: captcha.randstr
+    })
     ElMessage.success('登录成功')
     router.replace(route.query.redirect || '/')
   } catch (e) {

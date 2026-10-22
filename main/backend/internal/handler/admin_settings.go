@@ -15,6 +15,7 @@ func (h *Handler) AdminGetSettings(c *gin.Context) {
 		"secret_status": gin.H{
 			"sms_credentials_configured":    h.Cfg.SMS.APIKey != "" && h.Cfg.SMS.APISecret != "",
 			"smtp_credentials_configured":   h.Cfg.SMTP.Host != "" && h.Cfg.SMTP.From != "" && h.Cfg.SMTP.Password != "",
+			"captcha_credentials_configured": h.Cfg.Captcha.APIKey != "" || h.Cfg.SMS.APIKey != "",
 			"wechat_credentials_configured": h.Cfg.WeChat.AppID != "" && h.Cfg.WeChat.AppSecret != "",
 			"judge_sync_secret_configured":  h.Cfg.Judge.SyncSecret != "",
 		},

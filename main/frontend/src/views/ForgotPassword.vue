@@ -67,6 +67,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { resetPasswordBySms, sendEmailCode, sendSmsCode } from '@/api'
+import { verifyCaptcha } from '@/utils/captcha'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
@@ -109,26 +110,33 @@ const startCountdown = () => {
 }
 
 const sendCode = async () => {
+  if (channel.value === 'sms') {
+    if (!/^1[3-9]\d{9}$/.test(form.phone)) {
+      ElMessage.warning('请先输入有效手机号')
+      return
+    }
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    ElMessage.warning('请先输入有效邮箱')
+    return
+  }
   sending.value = true
   try {
+    // 发送前做人机验证，拦截脚本批量刷验证码
+    const captcha = await verifyCaptcha('sms')
+    const payload = { purpose: 'reset_password', captcha_ticket: captcha.ticket, captcha_randstr: captcha.randstr }
     if (channel.value === 'sms') {
-      if (!/^1[3-9]\d{9}$/.test(form.phone)) {
-        ElMessage.warning('请先输入有效手机号')
-        return
-      }
-      await sendSmsCode({ phone: form.phone, purpose: 'reset_password' })
+      await sendSmsCode({ ...payload, phone: form.phone })
       ElMessage.success('如手机号已注册，验证码将发送到该号码')
     } else {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        ElMessage.warning('请先输入有效邮箱')
-        return
-      }
-      await sendEmailCode({ email: form.email, purpose: 'reset_password' })
+      await sendEmailCode({ ...payload, email: form.email })
       ElMessage.success('如邮箱已注册，验证码将发送到该邮箱')
     }
     startCountdown()
   } catch (e) {
-    // 错误提示由请求层统一处理
+    // 人机验证取消/失败给出提示，其余错误由请求层统一处理
+    if (e?.message?.includes('人机验证') || e?.message?.includes('取消')) {
+      ElMessage.warning(e.message)
+    }
   } finally {
     sending.value = false
   }

@@ -71,6 +71,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { sendEmailCode, sendSmsCode } from '@/api'
+import { verifyCaptcha } from '@/utils/captcha'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
@@ -135,27 +136,34 @@ const startCountdown = (seconds = 60) => {
 }
 
 const handleSendCode = async () => {
+  if (channel.value === 'sms') {
+    if (!/^1[3-9]\d{9}$/.test(form.phone)) {
+      ElMessage.warning('请先输入有效手机号')
+      return
+    }
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    ElMessage.warning('请先输入有效邮箱')
+    return
+  }
   sending.value = true
   try {
+    // 发送前做人机验证，拦截脚本批量刷验证码
+    const captcha = await verifyCaptcha('sms')
+    const payload = { purpose: 'register', captcha_ticket: captcha.ticket, captcha_randstr: captcha.randstr }
+    let data
     if (channel.value === 'sms') {
-      if (!/^1[3-9]\d{9}$/.test(form.phone)) {
-        ElMessage.warning('请先输入有效手机号')
-        return
-      }
-      const data = await sendSmsCode({ phone: form.phone, purpose: 'register' })
-      startCountdown(Math.min(Number(data.expires_in || 60), 60))
+      data = await sendSmsCode({ ...payload, phone: form.phone })
       ElMessage.success('验证码已发送')
     } else {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        ElMessage.warning('请先输入有效邮箱')
-        return
-      }
-      const data = await sendEmailCode({ email: form.email, purpose: 'register' })
-      startCountdown(Math.min(Number(data.expires_in || 60), 60))
+      data = await sendEmailCode({ ...payload, email: form.email })
       ElMessage.success('验证码已发送，请查收邮件')
     }
+    startCountdown(Math.min(Number(data.expires_in || 60), 60))
   } catch (e) {
-    // 错误提示由请求层统一处理
+    // 人机验证取消/失败给出提示，其余错误由请求层统一处理
+    if (e?.message?.includes('人机验证') || e?.message?.includes('取消')) {
+      ElMessage.warning(e.message)
+    }
   } finally {
     sending.value = false
   }

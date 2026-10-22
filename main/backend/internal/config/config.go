@@ -36,6 +36,12 @@ type SMTPConfig struct {
 	From     string
 }
 
+// CaptchaConfig 是行为验证码的 API 凭据；留空时回退到短信密钥（同一平台账号）。
+type CaptchaConfig struct {
+	APIKey    string
+	APISecret string
+}
+
 // JudgeConfig 为主站侧评测相关配置：投递队列、测试数据存储与评测节点同步。
 type JudgeConfig struct {
 	QueueKey    string
@@ -60,9 +66,10 @@ type Config struct {
 
 	JWTSecret string
 
-	WeChat WeChatConfig
-	SMS    SMSConfig
-	SMTP   SMTPConfig
+	WeChat  WeChatConfig
+	SMS     SMSConfig
+	SMTP    SMTPConfig
+	Captcha CaptchaConfig
 
 	Judge JudgeConfig
 
@@ -109,6 +116,10 @@ func Load() (*Config, error) {
 			Username: getEnv("SMTP_USERNAME", ""),
 			Password: getEnv("SMTP_PASSWORD", ""),
 			From:     getEnv("SMTP_FROM", ""),
+		},
+		Captcha: CaptchaConfig{
+			APIKey:    getEnv("CAPTCHA_API_KEY", ""),
+			APISecret: getEnv("CAPTCHA_API_SECRET", ""),
 		},
 
 		Judge: JudgeConfig{

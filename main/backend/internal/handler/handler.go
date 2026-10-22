@@ -17,6 +17,7 @@ type Handler struct {
 	WeChat   *service.WeChatService
 	SMS      *service.SMSService
 	Email    *service.EmailService
+	Captcha  *service.CaptchaService
 	Queue    *queue.Queue
 	Rank     *service.RankService
 	Settings *service.SettingService
@@ -33,6 +34,7 @@ func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client, settings *service.S
 		WeChat:   service.NewWeChat(db, rdb, cfg, settings),
 		SMS:      service.NewSMS(rdb, cfg, settings),
 		Email:    service.NewEmail(rdb, cfg, settings),
+		Captcha:  service.NewCaptcha(cfg, settings),
 		Queue:    queue.New(rdb, cfg.Judge.QueueKey),
 		Rank:     service.NewRank(db),
 		Settings: settings,
