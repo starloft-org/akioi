@@ -13,12 +13,12 @@
 
     <el-form :model="form" label-width="110px">
       <el-row :gutter="16">
-        <el-col :span="12">
+        <el-col v-if="isEdit" :span="12">
           <el-form-item label="题号">
-            <el-input v-model="form.display_id" :placeholder="isEdit ? '' : '留空自动生成，如 A0000'" />
+            <el-input v-model="form.display_id" disabled />
           </el-form-item>
         </el-col>
-        <el-col :span="12">
+        <el-col :span="isEdit ? 12 : 24">
           <el-form-item label="标题">
             <el-input v-model="form.title" placeholder="题目名称" />
           </el-form-item>
@@ -227,8 +227,9 @@ const handleDifficultyChange = (value) => {
   }
 }
 
+// 题号由系统自动分配；编辑时回传原题号，新建时不传
 const buildPayload = () => ({
-  display_id: form.display_id.trim(),
+  ...(isEdit.value ? { display_id: form.display_id.trim() } : {}),
   title: form.title.trim(),
   description: form.description,
   input_format: form.input_format,

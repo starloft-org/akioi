@@ -215,31 +215,11 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		points = *req.Points
 	}
 
-	displayID := ""
-	if req.DisplayID != nil {
-		displayID = strings.TrimSpace(*req.DisplayID)
-	}
-	if displayID == "" {
-		next, err := h.nextProblemDisplayID()
-		if err != nil {
-			httpx.ServerError(c, "生成题号失败")
-			return
-		}
-		displayID = next
-	} else {
-		if !validProblemDisplayID(displayID) {
-			httpx.BadRequest(c, "题号格式应为 A 加至少 4 位数字，例如 A0000")
-			return
-		}
-		var exists int64
-		if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
-			httpx.ServerError(c, "创建题目失败")
-			return
-		}
-		if exists > 0 {
-			httpx.Conflict(c, "题号已存在")
-			return
-		}
+	// 题号由系统按 A0000 起自动递增分配，不再接受手工指定
+	displayID, err := h.nextProblemDisplayID()
+	if err != nil {
+		httpx.ServerError(c, "生成题号失败")
+		return
 	}
 
 	p := model.Problem{
@@ -512,15 +492,10 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		return
 	}
 
-	displayID := strings.TrimSpace(pkg.Config.DisplayID)
-	if displayID == "" {
-		displayID, err = h.nextProblemDisplayID()
-		if err != nil {
-			httpx.ServerError(c, "生成题号失败")
-			return
-		}
-	} else if !validProblemDisplayID(displayID) {
-		httpx.BadRequest(c, "config.json 中的题号格式应为 A 加至少 4 位数字，例如 A0000")
+	// 题号统一自动分配，忽略导入包中的 display_id
+	displayID, err := h.nextProblemDisplayID()
+	if err != nil {
+		httpx.ServerError(c, "生成题号失败")
 		return
 	}
 	var exists int64
