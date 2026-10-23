@@ -27,6 +27,8 @@ type RuntimeSettings struct {
 	ThemeColor           string   `json:"theme_color"`
 	JWTTTLHours          int      `json:"jwt_ttl_hours"`
 	RegisterEnabled      bool     `json:"register_enabled"`
+	// CommentsEnabled 控制讨论区评论是否可发表；关闭后查看不受影响
+	CommentsEnabled      bool     `json:"comments_enabled"`
 	WeChatEnabled        bool     `json:"wechat_enabled"`
 	WeChatRedirectURI    string   `json:"wechat_redirect_uri"`
 	SMSEnabled           bool     `json:"sms_enabled"`
@@ -54,6 +56,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 		ThemeColor:           "#1CD5C7",
 		JWTTTLHours:           168,
 		RegisterEnabled:      true,
+		CommentsEnabled:      true,
 		WeChatEnabled:        false,
 		SMSEnabled:           false,
 		EmailEnabled:         false,

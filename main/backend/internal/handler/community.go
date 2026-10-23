@@ -311,6 +311,10 @@ func (h *Handler) CreateComment(c *gin.Context) {
 	if u == nil || !ok {
 		return
 	}
+	if !h.Settings.Current().CommentsEnabled {
+		httpx.Forbidden(c, "评论区已关闭，暂时无法发表评论")
+		return
+	}
 	var discussion model.Discussion
 	if err := h.DB.Where("id = ? AND visible = ?", discussionID, true).First(&discussion).Error; err != nil {
 		httpx.NotFound(c, "讨论不存在")
@@ -341,6 +345,10 @@ func (h *Handler) UpdateComment(c *gin.Context) {
 	u := httpx.MustUser(c)
 	id, ok := httpx.PathID(c, "id")
 	if u == nil || !ok {
+		return
+	}
+	if !h.Settings.Current().CommentsEnabled {
+		httpx.Forbidden(c, "评论区已关闭，暂时无法编辑评论")
 		return
 	}
 	var row model.DiscussionComment

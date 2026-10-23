@@ -214,6 +214,7 @@ func (h *Handler) SiteInfo(c *gin.Context) {
 		"theme_color":      settings.ThemeColor,
 		// 注册入口由后台开关与渠道状态共同决定：两个渠道都未开放时不支持注册。
 		"register_enabled": settings.RegisterEnabled,
+		"comments_enabled": settings.CommentsEnabled,
 		"register_channels": gin.H{
 			"sms":   h.SMS.Enabled(),
 			"email": h.Email.Enabled(),

@@ -35,6 +35,12 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
+            <el-form-item label="评论区">
+              <el-switch v-model="form.comments_enabled" />
+              <span class="muted" style="margin-left: 8px">关闭后讨论区暂不可发表与编辑评论</span>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="12">
             <el-form-item label="微信扫码登录">
               <el-switch v-model="form.wechat_enabled" />
               <secret-tag label="微信密钥" :configured="secretStatus.wechat_credentials_configured" />
@@ -227,6 +233,7 @@ const SecretTag = defineComponent({
 
 const defaults = {
   app_name: 'AKIOI', theme_color: '#1CD5C7', jwt_ttl_hours: 168, register_enabled: true,
+  comments_enabled: true,
   captcha_enabled: false,
   wechat_enabled: false, wechat_redirect_uri: '', sms_enabled: false,
   sms_api_base_url: 'https://api.starloft.cn/v2', sms_register_template_id: '',

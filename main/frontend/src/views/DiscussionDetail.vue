@@ -30,7 +30,8 @@
         </div>
       </div>
       <div class="comment-compose">
-        <template v-if="store.isLogin"><el-input v-model="newComment" type="textarea" :rows="4" maxlength="5000" show-word-limit placeholder="发表友善的评论" /><el-button type="primary" :loading="commenting" style="margin-top: 8px" @click="submitComment">发表评论</el-button></template>
+        <template v-if="!commentsOpen"><span class="muted">评论区已关闭，暂时无法发表评论</span></template>
+        <template v-else-if="store.isLogin"><el-input v-model="newComment" type="textarea" :rows="4" maxlength="5000" show-word-limit placeholder="发表友善的评论" /><el-button type="primary" :loading="commenting" style="margin-top: 8px" @click="submitComment">发表评论</el-button></template>
         <el-button v-else type="primary" @click="router.push({ path: '/login', query: { redirect: route.fullPath } })">登录后评论</el-button>
       </div>
     </div>
@@ -38,13 +39,15 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createComment, deleteComment, deleteDiscussion, getDiscussion, updateComment, updateDiscussion } from '@/api'
 import { useUserStore } from '@/store/user'
 import { formatTime } from '@/utils/format'
 const route = useRoute(), router = useRouter(), store = useUserStore()
+// 站点信息未加载或后端未下发时按开启处理，避免误显「已关闭」
+const commentsOpen = computed(() => store.site?.comments_enabled !== false)
 const loading = ref(false), discussion = ref(null), comments = ref([]), editing = ref(false), saving = ref(false)
 const newComment = ref(''), commenting = ref(false), editingComment = ref(0), commentEditContent = ref('')
 const editForm = reactive({ title: '', content: '' })
