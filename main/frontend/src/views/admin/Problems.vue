@@ -71,28 +71,40 @@
       />
     </div>
 
-    <el-dialog v-model="importVisible" title="导入题目" width="600px">
+    <el-dialog v-model="importVisible" title="导入题目" width="640px">
       <el-upload
         v-model:file-list="importFiles"
         drag
+        multiple
         :auto-upload="false"
-        :limit="1"
         accept=".zip"
       >
-        <div class="el-upload__text">把题目包 zip 拖到这里，或<em>点击选择</em></div>
+        <div class="el-upload__text">把题目包 zip 拖到这里（支持多选），或<em>点击选择</em></div>
       </el-upload>
 
+      <div v-if="importResults.length" class="import-results">
+        <p class="import-results__title">
+          导入结果：成功 {{ resultsSummary.success }} 个，失败 {{ resultsSummary.failed }} 个
+        </p>
+        <div v-for="item in importResults" :key="item.filename" class="import-result-item">
+          <span :class="item.ok ? 'result-ok' : 'result-fail'">{{ item.ok ? '✓' : '✗' }}</span>
+          <span class="import-result__file">{{ item.filename }}</span>
+          <span v-if="item.ok" class="muted">{{ item.display_id }} {{ item.title }}</span>
+          <span v-else class="import-result__error">{{ item.error }}</span>
+        </div>
+      </div>
+
       <div class="import-hint">
-        <p class="muted">包内结构：</p>
+        <p class="muted">每个 zip 一个题目，包内结构：</p>
         <pre class="pre-block">problem.md        题面，可直接用洛谷「复制 Markdown」的内容
-config.json       可选：title / display_id / difficulty / time_limit_ms
-                  / memory_limit_mb / points / tags / source / visibility
+config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
+                  / points / tags / source / visibility
 1.in  1.out       测试数据，可以有多组；都不带时只导入题面</pre>
         <p class="muted">没有 config.json 时，标题取题面的一级标题，题号自动生成。</p>
       </div>
 
       <template #footer>
-        <el-button @click="importVisible = false">取消</el-button>
+        <el-button @click="closeImportDialog">关闭</el-button>
         <el-button type="primary" :loading="importing" :disabled="!importFiles.length" @click="handleImport">
           开始导入
         </el-button>
@@ -119,6 +131,11 @@ const visibilityFilter = ref('')
 const importVisible = ref(false)
 const importing = ref(false)
 const importFiles = ref([])
+const importResults = ref([])
+const resultsSummary = computed(() => {
+  const success = importResults.value.filter((item) => item.ok).length
+  return { success, failed: importResults.value.length - success }
+})
 
 const visibleItems = computed(() => {
   if (!visibilityFilter.value) {
@@ -168,30 +185,26 @@ const removeProblem = async (row) => {
 }
 
 const handleImport = async () => {
-  const raw = importFiles.value[0]?.raw
-  if (!raw) {
+  const raws = importFiles.value.map((item) => item.raw).filter(Boolean)
+  if (!raws.length) {
     return
   }
   importing.value = true
   try {
-    const data = await adminImportProblem(raw)
-    const failed = data?.sync_failed || []
-    if (failed.length) {
-      ElMessage.warning(`题目已导入，但以下评测节点同步失败：${failed.join('、')}`)
-    } else {
-      ElMessage.success(`已导入「${data?.title || '题目'}」，${data?.testcase_count || 0} 个测试点`)
-    }
-    importVisible.value = false
-    importFiles.value = []
+    const data = await adminImportProblem(raws)
+    importResults.value = data?.items || []
     load()
-    if (data?.problem?.id) {
-      router.push(`/admin/problems/${data.problem.id}/testdata`)
-    }
   } catch (e) {
     // 错误提示由请求层统一处理
   } finally {
     importing.value = false
   }
+}
+
+const closeImportDialog = () => {
+  importVisible.value = false
+  importFiles.value = []
+  importResults.value = []
 }
 
 onMounted(load)
@@ -211,5 +224,44 @@ onMounted(load)
   margin: 0 0 8px;
   font-size: 12px;
   line-height: 1.7;
+}
+
+.import-results {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--akioi-border);
+  border-radius: 6px;
+  background: #fafbfc;
+}
+
+.import-results__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.import-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.import-result__file {
+  min-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-ok {
+  color: #00b42a;
+  font-weight: 600;
+}
+
+.result-fail,
+.import-result__error {
+  color: #f53f3f;
 }
 </style>

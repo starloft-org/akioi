@@ -92,9 +92,12 @@ export const adminImportUsers = (file) => {
 export const adminListProblems = (params) => request.get('/api/admin/v1/problems', { params })
 export const adminGetProblem = (id) => request.get(`/api/admin/v1/problems/${id}`)
 export const adminCreateProblem = (data) => request.post('/api/admin/v1/problems', data)
-export const adminImportProblem = (file) => {
+export const adminImportProblem = (files) => {
   const form = new FormData()
-  form.append('file', file)
+  // files 为数组，支持一次导入多个题目包 zip
+  for (const file of files) {
+    form.append('files', file)
+  }
   return request.post('/api/admin/v1/problems/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000

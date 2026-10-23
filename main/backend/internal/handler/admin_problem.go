@@ -491,51 +491,103 @@ type testcaseItem struct {
 }
 
 // AdminImportProblem 从 zip 题目包导入题目：题面取 problem.md，元信息取 config.json，数据取 *.in/*.out。
+// importItem 是单个题目包的导入结果。
+type importItem struct {
+	Filename      string   `json:"filename"`
+	OK            bool     `json:"ok"`
+	ProblemID     uint     `json:"problem_id,omitempty"`
+	DisplayID     string   `json:"display_id,omitempty"`
+	Title         string   `json:"title,omitempty"`
+	TestcaseCount int      `json:"testcase_count,omitempty"`
+	SyncFailed    []string `json:"sync_failed,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// AdminImportProblem 导入题目包，支持一次上传多个 zip；逐包导入，单包失败不影响其余包。
+// 表单字段 files 为多包（重复字段名），也兼容旧客户端的单文件字段 file。
 func (h *Handler) AdminImportProblem(c *gin.Context) {
-	file, err := c.FormFile("file")
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	form, err := c.MultipartForm()
 	if err != nil {
 		httpx.BadRequest(c, "请上传题目包 zip")
 		return
 	}
-	if !strings.EqualFold(filepath.Ext(file.Filename), ".zip") {
-		httpx.BadRequest(c, "题目包必须是 zip 文件")
-		return
+	fileHeaders := form.File["files"]
+	if len(fileHeaders) == 0 {
+		fileHeaders = form.File["file"]
 	}
-	content, err := readUploadedFile(file, int64(h.Settings.Current().MaxTestdataMB)*1024*1024)
-	if err != nil {
-		httpx.BadRequest(c, err.Error())
-		return
-	}
-	files, err := service.ExtractZip(content)
-	if err != nil {
-		httpx.BadRequest(c, err.Error())
-		return
-	}
-	pkg, err := service.ParseProblemPackage(files)
-	if err != nil {
-		httpx.BadRequest(c, err.Error())
+	if len(fileHeaders) == 0 {
+		httpx.BadRequest(c, "请上传题目包 zip")
 		return
 	}
 
-	u := httpx.MustUser(c)
-	if u == nil {
-		return
+	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
+	items := make([]importItem, 0, len(fileHeaders))
+	successCount := 0
+	for _, fh := range fileHeaders {
+		item := h.importOneProblem(c, fh, u, maxBytes)
+		if item.OK {
+			successCount++
+		}
+		items = append(items, item)
+	}
+
+	resp := gin.H{
+		"items":         items,
+		"total":         len(fileHeaders),
+		"success_count": successCount,
+		"failed_count":  len(fileHeaders) - successCount,
+	}
+	// 单包时保留旧响应结构，兼容已有前端流程
+	if len(fileHeaders) == 1 && items[0].OK {
+		resp["problem"] = gin.H{"id": items[0].ProblemID, "display_id": items[0].DisplayID}
+		resp["title"] = items[0].Title
+		resp["testcase_count"] = items[0].TestcaseCount
+		resp["sync_failed"] = items[0].SyncFailed
+	}
+	httpx.OK(c, resp)
+}
+
+// importOneProblem 导入单个题目包；测试数据失败时回滚已创建的题目。
+func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *model.User, maxBytes int64) importItem {
+	item := importItem{Filename: fh.Filename}
+	if !strings.EqualFold(filepath.Ext(fh.Filename), ".zip") {
+		item.Error = "题目包必须是 zip 文件"
+		return item
+	}
+	content, err := readUploadedFile(fh, maxBytes)
+	if err != nil {
+		item.Error = err.Error()
+		return item
+	}
+	files, err := service.ExtractZip(content)
+	if err != nil {
+		item.Error = err.Error()
+		return item
+	}
+	pkg, err := service.ParseProblemPackage(files)
+	if err != nil {
+		item.Error = err.Error()
+		return item
 	}
 
 	// 题号统一自动分配，忽略导入包中的 display_id
 	displayID, err := h.nextProblemDisplayID()
 	if err != nil {
-		httpx.ServerError(c, "生成题号失败")
-		return
+		item.Error = "生成题号失败"
+		return item
 	}
 	var exists int64
 	if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
-		httpx.ServerError(c, "导入题目失败")
-		return
+		item.Error = "导入题目失败"
+		return item
 	}
 	if exists > 0 {
-		httpx.Conflict(c, "题号 "+displayID+" 已存在")
-		return
+		item.Error = "题号 " + displayID + " 已存在"
+		return item
 	}
 
 	timeLimit := pkg.Config.TimeLimitMS
@@ -577,8 +629,8 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 	p.SetTags(pkg.Config.Tags)
 
 	if err := h.DB.Create(&p).Error; err != nil {
-		httpx.ServerError(c, "导入题目失败")
-		return
+		item.Error = "导入题目失败"
+		return item
 	}
 
 	// 包里带测试数据才写入；只有题面时允许先建题，之后再单独上传数据。
@@ -592,18 +644,19 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 	if hasTestdata {
 		if err := h.Testdata.Replace(&p, files, nil); err != nil {
 			h.DB.Delete(&model.Problem{}, p.ID)
-			httpx.BadRequest(c, "导入测试数据失败: "+err.Error())
-			return
+			item.Error = "导入测试数据失败: " + err.Error()
+			return item
 		}
 	}
 
 	logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, p.DisplayID, p.ID, c.ClientIP())
-	httpx.OK(c, gin.H{
-		"problem":        gin.H{"id": p.ID, "display_id": p.DisplayID},
-		"title":          p.Title,
-		"testcase_count": p.TestcaseCount,
-		"sync_failed":    h.Testdata.SyncToNodes(syncContext(c), p.ID),
-	})
+	item.OK = true
+	item.ProblemID = p.ID
+	item.DisplayID = p.DisplayID
+	item.Title = p.Title
+	item.TestcaseCount = p.TestcaseCount
+	item.SyncFailed = h.Testdata.SyncToNodes(syncContext(c), p.ID)
+	return item
 }
 
 // AdminSyncTestdata 主动把某题的测试数据推送到全部评测节点，用于节点恢复后的补推送。
