@@ -143,8 +143,70 @@ a {
   gap: 8px;
 }
 
+/* 登录后的用户名：头像 + 昵称 + 箭头，悬停展开账户菜单 */
 .app-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 200px;
+  height: 34px;
+  padding: 0 10px 0 3px;
   color: var(--akioi-text);
+  font: inherit;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.app-user:hover,
+.app-user.is-open {
+  background: #f2f3f5;
+}
+
+.app-user:focus-visible {
+  outline: 2px solid var(--akioi-primary);
+  outline-offset: 2px;
+}
+
+.app-user__avatar {
+  flex: none;
+  color: #fff;
+  background: var(--akioi-primary);
+  font-size: 13px;
+}
+
+.app-user__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-user__caret {
+  flex: none;
+  font-size: 12px;
+  color: var(--akioi-text-weak);
+  transition: transform 0.15s ease;
+}
+
+.app-user.is-open .app-user__caret {
+  transform: rotate(180deg);
+}
+
+/* 账户菜单：比默认下拉更紧凑，与导航栏保持同一套字号和灰阶 */
+.app-user-menu {
+  min-width: 148px;
+}
+
+.app-user-menu .el-dropdown-menu {
+  padding: 4px 0;
+}
+
+.app-user-menu .el-dropdown-menu__item {
+  padding: 0 16px;
+  font-size: 13px;
+  line-height: 34px;
 }
 
 .app-main {

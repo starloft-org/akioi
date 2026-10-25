@@ -15,13 +15,7 @@
           <router-link to="/submissions">评测记录</router-link>
         </nav>
         <div class="app-header__right">
-          <template v-if="store.user">
-            <router-link to="/profile" class="app-user">
-              {{ store.user.nickname || store.user.username }}
-            </router-link>
-            <el-button v-if="store.isAdmin" size="small" @click="router.push('/admin')">管理后台</el-button>
-            <el-button size="small" text @click="handleLogout">退出</el-button>
-          </template>
+          <UserMenu v-if="store.user" />
           <template v-else>
             <el-button size="small" @click="router.push('/login')">登录</el-button>
             <el-button v-if="site.register_enabled" size="small" type="primary" @click="router.push('/register')">
@@ -45,7 +39,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import UserMenu from '@/components/UserMenu.vue'
 import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
@@ -59,10 +53,4 @@ onMounted(async () => {
     await store.loadMe()
   }
 })
-
-const handleLogout = async () => {
-  await store.logout()
-  ElMessage.success('已退出登录')
-  router.push('/')
-}
 </script>
