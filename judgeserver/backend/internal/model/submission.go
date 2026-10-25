@@ -10,6 +10,10 @@ type TestcaseResult struct {
 	MemoryKB int    `json:"memory_kb"`
 	Score    int    `json:"score"`
 	Message  string `json:"message"`
+	// Stderr 保留该测试点的错误输出，便于在评测详情里查看完整原因。
+	Stderr string `json:"stderr,omitempty"`
+	// ExitCode 为选手程序的退出码，0 表示未记录或正常结束。
+	ExitCode int `json:"exit_code,omitempty"`
 }
 
 type Submission struct {

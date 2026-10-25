@@ -105,7 +105,7 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 	maxMemoryKB := 0
 
 	for _, tc := range task.Testcases {
-		item := e.runCase(ctx, task, lang, tc, paths)
+		item, fatal := e.runCase(ctx, task, lang, tc, paths)
 		res.Results = append(res.Results, item)
 		totalScore += item.Score
 		if item.TimeMS > maxTimeMS {
@@ -117,6 +117,19 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 		if finalStatus == model.StatusAccepted && item.Status != model.StatusAccepted {
 			finalStatus = item.Status
 		}
+		if !fatal {
+			continue
+		}
+		// 测试数据缺失这类环境问题对每个测试点都一样，没必要继续跑完剩下的。
+		finalStatus = model.StatusSystemError
+		logger.Judgef("提交 %d 在测试点 #%d 遇到评测环境问题，提前结束", task.SubmissionID, item.Index)
+		break
+	}
+
+	// 评测环境故障时不计分，也不让环境问题看起来像选手的运行时错误。
+	if finalStatus == model.StatusSystemError {
+		totalScore = 0
+		res.JudgeMessage = systemMessage(res.Results)
 	}
 
 	res.Status = finalStatus
@@ -137,9 +150,9 @@ type casePaths struct {
 	outputLimit   int64
 }
 
-// runCase 执行单个测试点并得出状态、耗时与内存。
+// runCase 执行单个测试点。第二个返回值表示评测环境本身出了问题，整轮评测可以提前结束。
 func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Language,
-	tc model.TaskTestcase, paths casePaths) model.TestcaseResult {
+	tc model.TaskTestcase, paths casePaths) (model.TestcaseResult, bool) {
 
 	item := model.TestcaseResult{Index: tc.Index, Status: model.StatusSystemError}
 	timeLimit := time.Duration(task.TimeLimitMS) * time.Millisecond
@@ -150,15 +163,14 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 	outName := fmt.Sprintf("case%d.out", tc.Index)
 	errName := fmt.Sprintf("case%d.err", tc.Index)
 	timeName := fmt.Sprintf("case%d.time", tc.Index)
-
-	shell := fmt.Sprintf("/usr/bin/time -v -o /work/%s %s < /box/%d.in > /work/%s 2> /work/%s",
-		timeName, lang.RunPath, tc.Index, outName, errName)
+	timePath := filepath.Join(paths.localWork, timeName)
+	errPath := filepath.Join(paths.localWork, errName)
 
 	runCtx, cancel := context.WithTimeout(ctx, caseTimeout)
 	defer cancel()
 	res, err := e.sb.Run(runCtx, RunSpec{
 		Name:             e.containerName(task.SubmissionID, "case"+strconv.Itoa(tc.Index)),
-		ShellCommand:     shell,
+		ShellCommand:     runShell(lang.RunPath, tc.Index, timeName, outName, errName),
 		MemoryMB:         task.MemoryLimitMB,
 		CPUs:             "1",
 		Timeout:          caseTimeout,
@@ -168,61 +180,71 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 	})
 	if err != nil {
 		item.Message = "沙箱执行失败: " + err.Error()
-		return item
+		return item, false
 	}
 
-	userMS, maxRSSKB := parseTimeReport(filepath.Join(paths.localWork, timeName))
+	userMS, maxRSSKB := parseTimeReport(timePath)
 	item.TimeMS = userMS
 	item.MemoryKB = maxRSSKB
 	if item.TimeMS == 0 {
 		item.TimeMS = res.WallMS
 	}
+	// /usr/bin/time 只有真正启动选手程序后才会写报告；没有报告说明命令根本没跑起来。
+	reportWritten := fileExists(timePath)
 
 	if res.TimedOut || (userMS > 0 && userMS > task.TimeLimitMS) {
 		item.Status = model.StatusTimeLimitExceeded
 		item.Message = fmt.Sprintf("超出时间限制 %dms", task.TimeLimitMS)
-		return item
+		return item, false
 	}
 	if res.ExitCode != 0 {
-		if res.ExitCode == 137 || maxRSSKB > task.MemoryLimitMB*1024 {
+		if res.ExitCode == 137 || (maxRSSKB > 0 && maxRSSKB > task.MemoryLimitMB*1024) {
 			item.Status = model.StatusMemoryLimitExceeded
 			item.Message = fmt.Sprintf("超出内存限制 %dMB", task.MemoryLimitMB)
-			return item
+			return item, false
+		}
+		item.ExitCode = res.ExitCode
+		item.Stderr = mergeStderr(errPath, res.Stderr)
+		if !reportWritten {
+			// 选手程序没有真正跑起来：多半是测试数据没挂进沙箱，按环境故障上报。
+			item.Status = model.StatusSystemError
+			item.Message = environmentMessage(res.ExitCode, item.Stderr)
+			return item, true
 		}
 		item.Status = model.StatusRuntimeError
-		item.Message = runtimeMessage(res.ExitCode, filepath.Join(paths.localWork, errName))
-		return item
+		item.Message = runtimeMessage(res.ExitCode)
+		return item, false
 	}
 
 	outInfo, err := os.Stat(filepath.Join(paths.localWork, outName))
 	if err == nil && outInfo.Size() > paths.outputLimit {
 		item.Status = model.StatusOutputLimitExceeded
 		item.Message = fmt.Sprintf("输出超过 %dMB", e.cfg.Judge.OutputLimitMB)
-		return item
+		return item, false
 	}
 
 	actual, err := os.ReadFile(filepath.Join(paths.localWork, outName))
 	if err != nil {
 		item.Status = model.StatusSystemError
 		item.Message = "无法读取选手输出"
-		return item
+		return item, false
 	}
 	expected, err := os.ReadFile(filepath.Join(paths.localTestdata, strconv.Itoa(tc.Index)+".out"))
 	if err != nil {
 		item.Status = model.StatusSystemError
-		item.Message = "无法读取标准输出"
-		return item
+		item.Message = "无法读取标准输出，测试数据可能不完整"
+		return item, true
 	}
 
 	cmp := Compare(task.CompareMode, task.FloatEps, expected, actual)
 	if !cmp.Accepted {
 		item.Status = model.StatusWrongAnswer
 		item.Message = cmp.Message
-		return item
+		return item, false
 	}
 	item.Status = model.StatusAccepted
 	item.Score = tc.Score
-	return item
+	return item, false
 }
 
 func (e *Engine) hostTestdataDir() string {
@@ -263,12 +285,4 @@ func parseTimeReport(path string) (int, int) {
 		}
 	}
 	return userMS, memKB
-}
-
-func runtimeMessage(exitCode int, stderrPath string) string {
-	msg := fmt.Sprintf("运行时错误，退出码 %d", exitCode)
-	if b, err := os.ReadFile(stderrPath); err == nil && len(b) > 0 {
-		msg += "：" + truncate(strings.TrimSpace(string(b)), 200)
-	}
-	return msg
 }

@@ -19,7 +19,7 @@
             <el-descriptions-item label="得分">{{ submission.score }}</el-descriptions-item>
             <el-descriptions-item label="语言">{{ languageName(submission.language) }}</el-descriptions-item>
             <el-descriptions-item label="耗时">{{ formatDuration(submission.time_ms) }}</el-descriptions-item>
-            <el-descriptions-item label="内存">{{ formatMemory(submission.memory_kb) }}</el-descriptions-item>
+            <el-descriptions-item label="内存">{{ memoryText(submission.memory_kb) }}</el-descriptions-item>
             <el-descriptions-item label="代码长度">{{ submission.code_length }} B</el-descriptions-item>
             <el-descriptions-item label="题目">
               <router-link :to="`/problems/${submission.problem_id}`">
@@ -53,11 +53,18 @@
             <template #default="{ row }">{{ formatDuration(row.time_ms) }}</template>
           </el-table-column>
           <el-table-column label="内存" width="100">
-            <template #default="{ row }">{{ formatMemory(row.memory_kb) }}</template>
+            <template #default="{ row }">{{ memoryText(row.memory_kb) }}</template>
           </el-table-column>
           <el-table-column label="得分" width="80" prop="score" />
-          <el-table-column label="提示" min-width="200">
-            <template #default="{ row }">{{ row.message || '-' }}</template>
+          <el-table-column label="提示" min-width="260">
+            <template #default="{ row }">
+              <div class="hint-cell">
+                <span class="hint-text">{{ row.message || '-' }}</span>
+                <el-button v-if="hasDetail(row)" link type="primary" size="small" @click="openDetail(row)">
+                  详情
+                </el-button>
+              </div>
+            </template>
           </el-table-column>
         </el-table>
       </div>
@@ -71,6 +78,29 @@
         <CodeEditor v-if="codeVisible" :model-value="code" readonly />
         <el-empty v-else description="比赛进行中，暂不能查看源码或他人代码" />
       </div>
+
+      <!-- 单个测试点的完整错误信息，表格里只放摘要 -->
+      <el-dialog v-model="detailVisible" :title="`测试点 #${detailRow?.index ?? ''} 详情`" width="640px">
+        <template v-if="detailRow">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="状态">
+              <StatusTag :status="detailRow.status" />
+            </el-descriptions-item>
+            <el-descriptions-item label="退出码">{{ detailRow.exit_code ?? '-' }}</el-descriptions-item>
+            <el-descriptions-item label="耗时">{{ formatDuration(detailRow.time_ms) }}</el-descriptions-item>
+            <el-descriptions-item label="内存">{{ memoryText(detailRow.memory_kb) }}</el-descriptions-item>
+          </el-descriptions>
+          <h4 class="section-title">提示</h4>
+          <div class="pre-block">{{ detailRow.message || '-' }}</div>
+          <template v-if="detailRow.stderr">
+            <h4 class="section-title">错误输出（stderr）</h4>
+            <div class="pre-block stderr-block">{{ detailRow.stderr }}</div>
+          </template>
+        </template>
+        <template #footer>
+          <el-button @click="detailVisible = false">关闭</el-button>
+        </template>
+      </el-dialog>
     </template>
   </div>
 </template>
@@ -95,6 +125,8 @@ const codeVisible = ref(false)
 const code = ref('')
 const compileError = ref('')
 const judgeMessage = ref('')
+const detailVisible = ref(false)
+const detailRow = ref(null)
 
 const submissionId = computed(() => route.params.id)
 
@@ -127,6 +159,18 @@ const startPolling = () => {
 
 const goLogin = () => {
   router.push({ path: '/login', query: { redirect: route.fullPath } })
+}
+
+// 内存采集失败时显示为 —，避免把「未知」误读成 0KB
+const memoryText = (kb) => (kb > 0 ? formatMemory(kb) : '—')
+
+// 运行时错误、系统错误或带 stderr 的测试点才值得展开完整信息
+const hasDetail = (row) =>
+  !!row.stderr || !!row.exit_code || row.status === 'RuntimeError' || row.status === 'SystemError'
+
+const openDetail = (row) => {
+  detailRow.value = row
+  detailVisible.value = true
 }
 
 // silent 为 true 时不显示 loading 遮罩，避免轮询期间页面闪烁
@@ -206,5 +250,28 @@ onUnmounted(stopPolling)
 .section-title {
   margin: 16px 0 8px;
   font-size: 14px;
+}
+
+.hint-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* 表格里只展示前两行摘要，完整内容放在详情弹窗 */
+.hint-text {
+  display: -webkit-box;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.stderr-block {
+  max-height: 320px;
+  overflow: auto;
 }
 </style>
