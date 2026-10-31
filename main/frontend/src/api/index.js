@@ -101,7 +101,7 @@ export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/prob
 
 export const adminImportProblem = (files, bankId) => {
   const form = new FormData()
-  // 导入的题目统一归入所选题库，未选择时后端归入默认题库
+  // 导入的题目统一归入所选题库，未选择时后端归入主库
   if (bankId) {
     form.append('bank_id', String(bankId))
   }

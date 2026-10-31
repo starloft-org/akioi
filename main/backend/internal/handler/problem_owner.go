@@ -25,7 +25,7 @@ func (h *Handler) problemBankByPrefix(prefix string) (*model.ProblemBank, error)
 }
 
 // problemBankForOwner 按归属取题库：团队题用团队题号池，个人题用个人题号池，
-// 公共题目使用默认题库（id 最小的题库）。
+// 公共题目使用主库（前缀非 T/P 的题库中 id 最小的一个）。
 func (h *Handler) problemBankForOwner(teamID, ownerID uint) (*model.ProblemBank, error) {
 	switch {
 	case teamID > 0:

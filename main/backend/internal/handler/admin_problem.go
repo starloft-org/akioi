@@ -188,7 +188,7 @@ func adminProblemDetail(p *model.Problem) gin.H {
 
 type adminProblemRequest struct {
 	DisplayID *string `json:"display_id"`
-	// BankID 归属题库；为空时归属默认题库
+	// BankID 归属题库；为空时归属主库
 	BankID        *uint           `json:"bank_id"`
 	Title         *string         `json:"title"`
 	Description   *string         `json:"description"`
@@ -327,7 +327,7 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	}
 
 	// 题号由所属题库按「前缀 + 定长序号」自动分配，不接受手工指定；
-	// 团队题目用团队题库、个人题目用个人题库，公共题目用请求指定或默认题库。
+	// 团队题目用团队库、个人题目用个人库，公共题目用请求指定或主库。
 	var bank *model.ProblemBank
 	var err error
 	if teamID > 0 || ownerID > 0 {
@@ -461,7 +461,7 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 		}
 	}
 
-	// 归属题库：请求未指定时沿用原题库，原题库已不存在时回退默认题库
+	// 归属题库：请求未指定时沿用原题库，原题库已不存在时回退主库
 	var bank *model.ProblemBank
 	var err error
 	if ownershipChanged && (teamID > 0 || ownerID > 0) {
@@ -693,11 +693,11 @@ func (h *Handler) problemOwnerNames(problems []model.Problem) (map[uint]string, 
 	return teamNames, ownerNames, nil
 }
 
-// resolveProblemBank 取指定题库；id 为空或 0 时取默认题库。
+// resolveProblemBank 取指定题库；id 为空或 0 时取主库。
 func (h *Handler) resolveProblemBank(id *uint) (*model.ProblemBank, error) {
 	var bank model.ProblemBank
 	if id == nil || *id == 0 {
-		// 默认题库优先取非团队/个人预置题库，避免公共题目落到 T/P 前缀下
+		// 主库优先取非团队/个人预置题库，避免公共题目落到 T/P 前缀下
 		err := h.DB.
 			Where("prefix NOT IN ?", []string{model.ProblemBankTeamPrefix, model.ProblemBankPersonalPrefix}).
 			Order("id asc").First(&bank).Error
@@ -775,7 +775,7 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		return
 	}
 
-	// 导入的题目统一归入请求指定的题库，未指定时归入默认题库
+	// 导入的题目统一归入请求指定的题库，未指定时归入主库
 	var bankID *uint
 	if vals := form.Value["bank_id"]; len(vals) > 0 {
 		if raw := strings.TrimSpace(vals[0]); raw != "" {

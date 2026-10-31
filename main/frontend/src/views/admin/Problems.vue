@@ -96,7 +96,7 @@
     <el-dialog v-model="importVisible" title="导入题目" width="640px">
       <div class="import-bank">
         <span class="muted">导入到题库</span>
-        <el-select v-model="importBankId" placeholder="默认题库" style="width: 240px">
+        <el-select v-model="importBankId" placeholder="选择题库" style="width: 240px">
           <el-option
             v-for="bank in banks"
             :key="bank.id"
@@ -210,7 +210,7 @@ const loadBanks = async () => {
   try {
     const data = await adminListProblemBanks()
     banks.value = data.items || []
-    // 默认选中默认题库，导入时不会误落到别的题库
+    // 默认选中第一个题库（主库），导入时不会误落到别的题库
     if (!importBankId.value && banks.value.length) {
       importBankId.value = banks.value[0].id
     }
