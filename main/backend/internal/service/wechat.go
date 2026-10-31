@@ -50,7 +50,8 @@ func NewWeChat(db *gorm.DB, rdb *goredis.Client, cfg *config.Config, settings *S
 
 // Enabled 表示登录方式是否可用，需开关打开且凭据齐全。
 func (s *WeChatService) Enabled() bool {
-	return s.settings.Current().WeChatEnabled && s.cfg.WeChat.AppID != "" && s.cfg.WeChat.AppSecret != ""
+	secrets := s.settings.Secrets()
+	return s.settings.Current().WeChatEnabled && secrets.WeChatAppID != "" && secrets.WeChatAppSecret != ""
 }
 
 // WeChatState 是随 state 一起保存在 Redis 里的一次性上下文。
@@ -90,7 +91,7 @@ func (s *WeChatService) ConsumeState(ctx context.Context, state string) (WeChatS
 
 func (s *WeChatService) AuthorizeURL(state string) string {
 	q := url.Values{}
-	q.Set("appid", s.cfg.WeChat.AppID)
+	q.Set("appid", s.settings.Secrets().WeChatAppID)
 	q.Set("redirect_uri", s.settings.Current().WeChatRedirectURI)
 	q.Set("response_type", "code")
 	// 公众号网页授权：snsapi_userinfo 能拿到昵称头像，首次会弹确认页。
@@ -147,8 +148,9 @@ type wechatProfile struct {
 // Exchange 用授权码换取用户资料。
 func (s *WeChatService) Exchange(ctx context.Context, code string) (*wechatProfile, error) {
 	tokenQuery := url.Values{}
-	tokenQuery.Set("appid", s.cfg.WeChat.AppID)
-	tokenQuery.Set("secret", s.cfg.WeChat.AppSecret)
+	secrets := s.settings.Secrets()
+	tokenQuery.Set("appid", secrets.WeChatAppID)
+	tokenQuery.Set("secret", secrets.WeChatAppSecret)
 	tokenQuery.Set("code", code)
 	tokenQuery.Set("grant_type", "authorization_code")
 

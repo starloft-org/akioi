@@ -55,9 +55,22 @@ func NewEmail(rdb *goredis.Client, cfg *config.Config, settings *SettingService)
 	return &EmailService{rdb: rdb, cfg: cfg, settings: settings}
 }
 
-// Enabled 需要后台开关与 .env 里的 SMTP 配置同时就绪。
+// Enabled 需要后台开关与后台填写的 SMTP 配置同时就绪。
 func (s *EmailService) Enabled() bool {
-	return s.settings.Current().EmailEnabled && s.cfg.SMTP.Host != "" && s.cfg.SMTP.From != ""
+	secrets := s.settings.Secrets()
+	return s.settings.Current().EmailEnabled && secrets.SMTPHost != "" && secrets.SMTPFrom != ""
+}
+
+// smtpConfig 把数据库中的邮件配置转换为发送函数需要的结构。
+func (s *EmailService) smtpConfig() config.SMTPConfig {
+	secrets := s.settings.Secrets()
+	return config.SMTPConfig{
+		Host:     secrets.SMTPHost,
+		Port:     secrets.SMTPPort,
+		Username: secrets.SMTPUsername,
+		Password: secrets.SMTPPassword,
+		From:     secrets.SMTPFrom,
+	}
 }
 
 // SendCode 生成一次性验证码，通过邮件发送并写入 Redis。
@@ -124,7 +137,7 @@ func (s *EmailService) VerifyCode(ctx context.Context, email, purpose, code stri
 }
 
 func (s *EmailService) codeDigest(email, purpose, code string) string {
-	mac := hmac.New(sha256.New, []byte(s.cfg.JWTSecret))
+	mac := hmac.New(sha256.New, []byte(s.settings.Secrets().JWTSecret))
 	_, _ = mac.Write([]byte(email + "\n" + purpose + "\n" + code))
 	return hex.EncodeToString(mac.Sum(nil))
 }
@@ -137,7 +150,7 @@ func (s *EmailService) send(ctx context.Context, to, purpose, code string) error
 	}
 	subject := fmt.Sprintf("%s%s", settings.AppName, label)
 	body := buildCodeEmailHTML(settings.AppName, label, code, settings.SMSCodeTTLMinutes)
-	return sendMail(s.cfg.SMTP, to, subject, body)
+	return sendMail(s.smtpConfig(), to, subject, body)
 }
 
 func buildCodeEmailHTML(appName, label, code string, ttlMinutes int) string {

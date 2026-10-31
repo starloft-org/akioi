@@ -18,7 +18,7 @@ func (h *Handler) AdminJudgeNodes(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"nodes":             nodes,
 		"total_problems":    totalWithData,
-		"secret_configured": h.Cfg.Judge.SyncSecret != "",
+		"secret_configured": h.Settings.Secrets().JudgeSyncSecret != "",
 	})
 }
 

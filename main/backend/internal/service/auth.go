@@ -49,6 +49,11 @@ func (s *AuthService) CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// signKey 返回当前登录密钥；密钥保存在数据库中并由管理后台维护。
+func (s *AuthService) signKey() []byte {
+	return []byte(s.settings.Secrets().JWTSecret)
+}
+
 type claims struct {
 	UserID      uint `json:"uid"`
 	AuthVersion int  `json:"av"`
@@ -72,7 +77,7 @@ func (s *AuthService) Issue(u *model.User) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 		},
 	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString([]byte(s.cfg.JWTSecret))
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(s.signKey())
 	if err != nil {
 		return "", err
 	}
@@ -94,7 +99,7 @@ func (s *AuthService) Authenticate(token string) (*model.User, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("非预期的签名算法")
 		}
-		return []byte(s.cfg.JWTSecret), nil
+		return s.signKey(), nil
 	})
 	if err != nil || !parsed.Valid {
 		return nil, ErrUnauthorized
@@ -133,7 +138,7 @@ func (s *AuthService) ResetPassword(userID uint, password string) error {
 func (s *AuthService) Revoke(token string) error {
 	var c claims
 	if _, err := jwt.ParseWithClaims(token, &c, func(t *jwt.Token) (any, error) {
-		return []byte(s.cfg.JWTSecret), nil
+		return s.signKey(), nil
 	}); err != nil {
 		return nil
 	}

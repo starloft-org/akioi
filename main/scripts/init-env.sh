@@ -7,7 +7,7 @@
 #
 # 行为：
 #   - 缺少 .env 时从 .env.example 复制，已有 .env 只补空项，不覆盖已填写的值
-#   - DB_PASSWORD / REDIS_PASSWORD / JWT_SECRET / ADMIN_INIT_PASSWORD 各自随机生成
+#   - DB_PASSWORD / REDIS_PASSWORD / ADMIN_INIT_PASSWORD 各自随机生成（登录密钥由主站首次启动自动生成并入库）
 #   - JUDGE_SYNC_SECRET 两端写成同一个值（沿用已有值，没有才生成）
 #   - judgeserver 的 MAIN_BASE_URL 按主站地址与 FRONTEND_PORT 生成
 #   - judgeserver 的 HOST_TESTDATA_DIR / HOST_WORK_DIR 按仓库路径生成并建好目录
@@ -47,7 +47,6 @@ fill() {
 
 fill "$MAIN_ENV" DB_PASSWORD "$(gen 16)"
 fill "$MAIN_ENV" REDIS_PASSWORD "$(gen 16)"
-fill "$MAIN_ENV" JWT_SECRET "$(gen 32)"
 fill "$MAIN_ENV" ADMIN_INIT_PASSWORD "$(gen 12)"
 fill "$JUDGE_ENV" DB_PASSWORD "$(gen 16)"
 fill "$JUDGE_ENV" REDIS_PASSWORD "$(gen 16)"
@@ -94,7 +93,7 @@ chmod 600 "$MAIN_ENV" "$JUDGE_ENV"
 
 echo
 echo "===== $MAIN_ENV"
-for key in DB_PASSWORD REDIS_PASSWORD JWT_SECRET ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET FRONTEND_PORT; do
+for key in DB_PASSWORD REDIS_PASSWORD ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET FRONTEND_PORT; do
   printf '  %-20s %s\n' "$key" "$(val "$MAIN_ENV" "$key")"
 done
 echo "===== $JUDGE_ENV"
@@ -105,5 +104,5 @@ echo
 echo "下一步："
 echo "  docker compose -f main/docker-compose.yml up -d --build"
 echo "  docker compose -f judgeserver/docker-compose.yml up -d --build"
-echo "后台「系统设置 → 评测节点」填 http://<主站地址>:9000"
+echo "后台「系统设置」配置评测节点（如 http://<主站地址>:9000）与「密钥与集成」中的微信、短信、邮件、验证码密钥"
 echo "admin 密码忘记时：docker compose -f main/docker-compose.yml exec backend /app/akioi-cli reset-password -user admin -password '新密码'"

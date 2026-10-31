@@ -17,8 +17,9 @@ import (
 // InternalJudgement 接收评测节点回传的结果。用同步密钥鉴权，不走用户登录态。
 func (h *Handler) InternalJudgement(c *gin.Context) {
 	given := c.GetHeader("X-Sync-Secret")
-	if h.Cfg.Judge.SyncSecret == "" ||
-		subtle.ConstantTimeCompare([]byte(h.Cfg.Judge.SyncSecret), []byte(given)) != 1 {
+	expected := h.Settings.Secrets().JudgeSyncSecret
+	if expected == "" ||
+		subtle.ConstantTimeCompare([]byte(expected), []byte(given)) != 1 {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "同步密钥不正确"})
 		return
 	}

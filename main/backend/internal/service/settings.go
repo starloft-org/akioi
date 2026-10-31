@@ -79,6 +79,7 @@ func DefaultRuntimeSettings() RuntimeSettings {
 type SettingService struct {
 	db      *gorm.DB
 	current atomic.Value
+	secrets atomic.Value
 }
 
 // NewSettingService 从数据库加载设置；首次启动会写入默认值。
@@ -110,6 +111,21 @@ func NewSettingService(db *gorm.DB) (*SettingService, error) {
 		}
 	}
 	s.current.Store(settings)
+	// 密钥单独存一行：首次启动（或从旧版本升级）时把 .env 中的密钥导入数据库，之后只认数据库中的值。
+	secrets, found, err := s.loadSecrets()
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		secrets, err = secretsFromEnvironment().Merge(SecretsPatch{})
+		if err != nil {
+			return nil, err
+		}
+		if err := s.saveSecrets(secrets); err != nil {
+			return nil, err
+		}
+	}
+	s.secrets.Store(secrets)
 	return s, nil
 }
 
@@ -121,6 +137,12 @@ func NewStaticSettingService(settings RuntimeSettings) *SettingService {
 	}
 	s := &SettingService{}
 	s.current.Store(normalized)
+	// 静态装配没有数据库，生成的登录密钥只在当前进程内有效。
+	secrets, err := Secrets{}.Merge(SecretsPatch{})
+	if err != nil {
+		panic(err)
+	}
+	s.secrets.Store(secrets)
 	return s
 }
 

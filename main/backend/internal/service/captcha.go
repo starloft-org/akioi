@@ -78,17 +78,19 @@ func NewCaptcha(cfg *config.Config, settings *SettingService) *CaptchaService {
 
 // apiKey/apiSecret 优先使用验证码专用密钥，未配置时回退到短信密钥（同一平台账号）。
 func (s *CaptchaService) apiKey() string {
-	if s.cfg.Captcha.APIKey != "" {
-		return s.cfg.Captcha.APIKey
+	secrets := s.settings.Secrets()
+	if secrets.CaptchaAPIKey != "" {
+		return secrets.CaptchaAPIKey
 	}
-	return s.cfg.SMS.APIKey
+	return secrets.SMSAPIKey
 }
 
 func (s *CaptchaService) apiSecret() string {
-	if s.cfg.Captcha.APISecret != "" {
-		return s.cfg.Captcha.APISecret
+	secrets := s.settings.Secrets()
+	if secrets.CaptchaAPISecret != "" {
+		return secrets.CaptchaAPISecret
 	}
-	return s.cfg.SMS.APISecret
+	return secrets.SMSAPISecret
 }
 
 // Enabled 需要后台开关与 API 密钥同时就绪。

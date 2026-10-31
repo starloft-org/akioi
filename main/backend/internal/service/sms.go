@@ -51,7 +51,8 @@ func NewSMS(rdb *goredis.Client, cfg *config.Config, settings *SettingService) *
 
 func (s *SMSService) Enabled() bool {
 	settings := s.settings.Current()
-	return settings.SMSEnabled && s.cfg.SMS.APIKey != "" && s.cfg.SMS.APISecret != "" &&
+	secrets := s.settings.Secrets()
+	return settings.SMSEnabled && secrets.SMSAPIKey != "" && secrets.SMSAPISecret != "" &&
 		settings.SMSRegisterTemplate != "" && settings.SMSResetTemplate != ""
 }
 
@@ -131,7 +132,7 @@ func (s *SMSService) VerifyCode(ctx context.Context, phone, purpose, code string
 }
 
 func (s *SMSService) codeDigest(phone, purpose, code string) string {
-	mac := hmac.New(sha256.New, []byte(s.cfg.JWTSecret))
+	mac := hmac.New(sha256.New, []byte(s.settings.Secrets().JWTSecret))
 	_, _ = mac.Write([]byte(phone + "\n" + purpose + "\n" + code))
 	return hex.EncodeToString(mac.Sum(nil))
 }
@@ -165,13 +166,14 @@ func (s *SMSService) send(ctx context.Context, phone, purpose, code string) erro
 	if err != nil {
 		return err
 	}
-	sign := starLoftSign("POST", u.EscapedPath(), u.RawQuery, timestamp, nonce, body, s.cfg.SMS.APISecret)
+	secrets := s.settings.Secrets()
+	sign := starLoftSign("POST", u.EscapedPath(), u.RawQuery, timestamp, nonce, body, secrets.SMSAPISecret)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Api-Key", s.cfg.SMS.APIKey)
+	req.Header.Set("X-Api-Key", secrets.SMSAPIKey)
 	req.Header.Set("X-Sign", sign)
 	req.Header.Set("X-Sign-Version", "hmac_sha256_v2")
 	req.Header.Set("X-Timestamp", timestamp)

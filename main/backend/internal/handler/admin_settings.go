@@ -8,40 +8,50 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AdminGetSettings 返回可热更新设置与环境密钥的配置状态，不返回密钥内容。
+// adminSettingsRequest 把运行时设置与密钥增量放在同一个请求里提交，便于一次保存生效。
+type adminSettingsRequest struct {
+	service.RuntimeSettings
+	Secrets service.SecretsPatch `json:"secrets"`
+}
+
+// AdminGetSettings 返回可热更新设置与密钥的配置状态，不返回密钥内容。
 func (h *Handler) AdminGetSettings(c *gin.Context) {
+	secrets := h.Settings.Secrets()
 	httpx.OK(c, gin.H{
-		"settings": h.Settings.Current(),
-		"secret_status": gin.H{
-			"sms_credentials_configured":    h.Cfg.SMS.APIKey != "" && h.Cfg.SMS.APISecret != "",
-			"smtp_credentials_configured":   h.Cfg.SMTP.Host != "" && h.Cfg.SMTP.From != "" && h.Cfg.SMTP.Password != "",
-			"captcha_credentials_configured": h.Cfg.Captcha.APIKey != "" || h.Cfg.SMS.APIKey != "",
-			"wechat_credentials_configured": h.Cfg.WeChat.AppID != "" && h.Cfg.WeChat.AppSecret != "",
-			"judge_sync_secret_configured":  h.Cfg.Judge.SyncSecret != "",
-		},
+		"settings":      h.Settings.Current(),
+		"secret_status": secrets.Status(),
+		"secret_view":   secrets.View(),
 	})
 }
 
-// AdminUpdateSettings 校验、持久化并立即切换运行时设置。
+// AdminUpdateSettings 校验、持久化并立即切换运行时设置与密钥。
 func (h *Handler) AdminUpdateSettings(c *gin.Context) {
-	var req service.RuntimeSettings
+	var req adminSettingsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, "请求参数格式错误")
 		return
 	}
-	if req.SMSEnabled && (h.Cfg.SMS.APIKey == "" || h.Cfg.SMS.APISecret == "") {
-		httpx.BadRequest(c, "启用短信服务前请先在 .env 配置 SMS_API_KEY 和 SMS_API_SECRET，并重启服务")
+	settings, err := service.NormalizeRuntimeSettings(req.RuntimeSettings)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
 		return
 	}
-	if req.WeChatEnabled && (h.Cfg.WeChat.AppID == "" || h.Cfg.WeChat.AppSecret == "") {
-		httpx.BadRequest(c, "启用微信登录前请先在 .env 配置 WECHAT_APPID 和 WECHAT_APPSECRET，并重启服务")
+	secrets, err := h.Settings.Secrets().Merge(req.Secrets)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
 		return
 	}
-	if len(req.JudgeNodeEndpoints) > 0 && h.Cfg.Judge.SyncSecret == "" {
-		httpx.BadRequest(c, "配置评测节点前请先在 .env 配置 JUDGE_SYNC_SECRET，并重启服务")
+	if err := secrets.Validate(settings); err != nil {
+		httpx.BadRequest(c, err.Error())
 		return
 	}
-	settings, err := h.Settings.Update(req)
+	// 先保存密钥再切换设置：即使第二步失败，也只会保留未启用的旧设置，不会出现已启用但缺少密钥。
+	secrets, err = h.Settings.UpdateSecrets(secrets)
+	if err != nil {
+		httpx.ServerError(c, err.Error())
+		return
+	}
+	updated, err := h.Settings.Update(req.RuntimeSettings)
 	if err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
@@ -51,5 +61,14 @@ func (h *Handler) AdminUpdateSettings(c *gin.Context) {
 		return
 	}
 	logger.Adminf("管理员 %s 更新系统设置 ip=%s", user.Username, c.ClientIP())
-	httpx.OK(c, gin.H{"settings": settings})
+
+	data := gin.H{
+		"settings":      updated,
+		"secret_status": secrets.Status(),
+		"secret_view":   secrets.View(),
+	}
+	if req.Secrets.RegenerateJWT {
+		data["notice"] = "登录密钥已重新生成，所有用户的登录状态已失效"
+	}
+	httpx.OK(c, data)
 }

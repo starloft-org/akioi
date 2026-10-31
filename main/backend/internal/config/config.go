@@ -141,9 +141,7 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.JWTSecret == "" {
-		return fmt.Errorf("JWT_SECRET 未配置")
-	}
+	// 登录密钥等第三方凭据保存在数据库中，首次启动时自动生成或从环境变量导入，因此这里不再要求 JWT_SECRET。
 	if c.DBPassword == "" {
 		return fmt.Errorf("DB_PASSWORD 未配置")
 	}
