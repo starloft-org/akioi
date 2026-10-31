@@ -253,10 +253,10 @@ func (h *Handler) AdminUpdateProblemBank(c *gin.Context) {
 }
 
 // renumberProblemBank 按题号里的原序号重排题库内所有题号：先写入临时值再写最终值，
-// 避免同一题库内新旧题号在唯一索引上互相占用。
+// 避免同一题库内新旧题号在唯一索引上互相占用。已删除的题目一并重排，保证唯一索引不冲突。
 func renumberProblemBank(tx *gorm.DB, bankID uint, oldPrefix, prefix string, codeLength int) error {
 	var problems []model.Problem
-	if err := tx.Select("id, display_id").Where("bank_id = ?", bankID).Order("id asc").Find(&problems).Error; err != nil {
+	if err := tx.Unscoped().Select("id, display_id").Where("bank_id = ?", bankID).Order("id asc").Find(&problems).Error; err != nil {
 		return err
 	}
 	if len(problems) == 0 {
@@ -321,7 +321,17 @@ func (h *Handler) AdminDeleteProblemBank(c *gin.Context) {
 		httpx.Conflict(c, "题库下还有题目，请先删除或移动到其他题库")
 		return
 	}
-	if err := h.DB.Delete(&model.ProblemBank{}, bank.ID).Error; err != nil {
+	// 软删除会把行留在表里，先释放前缀，避免同名前缀被永久占用而无法再建题库。
+	released := fmt.Sprintf("~%d", bank.ID)
+	if len(released) > 8 {
+		released = released[:8]
+	}
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.ProblemBank{}).Where("id = ?", bank.ID).Update("prefix", released).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.ProblemBank{}, bank.ID).Error
+	}); err != nil {
 		httpx.ServerError(c, "删除题库失败")
 		return
 	}

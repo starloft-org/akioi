@@ -211,7 +211,8 @@ func (h *Handler) decorateSubmissions(subs []model.Submission) []SubmissionItem 
 	}
 	problems := map[uint]model.Problem{}
 	var probs []model.Problem
-	h.DB.Where("id IN ?", problemIDs).Find(&probs)
+	// 题目删除后仍要展示历史提交的题号与标题，因此连软删除的题目一起查。
+	h.DB.Unscoped().Where("id IN ?", problemIDs).Find(&probs)
 	for i := range probs {
 		problems[probs[i].ID] = probs[i]
 	}

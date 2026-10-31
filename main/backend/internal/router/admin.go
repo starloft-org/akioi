@@ -61,6 +61,14 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		banks.DELETE("/:id", h.AdminDeleteProblemBank)
 	}
 
+	backups := admin.Group("/backups", middleware.RequirePermission(model.AdminPermissionBackups))
+	{
+		backups.GET("", h.AdminListBackups)
+		backups.POST("", h.AdminCreateBackup)
+		backups.GET("/:name", h.AdminDownloadBackup)
+		backups.DELETE("/:name", h.AdminDeleteBackup)
+	}
+
 	judges := admin.Group("/judges", middleware.RequirePermission(model.AdminPermissionJudges))
 	judges.GET("/status", h.AdminJudgeNodes)
 	judges.POST("/sync-all", h.AdminJudgeSyncAll)

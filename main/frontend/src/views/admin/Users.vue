@@ -114,6 +114,7 @@ const PERMISSION_LABELS = {
   judges: '测评机管理',
   announcements: '公告管理',
   settings: '系统设置',
+  backups: '数据备份',
   logs: '日志查看'
 }
 

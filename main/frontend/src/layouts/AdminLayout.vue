@@ -19,6 +19,7 @@
         <el-menu-item-group title="系统">
           <el-menu-item v-if="store.isSuperAdmin" index="/admin/admins">管理员管理</el-menu-item>
           <el-menu-item v-if="store.hasPermission('settings')" index="/admin/settings">系统设置</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('backups')" index="/admin/backups">数据备份</el-menu-item>
           <el-menu-item v-if="store.hasPermission('logs')" index="/admin/logs">日志查看</el-menu-item>
         </el-menu-item-group>
       </el-menu>

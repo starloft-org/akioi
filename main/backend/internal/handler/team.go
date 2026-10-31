@@ -33,13 +33,16 @@ func (h *Handler) isTeamMember(userID, teamID uint) bool {
 	return h.teamMembership(userID, teamID) != nil
 }
 
-// myTeamIDs 返回用户加入的团队 ID 列表，用于过滤团队私有内容。
+// myTeamIDs 返回用户加入的团队 ID 列表，用于过滤团队私有内容；已删除的团队不计入。
 func (h *Handler) myTeamIDs(userID uint) []uint {
 	if userID == 0 {
 		return nil
 	}
 	var ids []uint
-	_ = h.DB.Model(&model.TeamMember{}).Where("user_id = ?", userID).Pluck("team_id", &ids).Error
+	_ = h.DB.Table("team_members").
+		Joins("JOIN teams ON teams.id = team_members.team_id AND teams.deleted_at IS NULL").
+		Where("team_members.user_id = ?", userID).
+		Pluck("team_members.team_id", &ids).Error
 	return ids
 }
 
@@ -185,11 +188,11 @@ func (h *Handler) GetTeam(c *gin.Context) {
 	}
 
 	httpx.OK(c, gin.H{
-		"team":        team,
-		"my_role":     role,
-		"applied":     applied,
-		"is_member":   role != "",
-		"can_manage":  role == model.TeamRoleOwner,
+		"team":       team,
+		"my_role":    role,
+		"applied":    applied,
+		"is_member":  role != "",
+		"can_manage": role == model.TeamRoleOwner,
 	})
 }
 
@@ -385,13 +388,13 @@ func (h *Handler) ListTeamApplications(c *gin.Context) {
 		query = query.Where("status = ?", status)
 	}
 	type row struct {
-		ID        uint       `json:"id"`
-		UserID    uint       `json:"user_id"`
-		Username  string     `json:"username"`
-		Nickname  string     `json:"nickname"`
-		Message   string     `json:"message"`
-		Status    string     `json:"status"`
-		CreatedAt time.Time  `json:"created_at"`
+		ID         uint       `json:"id"`
+		UserID     uint       `json:"user_id"`
+		Username   string     `json:"username"`
+		Nickname   string     `json:"nickname"`
+		Message    string     `json:"message"`
+		Status     string     `json:"status"`
+		CreatedAt  time.Time  `json:"created_at"`
 		ReviewedAt *time.Time `json:"reviewed_at"`
 	}
 	var rows []row
@@ -556,13 +559,13 @@ func (h *Handler) ListTeamSets(c *gin.Context) {
 	for _, s := range sets {
 		ids := s.Problems()
 		items = append(items, gin.H{
-			"id":           s.ID,
-			"title":        s.Title,
-			"description":  s.Description,
+			"id":            s.ID,
+			"title":         s.Title,
+			"description":   s.Description,
 			"problem_count": len(ids),
-			"problem_ids":  ids,
-			"created_by":   s.CreatedBy,
-			"created_at":   s.CreatedAt,
+			"problem_ids":   ids,
+			"created_by":    s.CreatedBy,
+			"created_at":    s.CreatedAt,
 		})
 	}
 	httpx.OK(c, gin.H{"items": items})
@@ -648,9 +651,9 @@ func (h *Handler) UpdateTeamSet(c *gin.Context) {
 		return
 	}
 	if err := h.DB.Model(&set).Updates(map[string]any{
-		"title":         req.Title,
-		"description":   req.Description,
-		"problem_ids":   string(idsJSON),
+		"title":       req.Title,
+		"description": req.Description,
+		"problem_ids": string(idsJSON),
 	}).Error; err != nil {
 		httpx.ServerError(c, "更新题单失败")
 		return
@@ -698,15 +701,15 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 	for i := range problems {
 		p := &problems[i]
 		items = append(items, gin.H{
-			"id":              p.ID,
-			"display_id":      p.DisplayID,
-			"title":           p.Title,
-			"difficulty":      p.Difficulty,
-			"points":          p.Points,
-			"submit_count":    p.SubmitCount,
-			"accepted_count":  p.AcceptedCount,
-			"testcase_count":  p.TestcaseCount,
-			"created_at":      p.CreatedAt,
+			"id":             p.ID,
+			"display_id":     p.DisplayID,
+			"title":          p.Title,
+			"difficulty":     p.Difficulty,
+			"points":         p.Points,
+			"submit_count":   p.SubmitCount,
+			"accepted_count": p.AcceptedCount,
+			"testcase_count": p.TestcaseCount,
+			"created_at":     p.CreatedAt,
 		})
 	}
 	httpx.OK(c, gin.H{"items": items})
@@ -731,11 +734,11 @@ func (h *Handler) ListTeamContests(c *gin.Context) {
 	for i := range contests {
 		ct := &contests[i]
 		items = append(items, gin.H{
-			"id":          ct.ID,
-			"title":       ct.Title,
-			"start_at":    ct.StartAt,
-			"end_at":      ct.EndAt,
-			"status":      ct.Status(now),
+			"id":                ct.ID,
+			"title":             ct.Title,
+			"start_at":          ct.StartAt,
+			"end_at":            ct.EndAt,
+			"status":            ct.Status(now),
 			"register_required": ct.RegisterRequired,
 		})
 	}

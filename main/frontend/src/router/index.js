@@ -157,6 +157,12 @@ const routes = [
         component: () => import('@/views/admin/Settings.vue')
       },
       {
+        path: 'backups',
+        name: 'admin-backups',
+        meta: { permission: 'backups' },
+        component: () => import('@/views/admin/Backups.vue')
+      },
+      {
         path: 'logs',
         name: 'admin-logs',
         meta: { permission: 'logs' },

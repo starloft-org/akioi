@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"gorm.io/gorm"
 	"strings"
 	"time"
 )
@@ -22,13 +23,14 @@ const (
 
 // Team 是团队，持有团队题目、题单与团队比赛。
 type Team struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"size:32;uniqueIndex;not null" json:"name"`
-	Description string    `gorm:"size:255" json:"description"`
-	OwnerID     uint      `gorm:"index;not null" json:"owner_id"`
-	MemberCount int       `gorm:"not null;default:1" json:"member_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	Name        string         `gorm:"size:32;uniqueIndex;not null" json:"name"`
+	Description string         `gorm:"size:255" json:"description"`
+	OwnerID     uint           `gorm:"index;not null" json:"owner_id"`
+	MemberCount int            `gorm:"not null;default:1" json:"member_count"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 func (Team) TableName() string { return "teams" }
@@ -61,14 +63,15 @@ func (TeamApplication) TableName() string { return "team_applications" }
 
 // TeamProblemSet 是团队内部的训练题单，仅成员可见。
 type TeamProblemSet struct {
-	ID             uint      `gorm:"primaryKey" json:"id"`
-	TeamID         uint      `gorm:"index;not null" json:"team_id"`
-	Title          string    `gorm:"size:128;not null" json:"title"`
-	Description    string    `gorm:"size:255" json:"description"`
-	ProblemIDsJSON string    `gorm:"column:problem_ids;type:text" json:"-"`
-	CreatedBy      uint      `gorm:"index" json:"created_by"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             uint           `gorm:"primaryKey" json:"id"`
+	TeamID         uint           `gorm:"index;not null" json:"team_id"`
+	Title          string         `gorm:"size:128;not null" json:"title"`
+	Description    string         `gorm:"size:255" json:"description"`
+	ProblemIDsJSON string         `gorm:"column:problem_ids;type:text" json:"-"`
+	CreatedBy      uint           `gorm:"index" json:"created_by"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 func (TeamProblemSet) TableName() string { return "team_problem_sets" }

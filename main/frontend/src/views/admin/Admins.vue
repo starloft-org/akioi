@@ -143,6 +143,7 @@ const FALLBACK_OPTIONS = [
   { key: 'submissions', label: '评测记录', group: '内容' },
   { key: 'judges', label: '测评机管理', group: '内容' },
   { key: 'settings', label: '系统设置', group: '系统' },
+  { key: 'backups', label: '数据备份', group: '系统' },
   { key: 'logs', label: '日志查看', group: '系统' }
 ]
 

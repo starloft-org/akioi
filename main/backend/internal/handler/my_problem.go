@@ -450,21 +450,17 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID, "kind": fresh.Kind()}})
 }
 
-// DeleteMyProblem 删除自己创建的题目或团队题目（队长）。
+// DeleteMyProblem 软删除自己创建的题目或团队题目（队长），测试数据保留不清空。
 func (h *Handler) DeleteMyProblem(c *gin.Context) {
 	p, ok := h.loadManageableProblem(c)
 	if !ok {
-		return
-	}
-	if err := h.Testdata.Delete(p.ID); err != nil {
-		httpx.ServerError(c, "删除测试数据失败")
 		return
 	}
 	if err := h.DB.Delete(&model.Problem{}, p.ID).Error; err != nil {
 		httpx.ServerError(c, "删除题目失败")
 		return
 	}
-	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
+	httpx.OK(c, gin.H{"sync_failed": false, "testdata_retained": true})
 }
 
 // ListMyProblemTestdata 返回自己题目的测试点清单。

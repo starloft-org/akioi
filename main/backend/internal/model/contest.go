@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Contest struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
@@ -13,9 +17,10 @@ type Contest struct {
 	RegisterRequired bool      `gorm:"not null;default:false" json:"register_required"`
 	CreatedBy        uint      `gorm:"index" json:"created_by"`
 	// TeamID 归属团队；0 表示公开比赛，团队比赛仅该团队成员可见。
-	TeamID           uint      `gorm:"index;not null;default:0" json:"team_id"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	TeamID    uint           `gorm:"index;not null;default:0" json:"team_id"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 func (Contest) TableName() string { return "contests" }
@@ -87,13 +92,14 @@ type RankItem struct {
 }
 
 type Announcement struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Title     string    `gorm:"size:128;not null" json:"title"`
-	Content   string    `gorm:"type:text" json:"content"`
-	Visible   bool      `gorm:"not null;default:true" json:"visible"`
-	CreatedBy uint      `gorm:"index" json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	Title     string         `gorm:"size:128;not null" json:"title"`
+	Content   string         `gorm:"type:text" json:"content"`
+	Visible   bool           `gorm:"not null;default:true" json:"visible"`
+	CreatedBy uint           `gorm:"index" json:"created_by"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 func (Announcement) TableName() string { return "announcements" }

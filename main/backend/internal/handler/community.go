@@ -430,7 +430,8 @@ func (h *Handler) discussionItems(c *gin.Context, rows []model.Discussion, withC
 	problems := map[uint]model.Problem{}
 	if len(problemIDs) > 0 {
 		var found []model.Problem
-		h.DB.Where("id IN ?", problemIDs).Find(&found)
+		// 题目被删除后，题解与讨论里仍显示原来的题号与标题。
+		h.DB.Unscoped().Where("id IN ?", problemIDs).Find(&found)
 		for _, p := range found {
 			problems[p.ID] = p
 		}

@@ -41,7 +41,7 @@ WORKDIR /app
 
 COPY --from=build /out/ ./
 
-RUN mkdir -p /app/logs /app/testdata /app/uploads
+RUN mkdir -p /app/logs /app/testdata /app/uploads /app/backups
 
 EXPOSE 8080
 

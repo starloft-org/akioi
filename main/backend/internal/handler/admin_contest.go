@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"akioi/internal/httpx"
+	"akioi/internal/logger"
 	"akioi/internal/model"
 
 	"github.com/gin-gonic/gin"
@@ -183,7 +184,7 @@ type adminContestRequest struct {
 	Password         *string `json:"password"`
 	RegisterRequired *bool   `json:"register_required"`
 	// TeamID 归属团队；0 或空表示公开比赛
-	TeamID           *uint   `json:"team_id"`
+	TeamID *uint `json:"team_id"`
 }
 
 // parseTime 解析 RFC3339 或 "2006-01-02 15:04:05" 两种时间格式。
@@ -368,7 +369,7 @@ func (h *Handler) AdminUpdateContest(c *gin.Context) {
 	httpx.OK(c, gin.H{"contest": gin.H{"id": contest.ID}})
 }
 
-// AdminDeleteContest 删除比赛，并清理其题目关联与报名记录。
+// AdminDeleteContest 软删除比赛；比赛题目关联、报名记录与提交记录全部保留，便于恢复与追溯。
 func (h *Handler) AdminDeleteContest(c *gin.Context) {
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
@@ -379,19 +380,14 @@ func (h *Handler) AdminDeleteContest(c *gin.Context) {
 		httpx.NotFound(c, "比赛不存在")
 		return
 	}
-	if err := h.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("contest_id = ?", contest.ID).Delete(&model.ContestProblem{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("contest_id = ?", contest.ID).Delete(&model.ContestParticipant{}).Error; err != nil {
-			return err
-		}
-		return tx.Delete(&model.Contest{}, contest.ID).Error
-	}); err != nil {
+	if err := h.DB.Delete(&model.Contest{}, contest.ID).Error; err != nil {
 		httpx.ServerError(c, "删除比赛失败")
 		return
 	}
-	httpx.OK(c, gin.H{})
+	if u := httpx.CurrentUser(c); u != nil {
+		logger.Adminf("管理员 %s 删除比赛 %s (id=%d)，关联数据保留 ip=%s", u.Username, contest.Title, contest.ID, c.ClientIP())
+	}
+	httpx.OK(c, gin.H{"retained": true})
 }
 
 type adminContestProblemsRequest struct {

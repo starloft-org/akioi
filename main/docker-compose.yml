@@ -61,6 +61,7 @@ services:
       - ./data/logs:/app/logs
       - ./data/testdata:/app/testdata
       - ./data/uploads:/app/uploads
+      - ./data/backups:/app/backups
     depends_on:
       mysql:
         condition: service_healthy

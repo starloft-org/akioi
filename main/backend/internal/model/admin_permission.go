@@ -14,6 +14,7 @@ const (
 	AdminPermissionAnnouncements = "announcements"
 	AdminPermissionSettings      = "settings"
 	AdminPermissionLogs          = "logs"
+	AdminPermissionBackups       = "backups"
 )
 
 // AdminPermissionOption 描述单个权限项，供后台渲染勾选项。
@@ -34,6 +35,7 @@ func AdminPermissionOptions() []AdminPermissionOption {
 		{Key: AdminPermissionSubmissions, Label: "评测记录", Group: "内容"},
 		{Key: AdminPermissionJudges, Label: "测评机管理", Group: "内容"},
 		{Key: AdminPermissionSettings, Label: "系统设置", Group: "系统"},
+		{Key: AdminPermissionBackups, Label: "数据备份", Group: "系统"},
 		{Key: AdminPermissionLogs, Label: "日志查看", Group: "系统"},
 	}
 }

@@ -77,6 +77,9 @@ type Config struct {
 	LogMaxMB int
 
 	UploadDir string
+
+	// BackupDir 是数据库逻辑备份的存放目录，后台「数据备份」页面在这里读写 .sql.gz 文件。
+	BackupDir string
 }
 
 // Load 读取环境变量构建配置；已注入的变量优先于 .env 文件。
@@ -132,6 +135,8 @@ func Load() (*Config, error) {
 		LogMaxMB: getEnvInt("LOG_MAX_MB", 100),
 
 		UploadDir: getEnv("UPLOAD_DIR", "/app/uploads"),
+
+		BackupDir: getEnv("BACKUP_DIR", "/app/backups"),
 	}
 
 	if err := cfg.validate(); err != nil {

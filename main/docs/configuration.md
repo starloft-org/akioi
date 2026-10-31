@@ -21,6 +21,7 @@
 | `TESTDATA_DIR` | 测试数据目录 |
 | `JUDGE_SYNC_SECRET` | 仅在库中没有该密钥时被导入一次（见下文） |
 | `LOG_DIR` / `LOG_MAX_MB` / `UPLOAD_DIR` | 日志与上传目录 |
+| `BACKUP_DIR` | 数据库备份目录（默认 `/app/backups`，对应 `data/backups`） |
 
 `ADMIN_INIT_USERNAME` / `ADMIN_INIT_PASSWORD` 只在数据库里还没有任何管理员时使用：已经有管理员账号后再改这两个键不会生效，改密码请用 `akioi-cli reset-password`。
 

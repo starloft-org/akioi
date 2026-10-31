@@ -148,7 +148,8 @@ func (h *Handler) GetContest(c *gin.Context) {
 			pids = append(pids, cp.ProblemID)
 		}
 		var problems []model.Problem
-		h.DB.Where("id IN ?", pids).Find(&problems)
+		// 题目被删除后，比赛里的题号与标题仍按历史记录展示。
+		h.DB.Unscoped().Where("id IN ?", pids).Find(&problems)
 		pmap := map[uint]model.Problem{}
 		for i := range problems {
 			pmap[problems[i].ID] = problems[i]

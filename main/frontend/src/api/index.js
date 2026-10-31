@@ -162,6 +162,14 @@ export const saveBlob = (blob, filename) => {
   URL.revokeObjectURL(url)
 }
 
+// 数据库备份：文件由后台写入服务器 BACKUP_DIR，下载走携带鉴权头的 blob 请求
+export const adminListBackups = () => request.get('/api/admin/v1/backups')
+export const adminCreateBackup = () => request.post('/api/admin/v1/backups')
+export const adminDownloadBackup = (name) =>
+  request.get(`/api/admin/v1/backups/${encodeURIComponent(name)}`, { responseType: 'blob', timeout: 600000 })
+export const adminDeleteBackup = (name) =>
+  request.delete(`/api/admin/v1/backups/${encodeURIComponent(name)}`)
+
 export const adminListContests = (params) => request.get('/api/admin/v1/contests', { params })
 export const adminGetContest = (id) => request.get(`/api/admin/v1/contests/${id}`)
 export const adminCreateContest = (data) => request.post('/api/admin/v1/contests', data)

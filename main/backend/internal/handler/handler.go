@@ -23,6 +23,7 @@ type Handler struct {
 	Settings *service.SettingService
 	Testdata *service.TestdataService
 	Judge    *service.JudgeService
+	Backup   *service.BackupService
 }
 
 func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client, settings *service.SettingService) *Handler {
@@ -40,5 +41,6 @@ func New(db *gorm.DB, cfg *config.Config, rdb *redis.Client, settings *service.S
 		Settings: settings,
 		Testdata: service.NewTestdata(db, cfg, settings),
 		Judge:    service.NewJudge(db, cfg, rdb, settings),
+		Backup:   service.NewBackup(db, cfg),
 	}
 }

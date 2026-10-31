@@ -505,7 +505,8 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 				return
 			}
 			var exists int64
-			if err := h.DB.Model(&model.Problem{}).
+			// 已删除的题目仍占用题号，查重要连软删除的记录一起算。
+			if err := h.DB.Unscoped().Model(&model.Problem{}).
 				Where("display_id = ? AND id <> ?", displayID, p.ID).Count(&exists).Error; err != nil {
 				httpx.ServerError(c, "更新题目失败")
 				return
@@ -617,7 +618,7 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID}})
 }
 
-// AdminDeleteProblem 删除题目及其测试数据。
+// AdminDeleteProblem 软删除题目：题目记录与测试点清单保留在库中，测试数据文件与评测节点上的数据都不清理。
 func (h *Handler) AdminDeleteProblem(c *gin.Context) {
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
@@ -628,15 +629,14 @@ func (h *Handler) AdminDeleteProblem(c *gin.Context) {
 		httpx.NotFound(c, "题目不存在")
 		return
 	}
-	if err := h.Testdata.Delete(p.ID); err != nil {
-		httpx.ServerError(c, "删除测试数据失败")
-		return
-	}
 	if err := h.DB.Delete(&model.Problem{}, p.ID).Error; err != nil {
 		httpx.ServerError(c, "删除题目失败")
 		return
 	}
-	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
+	if u := httpx.CurrentUser(c); u != nil {
+		logger.Adminf("管理员 %s 删除题目 %s (id=%d)，测试数据保留 ip=%s", u.Username, p.DisplayID, p.ID, c.ClientIP())
+	}
+	httpx.OK(c, gin.H{"sync_failed": false, "testdata_retained": true})
 }
 
 // problemBankNames 返回题库 id 到名称的映射，用于列表展示归属题库。
@@ -722,7 +722,8 @@ func (h *Handler) allocateProblemDisplayID(bank *model.ProblemBank) (string, err
 			return "", err
 		}
 		var exists int64
-		if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
+		// 已删除题目占用的题号仍算占用，所以查重也用 Unscoped 统计。
+		if err := h.DB.Unscoped().Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
 			return "", err
 		}
 		if exists == 0 {

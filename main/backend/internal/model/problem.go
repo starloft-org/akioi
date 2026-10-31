@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // Sample 是题面样例的一组输入输出。
 type Sample struct {
@@ -41,9 +45,10 @@ type Problem struct {
 	// Access 是访问权限，取值见 ProblemAccess* 常量。
 	Access int `gorm:"not null;default:1" json:"access"`
 	// BankID 归属题库；题号由题库前缀与定长序号生成。
-	BankID    uint      `gorm:"index;not null;default:0" json:"bank_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	BankID    uint           `gorm:"index;not null;default:0" json:"bank_id"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 func (Problem) TableName() string { return "problems" }

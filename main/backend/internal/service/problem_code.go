@@ -39,9 +39,10 @@ func ProblemDisplayIDSeq(displayID, prefix string) (int, bool) {
 }
 
 // NextProblemDisplayID 返回题库内的下一个题号：取现有最大序号加一，空题库从 0 开始。
+// 统计包含已删除的题目，题号删除后不会被再次分配。
 func NextProblemDisplayID(db *gorm.DB, bank *model.ProblemBank) (string, error) {
 	var ids []string
-	if err := db.Model(&model.Problem{}).Where("bank_id = ?", bank.ID).Pluck("display_id", &ids).Error; err != nil {
+	if err := db.Unscoped().Model(&model.Problem{}).Where("bank_id = ?", bank.ID).Pluck("display_id", &ids).Error; err != nil {
 		return "", err
 	}
 	next := 0
