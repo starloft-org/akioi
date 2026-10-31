@@ -47,8 +47,11 @@
             </el-form-item>
           </el-col>
           <el-col :span="24">
-            <el-form-item label="微信回调地址">
-              <el-input v-model="form.wechat_redirect_uri" placeholder="https://example.com/api/v1/auth/wechat/callback" />
+            <el-form-item label="微信授权回调页面">
+              <el-input v-model="form.wechat_redirect_uri" placeholder="https://oj.example.com/login" />
+              <p class="muted settings-note">
+                公众号「网页授权域名」下的前端登录页，授权后微信会带 code 与 state 跳回该地址；PC 端扫码与手机端微信内登录共用此地址。
+              </p>
             </el-form-item>
           </el-col>
         </el-row>
@@ -148,10 +151,10 @@
         <el-row :gutter="24">
           <el-col :xs="24" :md="12">
             <el-form-item label="微信 AppID">
-              <el-input v-model="secrets.wechat_app_id" placeholder="公众号 AppID，留空表示不使用" />
+              <el-input v-model="secrets.wechat_app_id" placeholder="公众号（服务号）AppID，留空表示不使用" />
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :md="12">
+          <el-col :span="24">
             <el-form-item label="微信 AppSecret">
               <el-input
                 v-model="secrets.wechat_app_secret"
@@ -160,22 +163,6 @@
                 :placeholder="secretStatus.wechat_credentials_configured ? '已配置，留空表示不修改' : '未配置'"
               />
               <el-checkbox v-model="clearGroups.wechat" class="clear-box">清除微信配置</el-checkbox>
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-form-item label="开放平台 AppID">
-              <el-input v-model="secrets.wechat_open_app_id" placeholder="PC 扫码登录用，留空表示不支持扫码" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :md="12">
-            <el-form-item label="开放平台 Secret">
-              <el-input
-                v-model="secrets.wechat_open_app_secret"
-                type="password"
-                show-password
-                :placeholder="secretStatus.wechat_open_configured ? '已配置，留空表示不修改' : '未配置'"
-              />
-              <el-checkbox v-model="clearGroups.wechat_open" class="clear-box">清除开放平台配置</el-checkbox>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
@@ -388,11 +375,11 @@ const judgeNodesText = ref('')
 const corsText = ref('')
 // 密钥输入框只承载本次提交的新值，已保存的内容不会回显。
 const secrets = reactive({
-  wechat_app_id: '', wechat_app_secret: '', wechat_open_app_id: '', wechat_open_app_secret: '',
+  wechat_app_id: '', wechat_app_secret: '',
   sms_api_key: '', sms_api_secret: '', smtp_host: '', smtp_port: 465, smtp_username: '',
   smtp_password: '', smtp_from: '', captcha_api_key: '', captcha_api_secret: '', judge_sync_secret: ''
 })
-const clearGroups = reactive({ wechat: false, wechat_open: false, sms: false, smtp: false, captcha: false, judge: false })
+const clearGroups = reactive({ wechat: false, sms: false, smtp: false, captcha: false, judge: false })
 const regenerateJWT = ref(false)
 
 const lines = (value) => value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
@@ -400,7 +387,7 @@ const lines = (value) => value.split(/\r?\n/).map((item) => item.trim()).filter(
 // clearSecretInputs 清空密钥输入框与清除勾选，避免已提交的密钥在表单里残留。
 const clearSecretInputs = () => {
   Object.assign(secrets, {
-    wechat_app_secret: '', wechat_open_app_secret: '', sms_api_key: '', sms_api_secret: '',
+    wechat_app_secret: '', sms_api_key: '', sms_api_secret: '',
     smtp_password: '', captcha_api_key: '', captcha_api_secret: '', judge_sync_secret: ''
   })
   Object.keys(clearGroups).forEach((key) => { clearGroups[key] = false })
@@ -428,7 +415,6 @@ const applyData = (data) => {
   const view = data.secret_view || {}
   Object.assign(secrets, {
     wechat_app_id: view.wechat_app_id || '',
-    wechat_open_app_id: view.wechat_open_app_id || '',
     smtp_host: view.smtp_host || '',
     smtp_port: view.smtp_port || 465,
     smtp_username: view.smtp_username || '',

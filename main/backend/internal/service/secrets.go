@@ -20,10 +20,8 @@ const secretSettingsKey = "secrets"
 type Secrets struct {
 	JWTSecret string `json:"jwt_secret"`
 
-	WeChatAppID         string `json:"wechat_app_id"`
-	WeChatAppSecret     string `json:"wechat_app_secret"`
-	WeChatOpenAppID     string `json:"wechat_open_app_id"`
-	WeChatOpenAppSecret string `json:"wechat_open_app_secret"`
+	WeChatAppID     string `json:"wechat_app_id"`
+	WeChatAppSecret string `json:"wechat_app_secret"`
 
 	SMSAPIKey    string `json:"sms_api_key"`
 	SMSAPISecret string `json:"sms_api_secret"`
@@ -42,32 +40,29 @@ type Secrets struct {
 
 // SecretsView 是管理后台可回填的非敏感字段；密钥本身只返回是否已配置。
 type SecretsView struct {
-	WeChatAppID     string `json:"wechat_app_id"`
-	WeChatOpenAppID string `json:"wechat_open_app_id"`
-	SMTPHost        string `json:"smtp_host"`
-	SMTPPort        int    `json:"smtp_port"`
-	SMTPUsername    string `json:"smtp_username"`
-	SMTPFrom        string `json:"smtp_from"`
+	WeChatAppID  string `json:"wechat_app_id"`
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPUsername string `json:"smtp_username"`
+	SMTPFrom     string `json:"smtp_from"`
 }
 
 // SecretsPatch 是管理后台提交的增量修改：密钥字段留空表示保持不变，Clear 中的分组会被清空。
 type SecretsPatch struct {
-	WeChatAppID         string   `json:"wechat_app_id"`
-	WeChatAppSecret     string   `json:"wechat_app_secret"`
-	WeChatOpenAppID     string   `json:"wechat_open_app_id"`
-	WeChatOpenAppSecret string   `json:"wechat_open_app_secret"`
-	SMSAPIKey           string   `json:"sms_api_key"`
-	SMSAPISecret        string   `json:"sms_api_secret"`
-	SMTPHost            string   `json:"smtp_host"`
-	SMTPPort            int      `json:"smtp_port"`
-	SMTPUsername        string   `json:"smtp_username"`
-	SMTPPassword        string   `json:"smtp_password"`
-	SMTPFrom            string   `json:"smtp_from"`
-	CaptchaAPIKey       string   `json:"captcha_api_key"`
-	CaptchaAPISecret    string   `json:"captcha_api_secret"`
-	JudgeSyncSecret     string   `json:"judge_sync_secret"`
-	Clear               []string `json:"clear"`
-	RegenerateJWT       bool     `json:"regenerate_jwt"`
+	WeChatAppID      string   `json:"wechat_app_id"`
+	WeChatAppSecret  string   `json:"wechat_app_secret"`
+	SMSAPIKey        string   `json:"sms_api_key"`
+	SMSAPISecret     string   `json:"sms_api_secret"`
+	SMTPHost         string   `json:"smtp_host"`
+	SMTPPort         int      `json:"smtp_port"`
+	SMTPUsername     string   `json:"smtp_username"`
+	SMTPPassword     string   `json:"smtp_password"`
+	SMTPFrom         string   `json:"smtp_from"`
+	CaptchaAPIKey    string   `json:"captcha_api_key"`
+	CaptchaAPISecret string   `json:"captcha_api_secret"`
+	JudgeSyncSecret  string   `json:"judge_sync_secret"`
+	Clear            []string `json:"clear"`
+	RegenerateJWT    bool     `json:"regenerate_jwt"`
 }
 
 // Normalized 去掉首尾空白并补齐端口默认值。
@@ -75,8 +70,6 @@ func (s Secrets) Normalized() Secrets {
 	s.JWTSecret = strings.TrimSpace(s.JWTSecret)
 	s.WeChatAppID = strings.TrimSpace(s.WeChatAppID)
 	s.WeChatAppSecret = strings.TrimSpace(s.WeChatAppSecret)
-	s.WeChatOpenAppID = strings.TrimSpace(s.WeChatOpenAppID)
-	s.WeChatOpenAppSecret = strings.TrimSpace(s.WeChatOpenAppSecret)
 	s.SMSAPIKey = strings.TrimSpace(s.SMSAPIKey)
 	s.SMSAPISecret = strings.TrimSpace(s.SMSAPISecret)
 	s.SMTPHost = strings.TrimSpace(s.SMTPHost)
@@ -95,12 +88,11 @@ func (s Secrets) Normalized() Secrets {
 // View 返回可以在后台回填的非敏感字段。
 func (s Secrets) View() SecretsView {
 	return SecretsView{
-		WeChatAppID:     s.WeChatAppID,
-		WeChatOpenAppID: s.WeChatOpenAppID,
-		SMTPHost:        s.SMTPHost,
-		SMTPPort:        s.SMTPPort,
-		SMTPUsername:    s.SMTPUsername,
-		SMTPFrom:        s.SMTPFrom,
+		WeChatAppID:  s.WeChatAppID,
+		SMTPHost:     s.SMTPHost,
+		SMTPPort:     s.SMTPPort,
+		SMTPUsername: s.SMTPUsername,
+		SMTPFrom:     s.SMTPFrom,
 	}
 }
 
@@ -109,7 +101,6 @@ func (s Secrets) Status() map[string]bool {
 	return map[string]bool{
 		"jwt_secret_configured":          s.JWTSecret != "",
 		"wechat_credentials_configured":  s.WeChatAppID != "" && s.WeChatAppSecret != "",
-		"wechat_open_configured":         s.WeChatOpenAppID != "" && s.WeChatOpenAppSecret != "",
 		"sms_credentials_configured":     s.SMSAPIKey != "" && s.SMSAPISecret != "",
 		"smtp_credentials_configured":    s.SMTPHost != "" && s.SMTPFrom != "" && s.SMTPPassword != "",
 		"captcha_credentials_configured": s.CaptchaAPIKey != "" || s.SMSAPIKey != "",
@@ -122,7 +113,6 @@ func (s Secrets) Merge(patch SecretsPatch) (Secrets, error) {
 	next := s.Normalized()
 	// 非敏感字段允许清空，因此总是按提交值覆盖。
 	next.WeChatAppID = strings.TrimSpace(patch.WeChatAppID)
-	next.WeChatOpenAppID = strings.TrimSpace(patch.WeChatOpenAppID)
 	next.SMTPHost = strings.TrimSpace(patch.SMTPHost)
 	next.SMTPUsername = strings.TrimSpace(patch.SMTPUsername)
 	next.SMTPFrom = strings.TrimSpace(patch.SMTPFrom)
@@ -135,7 +125,6 @@ func (s Secrets) Merge(patch SecretsPatch) (Secrets, error) {
 		return current
 	}
 	next.WeChatAppSecret = keepOrReplace(next.WeChatAppSecret, patch.WeChatAppSecret)
-	next.WeChatOpenAppSecret = keepOrReplace(next.WeChatOpenAppSecret, patch.WeChatOpenAppSecret)
 	next.SMSAPIKey = keepOrReplace(next.SMSAPIKey, patch.SMSAPIKey)
 	next.SMSAPISecret = keepOrReplace(next.SMSAPISecret, patch.SMSAPISecret)
 	next.SMTPPassword = keepOrReplace(next.SMTPPassword, patch.SMTPPassword)
@@ -149,8 +138,6 @@ func (s Secrets) Merge(patch SecretsPatch) (Secrets, error) {
 			continue
 		case "wechat":
 			next.WeChatAppID, next.WeChatAppSecret = "", ""
-		case "wechat_open":
-			next.WeChatOpenAppID, next.WeChatOpenAppSecret = "", ""
 		case "sms":
 			next.SMSAPIKey, next.SMSAPISecret = "", ""
 		case "smtp":
@@ -200,21 +187,19 @@ func secretsFromEnvironment() Secrets {
 	value := func(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 	port, _ := strconv.Atoi(value("SMTP_PORT"))
 	return Secrets{
-		JWTSecret:           value("JWT_SECRET"),
-		WeChatAppID:         value("WECHAT_APPID"),
-		WeChatAppSecret:     value("WECHAT_APPSECRET"),
-		WeChatOpenAppID:     value("WECHAT_OPEN_APPID"),
-		WeChatOpenAppSecret: value("WECHAT_OPEN_APPSECRET"),
-		SMSAPIKey:           value("SMS_API_KEY"),
-		SMSAPISecret:        value("SMS_API_SECRET"),
-		SMTPHost:            value("SMTP_HOST"),
-		SMTPPort:            port,
-		SMTPUsername:        value("SMTP_USERNAME"),
-		SMTPPassword:        value("SMTP_PASSWORD"),
-		SMTPFrom:            value("SMTP_FROM"),
-		CaptchaAPIKey:       value("CAPTCHA_API_KEY"),
-		CaptchaAPISecret:    value("CAPTCHA_API_SECRET"),
-		JudgeSyncSecret:     value("JUDGE_SYNC_SECRET"),
+		JWTSecret:        value("JWT_SECRET"),
+		WeChatAppID:      value("WECHAT_APPID"),
+		WeChatAppSecret:  value("WECHAT_APPSECRET"),
+		SMSAPIKey:        value("SMS_API_KEY"),
+		SMSAPISecret:     value("SMS_API_SECRET"),
+		SMTPHost:         value("SMTP_HOST"),
+		SMTPPort:         port,
+		SMTPUsername:     value("SMTP_USERNAME"),
+		SMTPPassword:     value("SMTP_PASSWORD"),
+		SMTPFrom:         value("SMTP_FROM"),
+		CaptchaAPIKey:    value("CAPTCHA_API_KEY"),
+		CaptchaAPISecret: value("CAPTCHA_API_SECRET"),
+		JudgeSyncSecret:  value("JUDGE_SYNC_SECRET"),
 	}.Normalized()
 }
 

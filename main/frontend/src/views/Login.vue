@@ -3,50 +3,57 @@
     <div class="auth-card">
       <div class="auth-brand">{{ store.site.app_name }}</div>
       <div class="auth-sub">信息学奥赛在线评测系统</div>
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
-        <el-form-item prop="account">
-          <el-input
-            v-model="form.account"
-            size="large"
-            placeholder="手机号或用户名"
-            :prefix-icon="UserIcon"
-            clearable
-            @keyup.enter="handleLogin"
-          />
-        </el-form-item>
-        <el-form-item prop="password">
-          <el-input
-            v-model="form.password"
-            size="large"
-            type="password"
-            show-password
-            placeholder="请输入密码"
-            :prefix-icon="LockIcon"
-            @keyup.enter="handleLogin"
-          />
-        </el-form-item>
-        <el-button type="primary" size="large" class="auth-submit" :loading="loading" @click="handleLogin">
-          登录
-        </el-button>
-      </el-form>
-      <div class="auth-links">
-        <template v-if="store.site.register_enabled">
-          <span class="muted">还没有账号？</span>
-          <el-link type="primary" :underline="false" @click="router.push('/register')">注册账号</el-link>
-        </template>
-        <el-link type="primary" :underline="false" @click="router.push('/forgot-password')">忘记密码</el-link>
+      <div v-if="scanDone" class="auth-scan-done">
+        <div class="auth-scan-done__icon">✓</div>
+        <p class="auth-scan-done__title">已完成微信授权</p>
+        <p class="muted">请回到电脑上的页面继续操作，本页可直接关闭。</p>
       </div>
-      <div v-if="store.site.wechat_enabled" class="wechat-login">
-        <div class="wechat-divider"><span>其他登录方式</span></div>
-        <el-button class="wechat-btn" size="large" @click="handleWechat">
-          <svg class="wechat-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <path d="M8.7 3C4.6 3 1.3 5.8 1.3 9.2c0 1.9 1.1 3.6 2.8 4.8l-.7 2.1 2.4-1.2c.9.3 1.9.4 2.9.4h.4a5.6 5.6 0 0 1-.2-1.5c0-3.2 3.1-5.8 6.9-5.8h.6C15.7 5.2 12.5 3 8.7 3Zm-2.4 3.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm4.8 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
-            <path d="M22.7 14.1c0-2.8-2.8-5.1-6.2-5.1s-6.2 2.3-6.2 5.1 2.8 5.1 6.2 5.1c.8 0 1.5-.1 2.2-.3l1.9 1-.5-1.7c1.6-.9 2.6-2.4 2.6-4.1Zm-8.2-1.5a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Zm4 0a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Z" />
-          </svg>
-          {{ wechatLabel }}
-        </el-button>
-      </div>
-      <WechatQrDialog ref="wechatDialog" purpose="login" @login="onWechatLogin" />
+      <template v-else>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @submit.prevent>
+          <el-form-item prop="account">
+            <el-input
+              v-model="form.account"
+              size="large"
+              placeholder="手机号或用户名"
+              :prefix-icon="UserIcon"
+              clearable
+              @keyup.enter="handleLogin"
+            />
+          </el-form-item>
+          <el-form-item prop="password">
+            <el-input
+              v-model="form.password"
+              size="large"
+              type="password"
+              show-password
+              placeholder="请输入密码"
+              :prefix-icon="LockIcon"
+              @keyup.enter="handleLogin"
+            />
+          </el-form-item>
+          <el-button type="primary" size="large" class="auth-submit" :loading="loading" @click="handleLogin">
+            登录
+          </el-button>
+        </el-form>
+        <div class="auth-links">
+          <template v-if="store.site.register_enabled">
+            <span class="muted">还没有账号？</span>
+            <el-link type="primary" :underline="false" @click="router.push('/register')">注册账号</el-link>
+          </template>
+          <el-link type="primary" :underline="false" @click="router.push('/forgot-password')">忘记密码</el-link>
+        </div>
+        <div v-if="store.site.wechat_enabled" class="wechat-login">
+          <div class="wechat-divider"><span>其他登录方式</span></div>
+          <el-button class="wechat-btn" size="large" @click="handleWechat">
+            <svg class="wechat-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path d="M8.7 3C4.6 3 1.3 5.8 1.3 9.2c0 1.9 1.1 3.6 2.8 4.8l-.7 2.1 2.4-1.2c.9.3 1.9.4 2.9.4h.4a5.6 5.6 0 0 1-.2-1.5c0-3.2 3.1-5.8 6.9-5.8h.6C15.7 5.2 12.5 3 8.7 3Zm-2.4 3.4a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Zm4.8 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
+              <path d="M22.7 14.1c0-2.8-2.8-5.1-6.2-5.1s-6.2 2.3-6.2 5.1 2.8 5.1 6.2 5.1c.8 0 1.5-.1 2.2-.3l1.9 1-.5-1.7c1.6-.9 2.6-2.4 2.6-4.1Zm-8.2-1.5a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Zm4 0a.8.8 0 1 1 0 1.5.8.8 0 0 1 0-1.5Z" />
+            </svg>
+            {{ wechatLabel }}
+          </el-button>
+        </div>
+        <WechatQrDialog ref="wechatDialog" purpose="login" @login="onWechatLogin" />
+      </template>
     </div>
   </div>
 </template>
@@ -72,6 +79,7 @@ const route = useRoute()
 const formRef = ref(null)
 const loading = ref(false)
 const wechatDialog = ref(null)
+const scanDone = ref(false)
 const form = reactive({ account: '', password: '' })
 
 // 公众号授权只能微信内置浏览器打开，其余环境走二维码
@@ -83,10 +91,15 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
-// 微信回调携带 code 与 state：登录流程换 token，绑定流程只确认绑定结果
+// 微信回调携带 code 与 state：登录流程换 token，绑定流程只确认绑定结果。
+// from=pc 表示二维码扫码发起，授权结果由 PC 端轮询取走，手机端只提示回电脑继续。
 const handleWechatCallback = async () => {
   try {
     const data = await wechatCallback({ code: route.query.code, state: route.query.state })
+    if (data?.from === 'pc') {
+      scanDone.value = true
+      return
+    }
     if (data?.bound) {
       ElMessage.success('微信绑定成功')
       await store.loadMe()
@@ -210,6 +223,34 @@ onMounted(() => {
 
 .auth-submit {
   width: 100%;
+}
+
+/* 扫码授权完成后，手机端只提示回电脑继续 */
+.auth-scan-done {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.auth-scan-done__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  line-height: 56px;
+  font-size: 28px;
+  color: #fff;
+  background: #07c160;
+  border-radius: 50%;
+}
+
+.auth-scan-done__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.auth-scan-done p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .auth-links {

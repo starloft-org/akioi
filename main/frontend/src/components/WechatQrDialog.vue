@@ -18,13 +18,13 @@
       </div>
       <p class="qr-tip">
         <template v-if="purpose === 'bind'">
-          请用微信「扫一扫」扫描二维码，扫码授权后即完成绑定。
+          打开手机微信「扫一扫」扫描二维码，在微信内点「允许」后完成绑定。
         </template>
         <template v-else>
-          请用微信「扫一扫」扫描二维码，在手机上确认授权后，本页面将自动登录。
+          打开手机微信「扫一扫」扫描二维码，在微信内点「允许」后，本页面会自动登录。
         </template>
       </p>
-      <p v-if="!loading && !error" class="qr-status">等待扫码…</p>
+      <p v-if="!loading && !error" class="qr-status">等待扫码…二维码 5 分钟内有效</p>
     </div>
   </el-dialog>
 </template>

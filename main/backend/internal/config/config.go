@@ -13,12 +13,9 @@ import (
 const DBName = "akioi"
 
 type WeChatConfig struct {
-	// 公众号：微信内置浏览器的网页授权（snsapi_userinfo）
+	// 公众号网页授权（snsapi_userinfo）：PC 端展示自绘二维码，手机扫码后在微信内完成授权
 	AppID     string
 	AppSecret string
-	// 开放平台网站应用：PC 扫码登录（snsapi_login），未配置时不提供扫码登录
-	OpenAppID     string
-	OpenAppSecret string
 }
 
 // SMSConfig 仅保存 StarLoft 的密钥；可热更新的业务参数保存在数据库中。
@@ -104,10 +101,8 @@ func Load() (*Config, error) {
 		JWTSecret: getEnv("JWT_SECRET", ""),
 
 		WeChat: WeChatConfig{
-			AppID:         getEnv("WECHAT_APPID", ""),
-			AppSecret:     getEnv("WECHAT_APPSECRET", ""),
-			OpenAppID:     getEnv("WECHAT_OPEN_APPID", ""),
-			OpenAppSecret: getEnv("WECHAT_OPEN_APPSECRET", ""),
+			AppID:     getEnv("WECHAT_APPID", ""),
+			AppSecret: getEnv("WECHAT_APPSECRET", ""),
 		},
 		SMS: SMSConfig{
 			APIKey:    getEnv("SMS_API_KEY", ""),

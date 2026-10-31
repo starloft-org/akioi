@@ -40,7 +40,7 @@ cd /akioi && git pull --ff-only && bash main/scripts/init-env.sh
 - 站点与登录：站点名、主题色、登录有效期、注册开关、评论开关
 - 人机验证码、邮件、短信的启用开关与模板
 - 访问与上传限制、评测节点地址与同步超时
-- 「密钥与集成」面板：微信 AppID/AppSecret、开放平台 AppID/AppSecret、短信 API Key/Secret、SMTP 服务器与账号、验证码 API Key/Secret、评测节点同步密钥、登录密钥
+- 「密钥与集成」面板：公众号 AppID/AppSecret、短信 API Key/Secret、SMTP 服务器与账号、验证码 API Key/Secret、评测节点同步密钥、登录密钥
 
 密钥类字段保存后不会回显，输入框留空表示保持原值；需要更换就填入新值，需要清空就勾选下面对应的「清除」。
 

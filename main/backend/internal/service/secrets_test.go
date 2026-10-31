@@ -126,7 +126,6 @@ func TestSecretsStatus(t *testing.T) {
 	cases := map[string]bool{
 		"jwt_secret_configured":          true,
 		"wechat_credentials_configured":  true,
-		"wechat_open_configured":         false,
 		"sms_credentials_configured":     false,
 		"smtp_credentials_configured":    true,
 		"captcha_credentials_configured": true,
