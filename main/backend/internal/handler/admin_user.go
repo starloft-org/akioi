@@ -25,6 +25,15 @@ type adminUserItem struct {
 	CreatedAt       time.Time  `json:"created_at"`
 	LastLoginAt     *time.Time `json:"last_login_at"`
 	SubmissionCount int64      `json:"submission_count"`
+	Permissions     []string   `json:"permissions"`
+}
+
+// permissionsOf 返回管理员账号的权限键，普通用户返回空列表。
+func permissionsOf(u *model.User) []string {
+	if !u.IsAdmin() {
+		return []string{}
+	}
+	return u.Permissions()
 }
 
 // AdminListUsers 返回用户列表，支持关键字与角色筛选。
@@ -87,6 +96,7 @@ func (h *Handler) AdminListUsers(c *gin.Context) {
 			CreatedAt:       u.CreatedAt,
 			LastLoginAt:     u.LastLoginAt,
 			SubmissionCount: counts[u.ID],
+			Permissions:     permissionsOf(u),
 		})
 	}
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
@@ -123,7 +133,28 @@ func (h *Handler) AdminUpdateUser(c *gin.Context) {
 			httpx.BadRequest(c, "角色取值非法")
 			return
 		}
+		operator := httpx.CurrentUser(c)
+		if operator == nil || !operator.IsSuperAdmin() {
+			httpx.Forbidden(c, "仅超级管理员可以调整角色")
+			return
+		}
+		if role == model.RoleSuperAdmin {
+			httpx.BadRequest(c, "不能在用户管理中把账号设为超级管理员")
+			return
+		}
+		if u.IsSuperAdmin() {
+			httpx.BadRequest(c, "不能修改超级管理员的角色")
+			return
+		}
+		if u.ID == operator.ID {
+			httpx.BadRequest(c, "不能修改自己的角色")
+			return
+		}
 		updates["role"] = role
+		// 降级为普通用户时清空权限，避免残留权限在下次提权时被意外复用
+		if role == model.RoleUser {
+			updates["admin_permissions"] = ""
+		}
 	}
 	if req.Status != nil {
 		if *req.Status != model.UserStatusActive && *req.Status != model.UserStatusBanned {
@@ -242,10 +273,7 @@ func (h *Handler) AdminImportUsers(c *gin.Context) {
 				continue
 			}
 		}
-		role := cell(4)
-		if !model.ValidRole(role) {
-			role = model.RoleUser
-		}
+		// 批量导入只创建普通用户，管理员账号统一在管理员管理中新建并分配权限
 		nickname := cell(2)
 		if nickname == "" {
 			nickname = username
@@ -255,7 +283,7 @@ func (h *Handler) AdminImportUsers(c *gin.Context) {
 			PasswordHash: hash,
 			Nickname:     nickname,
 			Phone:        model.PhonePointer(phone),
-			Role:         role,
+			Role:         model.RoleUser,
 			Status:       model.UserStatusActive,
 		}
 		if err := h.DB.Create(&u).Error; err != nil {

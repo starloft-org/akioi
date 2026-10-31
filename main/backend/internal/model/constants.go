@@ -1,14 +1,16 @@
 package model
 
 // 用户角色
+// 超级管理员可以管理管理员并分配权限，管理员按权限项访问后台模块。
 const (
-	RoleAdmin = "admin"
-	RoleUser  = "user"
+	RoleSuperAdmin = "superadmin"
+	RoleAdmin      = "admin"
+	RoleUser       = "user"
 )
 
 // ValidRole 判断角色是否为系统当前支持的角色。
 func ValidRole(role string) bool {
-	return role == RoleAdmin || role == RoleUser
+	return role == RoleSuperAdmin || role == RoleAdmin || role == RoleUser
 }
 
 // 用户状态

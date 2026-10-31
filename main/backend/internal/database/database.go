@@ -1,7 +1,9 @@
 package database
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"akioi/internal/config"
@@ -77,14 +79,17 @@ func AutoMigrate(db *gorm.DB) error {
 	return db.Model(&model.User{}).Where("role = ?", "setter").Update("role", model.RoleUser).Error
 }
 
-// Seed 幂等写入初始数据：仅在没有任何管理员时创建默认管理员。
+// Seed 幂等写入初始数据：确保存在超级管理员，并为存量管理员补齐默认权限。
 func Seed(db *gorm.DB, cfg *config.Config) error {
+	if err := ensureSuperAdmin(db); err != nil {
+		return err
+	}
 	var count int64
-	if err := db.Model(&model.User{}).Where("role = ?", model.RoleAdmin).Count(&count).Error; err != nil {
+	if err := db.Model(&model.User{}).Where("role IN ?", []string{model.RoleAdmin, model.RoleSuperAdmin}).Count(&count).Error; err != nil {
 		return err
 	}
 	if count > 0 {
-		return nil
+		return backfillAdminPermissions(db)
 	}
 	username := getEnvDefault("ADMIN_INIT_USERNAME", "admin")
 	password := config.EnvOr("ADMIN_INIT_PASSWORD", "")
@@ -99,14 +104,48 @@ func Seed(db *gorm.DB, cfg *config.Config) error {
 		Username:     username,
 		PasswordHash: string(hash),
 		Nickname:     "管理员",
-		Role:         model.RoleAdmin,
+		Role:         model.RoleSuperAdmin,
 		Status:       model.UserStatusActive,
 	}
+	admin.SetPermissions(model.AllAdminPermissions())
 	if err := db.Create(&admin).Error; err != nil {
 		return err
 	}
-	logger.Businessf("已创建默认管理员 username=%s，请登录后立即修改密码", username)
+	logger.Businessf("已创建默认超级管理员 username=%s，请登录后立即修改密码", username)
 	return nil
+}
+
+// ensureSuperAdmin 在没有超级管理员时把最早的管理员提升一级，
+// 避免升级后出现无人可以管理管理员的状态。
+func ensureSuperAdmin(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&model.User{}).Where("role = ?", model.RoleSuperAdmin).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	var first model.User
+	err := db.Where("role = ?", model.RoleAdmin).Order("id asc").First(&first).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := db.Model(&model.User{}).Where("id = ?", first.ID).Update("role", model.RoleSuperAdmin).Error; err != nil {
+		return err
+	}
+	logger.Businessf("已将管理员 username=%s 提升为超级管理员", first.Username)
+	return nil
+}
+
+// backfillAdminPermissions 为升级前就存在的管理员补齐全部权限，
+// 保证引入权限划分后原有管理员的行为不变。
+func backfillAdminPermissions(db *gorm.DB) error {
+	return db.Model(&model.User{}).
+		Where("role = ? AND admin_permissions = ?", model.RoleAdmin, "").
+		Update("admin_permissions", strings.Join(model.AllAdminPermissions(), ",")).Error
 }
 
 func getEnvDefault(key, def string) string {

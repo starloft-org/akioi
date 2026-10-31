@@ -24,11 +24,31 @@
       <el-table-column prop="username" label="用户名" min-width="120" />
       <el-table-column prop="nickname" label="昵称" min-width="120" />
       <el-table-column prop="phone" label="手机号" min-width="140" />
-      <el-table-column label="角色" width="120">
+      <el-table-column label="角色" width="140">
         <template #default="{ row }">
-          <el-select :model-value="row.role" size="small" @change="(val) => changeRole(row, val)">
+          <el-tag v-if="row.role === 'superadmin'" type="danger">超级管理员</el-tag>
+          <el-select
+            v-else-if="canChangeRole(row)"
+            :model-value="row.role"
+            size="small"
+            @change="(val) => changeRole(row, val)"
+          >
             <el-option v-for="item in ROLE_OPTIONS" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
+          <el-tag v-else-if="row.role === 'admin'" type="warning">管理员</el-tag>
+          <span v-else class="muted">选手</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="权限" min-width="180">
+        <template #default="{ row }">
+          <el-tag v-if="row.role === 'superadmin'" type="danger" size="small">全部权限</el-tag>
+          <template v-else-if="row.role === 'admin'">
+            <el-tag v-for="key in row.permissions || []" :key="key" size="small" class="permission-tag">
+              {{ permissionLabel(key) }}
+            </el-tag>
+            <span v-if="!(row.permissions || []).length" class="muted">未分配权限</span>
+          </template>
+          <span v-else class="muted">—</span>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120">
@@ -77,12 +97,30 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminImportUsers, adminListUsers, adminUpdateUser } from '@/api'
+import { useUserStore } from '@/store/user'
 import { formatTime } from '@/utils/format'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: '管理员' },
   { value: 'user', label: '选手' }
 ]
+
+const PERMISSION_LABELS = {
+  users: '用户管理',
+  problems: '题目管理',
+  problem_banks: '题库管理',
+  contests: '比赛管理',
+  submissions: '评测记录',
+  judges: '测评机管理',
+  announcements: '公告管理',
+  settings: '系统设置',
+  logs: '日志查看'
+}
+
+const permissionLabel = (key) => PERMISSION_LABELS[key] || key
+
+const store = useUserStore()
+const canChangeRole = (row) => store.isSuperAdmin && row.role !== 'superadmin' && row.id !== store.user?.id
 
 const loading = ref(false)
 const importing = ref(false)
@@ -180,3 +218,9 @@ const renameUser = async (row) => {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.permission-tag {
+  margin: 2px 6px 2px 0;
+}
+</style>

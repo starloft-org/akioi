@@ -36,12 +36,43 @@ func OptionalAuth(auth *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// RequireAdmin 要求管理员角色。
+// RequireAdmin 要求管理员角色，超级管理员与管理员都可以通过。
 func RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		u := httpx.CurrentUser(c)
 		if u == nil || !u.IsAdmin() {
 			httpx.Forbidden(c, "需要管理员权限")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireSuperAdmin 要求超级管理员角色，用于管理员管理与权限分配。
+func RequireSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		u := httpx.CurrentUser(c)
+		if u == nil || !u.IsSuperAdmin() {
+			httpx.Forbidden(c, "需要超级管理员权限")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequirePermission 要求管理员拥有指定后台权限项，超级管理员始终通过。
+func RequirePermission(permission string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		u := httpx.CurrentUser(c)
+		if u == nil || !u.IsAdmin() {
+			httpx.Forbidden(c, "需要管理员权限")
+			c.Abort()
+			return
+		}
+		if !u.HasAdminPermission(permission) {
+			httpx.Forbidden(c, "当前管理员未被分配该模块的权限")
 			c.Abort()
 			return
 		}

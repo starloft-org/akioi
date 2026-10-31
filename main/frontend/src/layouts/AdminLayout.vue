@@ -6,19 +6,20 @@
       <el-menu :default-active="activePath" router class="admin-menu" @select="sidebarOpen = false">
         <el-menu-item index="/admin">概览</el-menu-item>
         <el-menu-item-group title="运营">
-          <el-menu-item v-if="store.isAdmin" index="/admin/users">用户管理</el-menu-item>
-          <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('users')" index="/admin/users">用户管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('announcements')" index="/admin/announcements">公告管理</el-menu-item>
         </el-menu-item-group>
         <el-menu-item-group title="内容">
-          <el-menu-item index="/admin/problems">题目管理</el-menu-item>
-          <el-menu-item index="/admin/problem-banks">题库管理</el-menu-item>
-          <el-menu-item index="/admin/contests">比赛管理</el-menu-item>
-          <el-menu-item index="/admin/submissions">评测记录</el-menu-item>
-          <el-menu-item index="/admin/judges">测评机管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('problems')" index="/admin/problems">题目管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('problem_banks')" index="/admin/problem-banks">题库管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('contests')" index="/admin/contests">比赛管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('submissions')" index="/admin/submissions">评测记录</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('judges')" index="/admin/judges">测评机管理</el-menu-item>
         </el-menu-item-group>
         <el-menu-item-group title="系统">
-          <el-menu-item index="/admin/settings">系统设置</el-menu-item>
-          <el-menu-item index="/admin/logs">日志查看</el-menu-item>
+          <el-menu-item v-if="store.isSuperAdmin" index="/admin/admins">管理员管理</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('settings')" index="/admin/settings">系统设置</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('logs')" index="/admin/logs">日志查看</el-menu-item>
         </el-menu-item-group>
       </el-menu>
     </el-aside>

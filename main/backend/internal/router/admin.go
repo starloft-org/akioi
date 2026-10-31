@@ -4,28 +4,41 @@ import (
 	"akioi/internal/config"
 	"akioi/internal/handler"
 	"akioi/internal/middleware"
+	"akioi/internal/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
 // registerAdmin 装配管理后台路由，路由前缀 /api/admin/v1。
+// 除概览外，各模块都要求管理员被分配了对应权限项，超级管理员始终通过。
 func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config.Config) {
 	admin := r.Group("/api/admin/v1", middleware.Auth(h.Auth), middleware.RequireAdmin())
 
 	admin.GET("/stats", h.AdminStats)
-	admin.GET("/logs", h.AdminLogs)
-	admin.GET("/settings", h.AdminGetSettings)
-	admin.PUT("/settings", h.AdminUpdateSettings)
 
-	users := admin.Group("/users")
+	admin.GET("/logs", middleware.RequirePermission(model.AdminPermissionLogs), h.AdminLogs)
+	admin.GET("/settings", middleware.RequirePermission(model.AdminPermissionSettings), h.AdminGetSettings)
+	admin.PUT("/settings", middleware.RequirePermission(model.AdminPermissionSettings), h.AdminUpdateSettings)
+
+	// 用户列表对全部管理员开放，供题目归属等选择器使用；修改与导入需要用户管理权限。
+	admin.GET("/users", h.AdminListUsers)
+	users := admin.Group("/users", middleware.RequirePermission(model.AdminPermissionUsers))
 	{
-		users.GET("", h.AdminListUsers)
 		users.PUT("/:id", h.AdminUpdateUser)
 		users.POST("/import", h.AdminImportUsers)
 	}
 
-	problems := admin.Group("/problems")
+	// 管理员管理与权限分配只对超级管理员开放。
+	admins := admin.Group("/admins", middleware.RequireSuperAdmin())
+	{
+		admins.GET("", h.AdminListAdmins)
+		admins.POST("", h.AdminCreateAdmin)
+		admins.PUT("/:id", h.AdminUpdateAdmin)
+		admins.DELETE("/:id", h.AdminDeleteAdmin)
+	}
+
+	problems := admin.Group("/problems", middleware.RequirePermission(model.AdminPermissionProblems))
 	{
 		problems.GET("", h.AdminListProblems)
 		problems.POST("", h.AdminCreateProblem)
@@ -40,7 +53,7 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
 	}
 
-	banks := admin.Group("/problem-banks")
+	banks := admin.Group("/problem-banks", middleware.RequirePermission(model.AdminPermissionProblemBanks))
 	{
 		banks.GET("", h.AdminListProblemBanks)
 		banks.POST("", h.AdminCreateProblemBank)
@@ -48,11 +61,11 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		banks.DELETE("/:id", h.AdminDeleteProblemBank)
 	}
 
-	judges := admin.Group("/judges")
+	judges := admin.Group("/judges", middleware.RequirePermission(model.AdminPermissionJudges))
 	judges.GET("/status", h.AdminJudgeNodes)
 	judges.POST("/sync-all", h.AdminJudgeSyncAll)
 
-	contests := admin.Group("/contests")
+	contests := admin.Group("/contests", middleware.RequirePermission(model.AdminPermissionContests))
 	{
 		contests.GET("", h.AdminListContests)
 		contests.POST("", h.AdminCreateContest)
@@ -62,11 +75,12 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		contests.PUT("/:id/problems", h.AdminSetContestProblems)
 	}
 
-	admin.GET("/submissions", h.AdminListSubmissions)
-	admin.POST("/submissions/:id/rejudge", h.AdminRejudgeSubmission)
-	admin.POST("/rejudge", h.AdminRejudge)
+	submissions := admin.Group("/submissions", middleware.RequirePermission(model.AdminPermissionSubmissions))
+	submissions.GET("", h.AdminListSubmissions)
+	admin.POST("/submissions/:id/rejudge", middleware.RequirePermission(model.AdminPermissionSubmissions), h.AdminRejudgeSubmission)
+	admin.POST("/rejudge", middleware.RequirePermission(model.AdminPermissionSubmissions), h.AdminRejudge)
 
-	announcements := admin.Group("/announcements")
+	announcements := admin.Group("/announcements", middleware.RequirePermission(model.AdminPermissionAnnouncements))
 	{
 		announcements.GET("", h.AdminListAnnouncements)
 		announcements.POST("", h.AdminCreateAnnouncement)

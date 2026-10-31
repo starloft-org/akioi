@@ -16,7 +16,21 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isLogin: (state) => !!state.user,
-    isAdmin: (state) => !!state.user && state.user.role === 'admin'
+    // 超级管理员与管理员都能进入后台，模块可见性由 hasPermission 决定
+    isAdmin: (state) => !!state.user && (state.user.role === 'admin' || state.user.role === 'superadmin'),
+    isSuperAdmin: (state) => !!state.user && state.user.role === 'superadmin',
+    hasPermission: (state) => (key) => {
+      if (!state.user) {
+        return false
+      }
+      if (state.user.role === 'superadmin') {
+        return true
+      }
+      if (state.user.role !== 'admin') {
+        return false
+      }
+      return (state.user.permissions || []).includes(key)
+    }
   },
   actions: {
     setToken(token) {

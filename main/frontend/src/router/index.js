@@ -72,56 +72,96 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/Dashboard.vue') },
-      { path: 'users', name: 'admin-users', component: () => import('@/views/admin/Users.vue') },
-      { path: 'problems', name: 'admin-problems', component: () => import('@/views/admin/Problems.vue') },
+      {
+        path: 'users',
+        name: 'admin-users',
+        meta: { permission: 'users' },
+        component: () => import('@/views/admin/Users.vue')
+      },
+      {
+        path: 'admins',
+        name: 'admin-admins',
+        meta: { superAdmin: true },
+        component: () => import('@/views/admin/Admins.vue')
+      },
+      {
+        path: 'problems',
+        name: 'admin-problems',
+        meta: { permission: 'problems' },
+        component: () => import('@/views/admin/Problems.vue')
+      },
       {
         path: 'problem-banks',
         name: 'admin-problem-banks',
+        meta: { permission: 'problem_banks' },
         component: () => import('@/views/admin/ProblemBanks.vue')
       },
       {
         path: 'problems/new',
         name: 'admin-problem-new',
+        meta: { permission: 'problems' },
         component: () => import('@/views/admin/ProblemEdit.vue')
       },
       {
         path: 'problems/:id/edit',
         name: 'admin-problem-edit',
+        meta: { permission: 'problems' },
         component: () => import('@/views/admin/ProblemEdit.vue')
       },
       {
         path: 'problems/:id/testdata',
         name: 'admin-testdata',
+        meta: { permission: 'problems' },
         component: () => import('@/views/admin/Testdata.vue')
       },
-      { path: 'contests', name: 'admin-contests', component: () => import('@/views/admin/Contests.vue') },
+      {
+        path: 'contests',
+        name: 'admin-contests',
+        meta: { permission: 'contests' },
+        component: () => import('@/views/admin/Contests.vue')
+      },
       {
         path: 'contests/new',
         name: 'admin-contest-new',
+        meta: { permission: 'contests' },
         component: () => import('@/views/admin/ContestEdit.vue')
       },
       {
         path: 'contests/:id/edit',
         name: 'admin-contest-edit',
+        meta: { permission: 'contests' },
         component: () => import('@/views/admin/ContestEdit.vue')
       },
       {
         path: 'submissions',
         name: 'admin-submissions',
+        meta: { permission: 'submissions' },
         component: () => import('@/views/admin/Submissions.vue')
       },
       {
         path: 'judges',
         name: 'admin-judges',
+        meta: { permission: 'judges' },
         component: () => import('@/views/admin/Judges.vue')
       },
       {
         path: 'announcements',
         name: 'admin-announcements',
+        meta: { permission: 'announcements' },
         component: () => import('@/views/admin/Announcements.vue')
       },
-      { path: 'settings', name: 'admin-settings', component: () => import('@/views/admin/Settings.vue') },
-      { path: 'logs', name: 'admin-logs', component: () => import('@/views/admin/Logs.vue') }
+      {
+        path: 'settings',
+        name: 'admin-settings',
+        meta: { permission: 'settings' },
+        component: () => import('@/views/admin/Settings.vue')
+      },
+      {
+        path: 'logs',
+        name: 'admin-logs',
+        meta: { permission: 'logs' },
+        component: () => import('@/views/admin/Logs.vue')
+      }
     ]
   },
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFound.vue') }
@@ -140,6 +180,8 @@ router.beforeEach(async (to) => {
   }
   const needAuth = to.matched.some((r) => r.meta.requiresAuth)
   const needAdmin = to.matched.some((r) => r.meta.requiresAdmin)
+  const needSuperAdmin = to.matched.some((r) => r.meta.superAdmin)
+  const needPermission = to.matched.map((r) => r.meta.permission).find(Boolean)
 
   if (!store.user && store.token) {
     await store.loadMe()
@@ -149,6 +191,12 @@ router.beforeEach(async (to) => {
   }
   if (needAdmin && !store.isAdmin) {
     return { name: 'home' }
+  }
+  if (needSuperAdmin && !store.isSuperAdmin) {
+    return { name: 'admin-dashboard' }
+  }
+  if (needPermission && !store.hasPermission(needPermission)) {
+    return { name: 'admin-dashboard' }
   }
   return true
 })
