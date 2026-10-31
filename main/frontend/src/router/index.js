@@ -51,6 +51,11 @@ const routes = [
       { path: 'users', name: 'admin-users', component: () => import('@/views/admin/Users.vue') },
       { path: 'problems', name: 'admin-problems', component: () => import('@/views/admin/Problems.vue') },
       {
+        path: 'problem-banks',
+        name: 'admin-problem-banks',
+        component: () => import('@/views/admin/ProblemBanks.vue')
+      },
+      {
         path: 'problems/new',
         name: 'admin-problem-new',
         component: () => import('@/views/admin/ProblemEdit.vue')

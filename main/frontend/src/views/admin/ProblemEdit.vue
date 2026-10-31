@@ -13,12 +13,25 @@
 
     <el-form :model="form" label-width="110px">
       <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item label="题库">
+            <el-select v-model="form.bank_id" placeholder="选择题库" style="width: 100%" @change="handleBankChange">
+              <el-option
+                v-for="bank in banks"
+                :key="bank.id"
+                :label="`${bank.name}（${bank.prefix} + ${bank.code_length} 位）`"
+                :value="bank.id"
+              />
+            </el-select>
+            <span v-if="isEdit" class="form-hint">换题库后保存会按新题库重新编号</span>
+          </el-form-item>
+        </el-col>
         <el-col v-if="isEdit" :span="12">
           <el-form-item label="题号">
             <el-input v-model="form.display_id" disabled />
           </el-form-item>
         </el-col>
-        <el-col :span="isEdit ? 12 : 24">
+        <el-col :span="isEdit ? 24 : 12">
           <el-form-item label="标题">
             <el-input v-model="form.title" placeholder="题目名称" />
           </el-form-item>
@@ -154,7 +167,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { adminCreateProblem, adminGetProblem, adminUpdateProblem, listTeams } from '@/api'
+import { adminCreateProblem, adminGetProblem, adminListProblemBanks, adminUpdateProblem, listTeams } from '@/api'
 import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
 
 const route = useRoute()
@@ -168,6 +181,7 @@ const submitting = ref(false)
 
 const form = reactive({
   display_id: '',
+  bank_id: null,
   title: '',
   description: '',
   input_format: '',
@@ -194,12 +208,33 @@ const loadTeams = async () => {
   teams.value = data.items || []
 }
 
+// 题库下拉：题号由题库前缀与题号长度决定，新建题目必须选择题库
+const banks = ref([])
+const loadBanks = async () => {
+  const data = await adminListProblemBanks().catch(() => ({ items: [] }))
+  banks.value = data.items || []
+  // 新建时优先用列表页带过来的题库，其次默认第一个题库；编辑时以题目自身归属为准
+  if (!isEdit.value && !form.bank_id && banks.value.length) {
+    const fromQuery = Number(route.query.bank_id) || 0
+    form.bank_id = banks.value.some((item) => item.id === fromQuery) ? fromQuery : banks.value[0].id
+  }
+}
+
+// 编辑时换题库会触发重新编号，先提示用户
+const handleBankChange = (value) => {
+  const bank = banks.value.find((item) => item.id === value)
+  if (isEdit.value && bank) {
+    ElMessage.warning(`保存后会按题库「${bank.name}」重新分配题号`)
+  }
+}
+
 const loadProblem = async () => {
   loading.value = true
   try {
     const data = await adminGetProblem(problemId.value)
     const p = data.problem || {}
     form.display_id = p.display_id || ''
+    form.bank_id = p.bank_id || null
     form.title = p.title || ''
     form.description = p.description || ''
     form.input_format = p.input_format || ''
@@ -243,9 +278,10 @@ const handleDifficultyChange = (value) => {
   }
 }
 
-// 题号由系统自动分配；编辑时回传原题号，新建时不传
+// 题号由所属题库自动分配；编辑时回传原题号与题库，换题库后后端会重新编号
 const buildPayload = () => ({
   ...(isEdit.value ? { display_id: form.display_id.trim() } : {}),
+  ...(form.bank_id ? { bank_id: form.bank_id } : {}),
   title: form.title.trim(),
   description: form.description,
   input_format: form.input_format,
@@ -274,6 +310,10 @@ const handleSubmit = async () => {
     ElMessage.error('请填写标题')
     return
   }
+  if (!isEdit.value && !form.bank_id) {
+    ElMessage.error('请选择题库')
+    return
+  }
   submitting.value = true
   try {
     if (isEdit.value) {
@@ -300,6 +340,7 @@ const handleSubmit = async () => {
 
 onMounted(() => {
   loadTeams()
+  loadBanks()
   if (isEdit.value) {
     loadProblem()
   }

@@ -23,6 +23,8 @@ import (
 type adminProblemItem struct {
 	ID            uint      `json:"id"`
 	DisplayID     string    `json:"display_id"`
+	BankID        uint      `json:"bank_id"`
+	BankName      string    `json:"bank_name"`
 	Title         string    `json:"title"`
 	Difficulty    string    `json:"difficulty"`
 	Tags          []string  `json:"tags"`
@@ -37,7 +39,7 @@ type adminProblemItem struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// AdminListProblems 返回全部题目，包含隐藏题。
+// AdminListProblems 返回全部题目，包含隐藏题；可用 bank_id 只列某个题库。
 func (h *Handler) AdminListProblems(c *gin.Context) {
 	page, pageSize, offset := httpx.Pagination(c)
 
@@ -45,6 +47,14 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
 		query = query.Where("display_id = ? OR title LIKE ?", kw, like)
+	}
+	if bankID := strings.TrimSpace(c.Query("bank_id")); bankID != "" {
+		id, err := strconv.ParseUint(bankID, 10, 64)
+		if err != nil {
+			httpx.BadRequest(c, "题库参数非法")
+			return
+		}
+		query = query.Where("bank_id = ?", id)
 	}
 
 	var total int64
@@ -58,12 +68,20 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 		return
 	}
 
+	bankNames, err := h.problemBankNames()
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
+
 	items := make([]adminProblemItem, 0, len(problems))
 	for i := range problems {
 		p := &problems[i]
 		items = append(items, adminProblemItem{
 			ID:            p.ID,
 			DisplayID:     p.DisplayID,
+			BankID:        p.BankID,
+			BankName:      bankNames[p.BankID],
 			Title:         p.Title,
 			Difficulty:    p.Difficulty,
 			Tags:          p.Tags(),
@@ -92,7 +110,15 @@ func (h *Handler) AdminGetProblem(c *gin.Context) {
 		httpx.NotFound(c, "题目不存在")
 		return
 	}
-	httpx.OK(c, gin.H{"problem": adminProblemDetail(&p)})
+	bankNames, err := h.problemBankNames()
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
+	detail := adminProblemDetail(&p)
+	detail["bank_id"] = p.BankID
+	detail["bank_name"] = bankNames[p.BankID]
+	httpx.OK(c, gin.H{"problem": detail})
 }
 
 func adminProblemDetail(p *model.Problem) gin.H {
@@ -125,7 +151,9 @@ func adminProblemDetail(p *model.Problem) gin.H {
 }
 
 type adminProblemRequest struct {
-	DisplayID     *string         `json:"display_id"`
+	DisplayID *string `json:"display_id"`
+	// BankID 归属题库；为空时归属默认题库
+	BankID        *uint           `json:"bank_id"`
 	Title         *string         `json:"title"`
 	Description   *string         `json:"description"`
 	InputFormat   *string         `json:"input_format"`
@@ -143,7 +171,7 @@ type adminProblemRequest struct {
 	CompareMode   *string         `json:"compare_mode"`
 	FloatEps      *float64        `json:"float_eps"`
 	// TeamID 归属团队；0 或空表示公共题目
-	TeamID        *uint           `json:"team_id"`
+	TeamID *uint `json:"team_id"`
 }
 
 // AdminCreateProblem 创建题目，题号为空时自动生成。
@@ -218,8 +246,13 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		points = *req.Points
 	}
 
-	// 题号由系统按 A0000 起自动递增分配，不再接受手工指定
-	displayID, err := h.nextProblemDisplayID()
+	// 题号由所属题库按「前缀 + 定长序号」自动分配，不接受手工指定
+	bank, err := h.resolveProblemBank(req.BankID)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	displayID, err := h.allocateProblemDisplayID(bank)
 	if err != nil {
 		httpx.ServerError(c, "生成题号失败")
 		return
@@ -227,6 +260,7 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 
 	p := model.Problem{
 		DisplayID:     displayID,
+		BankID:        bank.ID,
 		Title:         title,
 		TimeLimitMS:   timeLimit,
 		MemoryLimitMB: memoryLimit,
@@ -311,24 +345,56 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 		}
 		updates["title"] = title
 	}
+	// 归属题库：请求未指定时沿用原题库，原题库已不存在时回退默认题库
+	bank, err := h.resolveProblemBank(&p.BankID)
+	if err != nil {
+		bank, err = h.resolveProblemBank(nil)
+	}
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	// 换题库后题号需要按新题库规则重新分配
+	renumber := false
+	if req.BankID != nil && *req.BankID != 0 && *req.BankID != p.BankID {
+		bank, err = h.resolveProblemBank(req.BankID)
+		if err != nil {
+			httpx.BadRequest(c, err.Error())
+			return
+		}
+		updates["bank_id"] = bank.ID
+		renumber = true
+	}
 	if req.DisplayID != nil {
 		displayID := strings.TrimSpace(*req.DisplayID)
 		if displayID == "" {
 			httpx.BadRequest(c, "题号不能为空")
 			return
 		}
-		if !validProblemDisplayID(displayID) {
-			httpx.BadRequest(c, "题号格式应为 A 加至少 4 位数字，例如 A0000")
-			return
+		if displayID != p.DisplayID {
+			if !service.ValidProblemDisplayID(bank, displayID) {
+				httpx.BadRequest(c, fmt.Sprintf("题号应为 %s 加上至少 %d 位数字，例如 %s",
+					bank.Prefix, bank.CodeLength, service.FormatProblemDisplayID(bank, 0)))
+				return
+			}
+			var exists int64
+			if err := h.DB.Model(&model.Problem{}).
+				Where("display_id = ? AND id <> ?", displayID, p.ID).Count(&exists).Error; err != nil {
+				httpx.ServerError(c, "更新题目失败")
+				return
+			}
+			if exists > 0 {
+				httpx.Conflict(c, "题号已存在")
+				return
+			}
+			updates["display_id"] = displayID
+			renumber = false
 		}
-		var exists int64
-		if err := h.DB.Model(&model.Problem{}).
-			Where("display_id = ? AND id <> ?", displayID, p.ID).Count(&exists).Error; err != nil {
-			httpx.ServerError(c, "更新题目失败")
-			return
-		}
-		if exists > 0 {
-			httpx.Conflict(c, "题号已存在")
+	}
+	if renumber {
+		displayID, err := h.allocateProblemDisplayID(bank)
+		if err != nil {
+			httpx.ServerError(c, "生成题号失败")
 			return
 		}
 		updates["display_id"] = displayID
@@ -451,34 +517,50 @@ func (h *Handler) AdminDeleteProblem(c *gin.Context) {
 	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
 }
 
-// nextProblemDisplayID 返回 A 开头的下一个题号：取现有最大编号加一，空库从 A0000 开始。
-func (h *Handler) nextProblemDisplayID() (string, error) {
-	var ids []string
-	if err := h.DB.Model(&model.Problem{}).
-		Where("display_id LIKE 'A%'").
-		Pluck("display_id", &ids).Error; err != nil {
-		return "", err
+// problemBankNames 返回题库 id 到名称的映射，用于列表展示归属题库。
+func (h *Handler) problemBankNames() (map[uint]string, error) {
+	var banks []model.ProblemBank
+	if err := h.DB.Select("id", "name").Find(&banks).Error; err != nil {
+		return nil, err
 	}
-	next := 0
-	for _, id := range ids {
-		if n, err := strconv.Atoi(strings.TrimPrefix(id, "A")); err == nil && n >= next {
-			next = n + 1
-		}
+	names := make(map[uint]string, len(banks))
+	for _, b := range banks {
+		names[b.ID] = b.Name
 	}
-	return fmt.Sprintf("A%04d", next), nil
+	return names, nil
 }
 
-// validProblemDisplayID 校验题号形如 A0000：字母 A 加至少 4 位数字。
-func validProblemDisplayID(id string) bool {
-	if len(id) < 5 || id[0] != 'A' {
-		return false
+// resolveProblemBank 取指定题库；id 为空或 0 时取默认题库（id 最小的题库）。
+func (h *Handler) resolveProblemBank(id *uint) (*model.ProblemBank, error) {
+	var bank model.ProblemBank
+	if id == nil || *id == 0 {
+		if err := h.DB.Order("id asc").First(&bank).Error; err != nil {
+			return nil, fmt.Errorf("尚未创建题库，请先在题库管理中新建题库")
+		}
+		return &bank, nil
 	}
-	for _, c := range id[1:] {
-		if c < '0' || c > '9' {
-			return false
+	if err := h.DB.First(&bank, *id).Error; err != nil {
+		return nil, fmt.Errorf("题库不存在")
+	}
+	return &bank, nil
+}
+
+// allocateProblemDisplayID 生成题库内的下一个题号；并发写入撞号时重试，仍冲突则报错。
+func (h *Handler) allocateProblemDisplayID(bank *model.ProblemBank) (string, error) {
+	for attempt := 0; attempt < 5; attempt++ {
+		displayID, err := service.NextProblemDisplayID(h.DB, bank)
+		if err != nil {
+			return "", err
+		}
+		var exists int64
+		if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
+			return "", err
+		}
+		if exists == 0 {
+			return displayID, nil
 		}
 	}
-	return true
+	return "", fmt.Errorf("题号分配冲突")
 }
 
 type testcaseItem struct {
@@ -524,11 +606,30 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		return
 	}
 
+	// 导入的题目统一归入请求指定的题库，未指定时归入默认题库
+	var bankID *uint
+	if vals := form.Value["bank_id"]; len(vals) > 0 {
+		if raw := strings.TrimSpace(vals[0]); raw != "" {
+			n, err := strconv.ParseUint(raw, 10, 64)
+			if err != nil {
+				httpx.BadRequest(c, "题库参数非法")
+				return
+			}
+			id := uint(n)
+			bankID = &id
+		}
+	}
+	bank, err := h.resolveProblemBank(bankID)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+
 	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
 	items := make([]importItem, 0, len(fileHeaders))
 	successCount := 0
 	for _, fh := range fileHeaders {
-		item := h.importOneProblem(c, fh, u, maxBytes)
+		item := h.importOneProblem(c, fh, u, maxBytes, bank)
 		if item.OK {
 			successCount++
 		}
@@ -552,7 +653,7 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 }
 
 // importOneProblem 导入单个题目包；测试数据失败时回滚已创建的题目。
-func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *model.User, maxBytes int64) importItem {
+func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *model.User, maxBytes int64, bank *model.ProblemBank) importItem {
 	item := importItem{Filename: fh.Filename}
 	if !strings.EqualFold(filepath.Ext(fh.Filename), ".zip") {
 		item.Error = "题目包必须是 zip 文件"
@@ -574,19 +675,10 @@ func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *
 		return item
 	}
 
-	// 题号统一自动分配，忽略导入包中的 display_id
-	displayID, err := h.nextProblemDisplayID()
+	// 题号由所属题库自动分配，忽略导入包中的 display_id
+	displayID, err := h.allocateProblemDisplayID(bank)
 	if err != nil {
 		item.Error = "生成题号失败"
-		return item
-	}
-	var exists int64
-	if err := h.DB.Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
-		item.Error = "导入题目失败"
-		return item
-	}
-	if exists > 0 {
-		item.Error = "题号 " + displayID + " 已存在"
 		return item
 	}
 
@@ -610,6 +702,7 @@ func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *
 
 	p := model.Problem{
 		DisplayID:     displayID,
+		BankID:        bank.ID,
 		Title:         strings.TrimSpace(pkg.Config.Title),
 		Description:   pkg.Description,
 		InputFormat:   pkg.InputFormat,

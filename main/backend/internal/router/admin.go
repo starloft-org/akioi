@@ -33,16 +33,24 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		problems.GET("/:id", h.AdminGetProblem)
 		problems.PUT("/:id", h.AdminUpdateProblem)
 		problems.DELETE("/:id", h.AdminDeleteProblem)
-	problems.GET("/:id/testdata", h.AdminListTestdata)
-	problems.POST("/:id/testdata", h.AdminUploadTestdata)
-	problems.POST("/:id/testdata/sync", h.AdminSyncTestdata)
-	problems.DELETE("/:id/testdata", h.AdminDeleteTestdata)
-	problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
+		problems.GET("/:id/testdata", h.AdminListTestdata)
+		problems.POST("/:id/testdata", h.AdminUploadTestdata)
+		problems.POST("/:id/testdata/sync", h.AdminSyncTestdata)
+		problems.DELETE("/:id/testdata", h.AdminDeleteTestdata)
+		problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
+	}
+
+	banks := admin.Group("/problem-banks")
+	{
+		banks.GET("", h.AdminListProblemBanks)
+		banks.POST("", h.AdminCreateProblemBank)
+		banks.PUT("/:id", h.AdminUpdateProblemBank)
+		banks.DELETE("/:id", h.AdminDeleteProblemBank)
+	}
 
 	judges := admin.Group("/judges")
 	judges.GET("/status", h.AdminJudgeNodes)
 	judges.POST("/sync-all", h.AdminJudgeSyncAll)
-	}
 
 	contests := admin.Group("/contests")
 	{

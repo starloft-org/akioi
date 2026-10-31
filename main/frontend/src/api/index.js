@@ -92,8 +92,19 @@ export const adminImportUsers = (file) => {
 export const adminListProblems = (params) => request.get('/api/admin/v1/problems', { params })
 export const adminGetProblem = (id) => request.get(`/api/admin/v1/problems/${id}`)
 export const adminCreateProblem = (data) => request.post('/api/admin/v1/problems', data)
-export const adminImportProblem = (files) => {
+
+// 题库：题号由题库前缀与题号长度决定，题目归属某个题库
+export const adminListProblemBanks = () => request.get('/api/admin/v1/problem-banks')
+export const adminCreateProblemBank = (data) => request.post('/api/admin/v1/problem-banks', data)
+export const adminUpdateProblemBank = (id, data) => request.put(`/api/admin/v1/problem-banks/${id}`, data)
+export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/problem-banks/${id}`)
+
+export const adminImportProblem = (files, bankId) => {
   const form = new FormData()
+  // 导入的题目统一归入所选题库，未选择时后端归入默认题库
+  if (bankId) {
+    form.append('bank_id', String(bankId))
+  }
   // files 为数组，支持一次导入多个题目包 zip
   for (const file of files) {
     form.append('files', file)

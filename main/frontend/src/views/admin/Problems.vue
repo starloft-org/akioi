@@ -13,8 +13,11 @@
         <el-option label="公开" :value="1" />
         <el-option label="隐藏" :value="2" />
       </el-select>
+      <el-select v-model="bankFilter" placeholder="题库" clearable style="width: 160px" @change="search">
+        <el-option v-for="bank in banks" :key="bank.id" :label="bank.name" :value="bank.id" />
+      </el-select>
       <el-button type="primary" @click="search">查询</el-button>
-      <el-button @click="router.push('/admin/problems/new')">新建题目</el-button>
+      <el-button @click="goCreate">新建题目</el-button>
       <el-button @click="importVisible = true">导入题目</el-button>
       <el-button @click="load">刷新</el-button>
     </div>
@@ -22,6 +25,7 @@
     <el-table v-loading="loading" :data="visibleItems" border>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="display_id" label="题号" width="100" />
+      <el-table-column prop="bank_name" label="题库" width="140" />
       <el-table-column prop="title" label="标题" min-width="180" />
       <el-table-column label="难度" width="140">
         <template #default="{ row }">
@@ -72,6 +76,17 @@
     </div>
 
     <el-dialog v-model="importVisible" title="导入题目" width="640px">
+      <div class="import-bank">
+        <span class="muted">导入到题库</span>
+        <el-select v-model="importBankId" placeholder="默认题库" style="width: 240px">
+          <el-option
+            v-for="bank in banks"
+            :key="bank.id"
+            :label="`${bank.name}（${bank.prefix} + ${bank.code_length} 位）`"
+            :value="bank.id"
+          />
+        </el-select>
+      </div>
       <el-upload
         v-model:file-list="importFiles"
         drag
@@ -100,7 +115,7 @@
 config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
                   / points / tags / source / visibility
 1.in  1.out       测试数据，可以有多组；都不带时只导入题面</pre>
-        <p class="muted">没有 config.json 时，标题取题面的一级标题，题号自动生成。</p>
+        <p class="muted">没有 config.json 时，标题取题面的一级标题；题号由所选题库自动分配，包里不需要写题号。</p>
       </div>
 
       <template #footer>
@@ -117,7 +132,12 @@ config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminDeleteProblem, adminImportProblem, adminListProblems } from '@/api'
+import {
+  adminDeleteProblem,
+  adminImportProblem,
+  adminListProblemBanks,
+  adminListProblems
+} from '@/api'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const router = useRouter()
@@ -128,9 +148,12 @@ const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
 const visibilityFilter = ref('')
+const bankFilter = ref('')
+const banks = ref([])
 const importVisible = ref(false)
 const importing = ref(false)
 const importFiles = ref([])
+const importBankId = ref('')
 const importResults = ref([])
 const resultsSummary = computed(() => {
   const success = importResults.value.filter((item) => item.ok).length
@@ -150,7 +173,8 @@ const load = async () => {
     const data = await adminListProblems({
       page: page.value,
       page_size: pageSize.value,
-      keyword: keyword.value || undefined
+      keyword: keyword.value || undefined,
+      bank_id: bankFilter.value || undefined
     })
     items.value = data.items || []
     total.value = data.total || 0
@@ -162,9 +186,30 @@ const load = async () => {
   }
 }
 
+const loadBanks = async () => {
+  try {
+    const data = await adminListProblemBanks()
+    banks.value = data.items || []
+    // 默认选中默认题库，导入时不会误落到别的题库
+    if (!importBankId.value && banks.value.length) {
+      importBankId.value = banks.value[0].id
+    }
+  } catch (e) {
+    banks.value = []
+  }
+}
+
 const search = () => {
   page.value = 1
   load()
+}
+
+// 新建题目时带上当前筛选的题库，避免建到别的题库里
+const goCreate = () => {
+  router.push({
+    path: '/admin/problems/new',
+    query: bankFilter.value ? { bank_id: bankFilter.value } : {}
+  })
 }
 
 const removeProblem = async (row) => {
@@ -191,7 +236,7 @@ const handleImport = async () => {
   }
   importing.value = true
   try {
-    const data = await adminImportProblem(raws)
+    const data = await adminImportProblem(raws, importBankId.value || undefined)
     importResults.value = data?.items || []
     load()
   } catch (e) {
@@ -207,10 +252,20 @@ const closeImportDialog = () => {
   importResults.value = []
 }
 
-onMounted(load)
+onMounted(() => {
+  loadBanks()
+  load()
+})
 </script>
 
 <style scoped>
+.import-bank {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .import-hint {
   margin-top: 16px;
 }

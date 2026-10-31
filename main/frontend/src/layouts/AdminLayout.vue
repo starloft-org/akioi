@@ -10,6 +10,7 @@
         </el-menu-item-group>
         <el-menu-item-group title="内容">
           <el-menu-item index="/admin/problems">题目管理</el-menu-item>
+          <el-menu-item index="/admin/problem-banks">题库管理</el-menu-item>
           <el-menu-item index="/admin/contests">比赛管理</el-menu-item>
           <el-menu-item index="/admin/submissions">评测记录</el-menu-item>
           <el-menu-item index="/admin/judges">测评机管理</el-menu-item>
