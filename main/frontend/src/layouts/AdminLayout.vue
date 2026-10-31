@@ -1,8 +1,9 @@
 <template>
   <el-container class="admin-shell">
-    <el-aside width="200px" class="admin-aside">
+    <div v-if="sidebarOpen" class="admin-mask" @click="sidebarOpen = false" />
+    <el-aside width="200px" class="admin-aside" :class="{ 'is-open': sidebarOpen }">
       <div class="admin-brand">{{ site.app_name }} 管理后台</div>
-      <el-menu :default-active="activePath" router class="admin-menu">
+      <el-menu :default-active="activePath" router class="admin-menu" @select="sidebarOpen = false">
         <el-menu-item index="/admin">概览</el-menu-item>
         <el-menu-item-group title="运营">
           <el-menu-item v-if="store.isAdmin" index="/admin/users">用户管理</el-menu-item>
@@ -24,8 +25,13 @@
 
     <el-container>
       <el-header class="admin-header">
-        <span class="admin-header__title">{{ pageTitle }}</span>
-        <div>
+        <div class="admin-header__left">
+          <button class="admin-menu-toggle" type="button" aria-label="展开菜单" @click="sidebarOpen = !sidebarOpen">
+            {{ sidebarOpen ? '×' : '☰' }}
+          </button>
+          <span class="admin-header__title">{{ pageTitle }}</span>
+        </div>
+        <div class="admin-header__actions">
           <el-button size="small" text @click="router.push('/')">返回前台</el-button>
           <el-button size="small" text @click="handleLogout">退出</el-button>
         </div>
@@ -38,7 +44,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 
@@ -50,6 +56,16 @@ const site = computed(() => store.site)
 const activePath = computed(() => '/' + route.path.split('/').slice(1, 3).join('/'))
 const pageTitle = computed(() => route.name || '管理后台')
 
+// 窄屏侧栏抽屉的展开状态，切换页面后自动收起
+const sidebarOpen = ref(false)
+
+watch(
+  () => route.fullPath,
+  () => {
+    sidebarOpen.value = false
+  }
+)
+
 const handleLogout = async () => {
   await store.logout()
   router.push('/login')
@@ -57,6 +73,18 @@ const handleLogout = async () => {
 </script>
 
 <style scoped>
+.admin-header__left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.admin-header__actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
 .admin-menu :deep(.el-menu-item-group__title) {
   padding: 14px 20px 4px;
   font-size: 12px;

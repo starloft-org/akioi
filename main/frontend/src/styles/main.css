@@ -382,6 +382,7 @@ a {
 .admin-aside {
   background: #fff;
   border-right: 1px solid var(--akioi-border);
+  overflow-y: auto;
 }
 
 .admin-brand {
@@ -446,4 +447,250 @@ a {
 .code-editor .cm-editor {
   height: 380px;
   font-size: 13px;
+}
+
+/* 移动端适配：窄屏下收起导航、压缩留白，并让表格与表单可操作 */
+.app-nav-toggle,
+.admin-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--akioi-text);
+  font-size: 16px;
+  line-height: 1;
+  background: #fff;
+  border: 1px solid var(--akioi-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.admin-mask {
+  display: none;
+}
+
+/* 窄屏表格与内容统一按容器宽度换行，避免出现横向滚动条 */
+.el-table {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .admin-shell {
+    position: relative;
+  }
+
+  .admin-aside {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2001;
+    width: 220px !important;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 0 8px 24px rgba(29, 33, 41, 0.16);
+  }
+
+  .admin-aside.is-open {
+    transform: none;
+  }
+
+  .admin-mask {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(29, 33, 41, 0.4);
+  }
+
+  .admin-menu-toggle {
+    display: inline-flex;
+    margin-right: 10px;
+  }
+
+  .admin-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+
+  .admin-main {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-header__inner {
+    position: relative;
+    gap: 10px;
+    height: 52px;
+    padding: 0 10px;
+  }
+
+  .app-nav-toggle {
+    display: inline-flex;
+  }
+
+  .app-logo {
+    font-size: 18px;
+  }
+
+  .app-logo__sub {
+    display: none;
+  }
+
+  /* 导航折叠为头部下方的下拉面板 */
+  .app-nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 900;
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 0 8px;
+    background: #fff;
+    border-bottom: 1px solid var(--akioi-border);
+    box-shadow: 0 10px 20px rgba(29, 33, 41, 0.08);
+  }
+
+  .app-nav.is-open {
+    display: flex;
+  }
+
+  .app-nav a {
+    height: 46px;
+    padding: 0 16px;
+    font-size: 15px;
+  }
+
+  .app-nav a.router-link-active::after {
+    display: none;
+  }
+
+  .app-header__right {
+    margin-left: auto;
+  }
+
+  .app-user {
+    max-width: 140px;
+  }
+
+  .app-user__name {
+    max-width: 84px;
+  }
+
+  .app-main {
+    padding: 10px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .app-footer {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* 对话框贴近屏幕边缘，内部留白收紧 */
+  .el-dialog {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px);
+    margin: 6vh auto 0;
+  }
+
+  .el-dialog__header {
+    padding: 14px 14px 6px;
+  }
+
+  .el-dialog__body {
+    padding: 10px 14px;
+    max-height: 68vh;
+    overflow-y: auto;
+  }
+
+  .el-dialog__footer {
+    padding: 6px 14px 14px;
+  }
+
+  .el-message-box {
+    width: calc(100vw - 24px) !important;
+    max-width: 420px;
+  }
+
+  .el-drawer {
+    max-width: 92vw;
+  }
+
+  /* 标签改为上方显示，避免固定标签宽度挤掉输入框 */
+  .el-form-item {
+    display: block;
+  }
+
+  .el-form-item__label {
+    display: block;
+    float: none;
+    width: auto !important;
+    padding: 0 0 4px;
+    text-align: left;
+    line-height: 1.5;
+  }
+
+  .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  /* 工具栏控件按两列排布 */
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar > .el-input,
+  .toolbar > .el-select,
+  .toolbar > .el-date-editor,
+  .toolbar > .el-input-number {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    width: auto !important;
+  }
+
+  .pagination-bar {
+    justify-content: center;
+  }
+
+  .el-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
+  }
+
+  .el-table {
+    font-size: 13px;
+  }
+
+  .el-table .el-table__cell {
+    padding: 7px 0;
+  }
+
+  .code-editor .cm-editor {
+    height: 260px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-card__value {
+    font-size: 20px;
+  }
 }

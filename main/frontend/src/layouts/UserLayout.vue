@@ -2,19 +2,22 @@
   <div class="app-shell">
     <header class="app-header">
       <div class="app-header__inner">
-        <router-link to="/" class="app-logo">
+        <button class="app-nav-toggle" type="button" aria-label="展开导航" @click="navOpen = !navOpen">
+          {{ navOpen ? '×' : '☰' }}
+        </button>
+        <router-link to="/" class="app-logo" @click="navOpen = false">
           {{ site.app_name }}
           <span class="app-logo__sub">在线评测</span>
         </router-link>
-        <nav class="app-nav">
-          <router-link to="/problems">题库</router-link>
-          <router-link to="/contests">比赛</router-link>
-          <router-link to="/teams">团队</router-link>
-          <router-link v-if="store.user" to="/my/problems">我的题目</router-link>
-          <router-link v-if="store.user" to="/problem-sets">题单</router-link>
-          <router-link to="/ranking">排行榜</router-link>
-          <router-link to="/discussions">讨论</router-link>
-          <router-link to="/submissions">评测记录</router-link>
+        <nav class="app-nav" :class="{ 'is-open': navOpen }">
+          <router-link to="/problems" @click="navOpen = false">题库</router-link>
+          <router-link to="/contests" @click="navOpen = false">比赛</router-link>
+          <router-link to="/teams" @click="navOpen = false">团队</router-link>
+          <router-link v-if="store.user" to="/my/problems" @click="navOpen = false">我的题目</router-link>
+          <router-link v-if="store.user" to="/problem-sets" @click="navOpen = false">题单</router-link>
+          <router-link to="/ranking" @click="navOpen = false">排行榜</router-link>
+          <router-link to="/discussions" @click="navOpen = false">讨论</router-link>
+          <router-link to="/submissions" @click="navOpen = false">评测记录</router-link>
         </nav>
         <div class="app-header__right">
           <UserMenu v-if="store.user" />
@@ -39,7 +42,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { useUserStore } from '@/store/user'
@@ -48,6 +51,16 @@ const store = useUserStore()
 const router = useRouter()
 const route = useRoute()
 const site = computed(() => store.site)
+
+// 窄屏折叠导航的展开状态，跳转页面后自动收起
+const navOpen = ref(false)
+
+watch(
+  () => route.fullPath,
+  () => {
+    navOpen.value = false
+  }
+)
 
 onMounted(async () => {
   await store.loadSite()

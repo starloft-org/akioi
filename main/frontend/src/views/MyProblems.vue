@@ -469,4 +469,14 @@ onMounted(() => {
   color: var(--el-text-color-secondary);
   padding-top: 6px;
 }
+
+@media (max-width: 640px) {
+  .sample-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sample-row__index {
+    padding-top: 0;
+  }
+}
 </style>
