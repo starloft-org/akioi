@@ -61,14 +61,14 @@ func (TeamApplication) TableName() string { return "team_applications" }
 
 // TeamProblemSet 是团队内部的训练题单，仅成员可见。
 type TeamProblemSet struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	TeamID       uint      `gorm:"index;not null" json:"team_id"`
-	Title        string    `gorm:"size:128;not null" json:"title"`
-	Description  string    `gorm:"size:255" json:"description"`
-	ProblemIDsJSON string  `gorm:"column:problem_ids;type:text" json:"-"`
-	CreatedBy    uint      `gorm:"index" json:"created_by"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	TeamID         uint      `gorm:"index;not null" json:"team_id"`
+	Title          string    `gorm:"size:128;not null" json:"title"`
+	Description    string    `gorm:"size:255" json:"description"`
+	ProblemIDsJSON string    `gorm:"column:problem_ids;type:text" json:"-"`
+	CreatedBy      uint      `gorm:"index" json:"created_by"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (TeamProblemSet) TableName() string { return "team_problem_sets" }
@@ -81,4 +81,17 @@ func (s *TeamProblemSet) Problems() []uint {
 	var ids []uint
 	_ = json.Unmarshal([]byte(s.ProblemIDsJSON), &ids)
 	return ids
+}
+
+// SetProblems 写入题目 ID 列表。
+func (s *TeamProblemSet) SetProblems(ids []uint) {
+	if ids == nil {
+		ids = []uint{}
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		s.ProblemIDsJSON = "[]"
+		return
+	}
+	s.ProblemIDsJSON = string(b)
 }

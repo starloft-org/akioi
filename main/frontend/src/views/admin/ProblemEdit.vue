@@ -15,7 +15,13 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="题库">
-            <el-select v-model="form.bank_id" placeholder="选择题库" style="width: 100%" @change="handleBankChange">
+            <el-select
+              v-model="form.bank_id"
+              placeholder="选择题库"
+              style="width: 100%"
+              :disabled="form.ownership !== 'public'"
+              @change="handleBankChange"
+            >
               <el-option
                 v-for="bank in banks"
                 :key="bank.id"
@@ -23,7 +29,10 @@
                 :value="bank.id"
               />
             </el-select>
-            <span v-if="isEdit" class="form-hint">换题库后保存会按新题库重新编号</span>
+            <span v-if="form.ownership !== 'public'" class="form-hint">
+              团队题目固定使用 T 题库，个人题目固定使用 P 题库
+            </span>
+            <span v-else-if="isEdit" class="form-hint">换题库后保存会按新题库重新编号</span>
           </el-form-item>
         </el-col>
         <el-col v-if="isEdit" :span="12">
@@ -68,9 +77,37 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
+          <el-form-item label="归属">
+            <el-radio-group v-model="form.ownership" @change="handleOwnershipChange">
+              <el-radio value="public">公共题目</el-radio>
+              <el-radio value="team">团队题目</el-radio>
+              <el-radio value="personal">个人题目</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </el-col>
+        <el-col v-if="form.ownership === 'team'" :span="12">
           <el-form-item label="归属团队">
-            <el-select v-model="form.team_id" clearable placeholder="公共题目（不属于团队）" style="width: 100%">
+            <el-select v-model="form.team_id" placeholder="选择团队" style="width: 100%">
               <el-option v-for="item in teams" :key="item.id" :label="item.name" :value="item.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col v-if="form.ownership === 'personal'" :span="12">
+          <el-form-item label="归属用户">
+            <el-select
+              v-model="form.owner_id"
+              filterable
+              remote
+              :remote-method="searchUsers"
+              placeholder="输入用户名搜索"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="item in users"
+                :key="item.id"
+                :label="`${item.username}（#${item.id}）`"
+                :value="item.id"
+              />
             </el-select>
           </el-form-item>
         </el-col>
@@ -96,6 +133,15 @@
               <el-radio :value="1">公开</el-radio>
               <el-radio :value="2">隐藏</el-radio>
             </el-radio-group>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="访问权限">
+            <el-radio-group v-model="form.access">
+              <el-radio :value="1">公开</el-radio>
+              <el-radio :value="2">{{ form.ownership === 'team' ? '仅团队成员' : '仅自己' }}</el-radio>
+            </el-radio-group>
+            <span v-if="form.ownership === 'public'" class="form-hint">公共题目只能设为公开</span>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -167,7 +213,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { adminCreateProblem, adminGetProblem, adminListProblemBanks, adminUpdateProblem, listTeams } from '@/api'
+import {
+  adminCreateProblem,
+  adminGetProblem,
+  adminListProblemBanks,
+  adminListUsers,
+  adminUpdateProblem,
+  listTeams
+} from '@/api'
 import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
 
 const route = useRoute()
@@ -198,7 +251,10 @@ const form = reactive({
   contest_only: false,
   compare_mode: 'default',
   float_eps: 0.000001,
-  team_id: null
+  team_id: null,
+  owner_id: null,
+  ownership: 'public',
+  access: 1
 })
 
 // 团队下拉：题目可归属某个团队，归团队后仅成员可见
@@ -225,6 +281,32 @@ const handleBankChange = (value) => {
   const bank = banks.value.find((item) => item.id === value)
   if (isEdit.value && bank) {
     ElMessage.warning(`保存后会按题库「${bank.name}」重新分配题号`)
+  }
+}
+
+// 个人题目需要指定归属用户，按用户名远程搜索
+const users = ref([])
+const searchUsers = async (keyword) => {
+  if (!keyword) {
+    users.value = []
+    return
+  }
+  const data = await adminListUsers({ keyword, page: 1, page_size: 20 }).catch(() => ({ items: [] }))
+  users.value = data.items || []
+}
+
+// 切换归属时同步清理不属于该归属的字段，并校正访问权限默认值
+const handleOwnershipChange = (value) => {
+  if (value === 'public') {
+    form.access = 1
+    form.owner_id = null
+    form.team_id = null
+  } else if (value === 'team') {
+    form.owner_id = null
+    form.access = form.access === 1 ? 2 : form.access
+  } else {
+    form.team_id = null
+    form.access = form.access === 1 ? 2 : form.access
   }
 }
 
@@ -256,6 +338,9 @@ const loadProblem = async () => {
     form.compare_mode = p.compare_mode || 'default'
     form.float_eps = p.float_eps ?? 0.000001
     form.team_id = p.team_id || null
+    form.owner_id = p.owner_id || null
+    form.ownership = p.kind === 'team' ? 'team' : p.kind === 'personal' ? 'personal' : 'public'
+    form.access = p.access ?? 1
   } catch (e) {
     // 错误提示已由请求层处理
   } finally {
@@ -302,7 +387,9 @@ const buildPayload = () => ({
   contest_only: form.contest_only,
   compare_mode: form.compare_mode,
   float_eps: form.float_eps,
-  team_id: form.team_id || 0
+  team_id: form.ownership === 'team' ? form.team_id || 0 : 0,
+  owner_id: form.ownership === 'personal' ? form.owner_id || 0 : 0,
+  access: form.access
 })
 
 const handleSubmit = async () => {
@@ -310,7 +397,15 @@ const handleSubmit = async () => {
     ElMessage.error('请填写标题')
     return
   }
-  if (!isEdit.value && !form.bank_id) {
+  if (form.ownership === 'team' && !form.team_id) {
+    ElMessage.error('请选择归属团队')
+    return
+  }
+  if (form.ownership === 'personal' && !form.owner_id) {
+    ElMessage.error('请选择归属用户')
+    return
+  }
+  if (!isEdit.value && !form.bank_id && form.ownership === 'public') {
     ElMessage.error('请选择题库')
     return
   }

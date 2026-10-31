@@ -21,6 +21,30 @@ const routes = [
       { path: 'submissions/:id', name: 'submission-detail', component: () => import('@/views/SubmissionDetail.vue') },
       { path: 'teams', name: 'teams', component: () => import('@/views/TeamList.vue') },
       { path: 'teams/:id', name: 'team-detail', component: () => import('@/views/TeamDetail.vue') },
+      {
+        path: 'my/problems',
+        name: 'my-problems',
+        meta: { requiresAuth: true },
+        component: () => import('@/views/MyProblems.vue')
+      },
+      {
+        path: 'problem-sets',
+        name: 'problem-sets',
+        meta: { requiresAuth: true },
+        component: () => import('@/views/ProblemSets.vue')
+      },
+      {
+        path: 'problem-sets/personal/:id',
+        name: 'problem-set-personal',
+        meta: { requiresAuth: true },
+        component: () => import('@/views/ProblemSetDetail.vue')
+      },
+      {
+        path: 'problem-sets/team/:teamId/:setId',
+        name: 'problem-set-team',
+        meta: { requiresAuth: true },
+        component: () => import('@/views/ProblemSetDetail.vue')
+      },
       { path: 'contests', name: 'contests', component: () => import('@/views/ContestList.vue') },
       { path: 'contests/:id', name: 'contest-detail', component: () => import('@/views/ContestDetail.vue') },
       { path: 'contests/:id/rank', name: 'contest-rank', component: () => import('@/views/ContestRank.vue') },

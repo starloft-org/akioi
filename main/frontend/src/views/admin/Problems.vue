@@ -16,6 +16,11 @@
       <el-select v-model="bankFilter" placeholder="题库" clearable style="width: 160px" @change="search">
         <el-option v-for="bank in banks" :key="bank.id" :label="bank.name" :value="bank.id" />
       </el-select>
+      <el-select v-model="kindFilter" placeholder="归属" clearable style="width: 130px" @change="search">
+        <el-option label="公共题目" value="public" />
+        <el-option label="团队题目" value="team" />
+        <el-option label="个人题目" value="personal" />
+      </el-select>
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="goCreate">新建题目</el-button>
       <el-button @click="importVisible = true">导入题目</el-button>
@@ -26,6 +31,19 @@
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="display_id" label="题号" width="100" />
       <el-table-column prop="bank_name" label="题库" width="140" />
+      <el-table-column label="归属" width="200">
+        <template #default="{ row }">
+          <el-tag size="small" :type="kindTagType(row.kind)">{{ kindText(row.kind) }}</el-tag>
+          <span v-if="row.kind !== 'public'" class="muted" style="margin-left: 6px">{{ ownerText(row) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="访问权限" width="110">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.access === 1 ? 'success' : 'info'">
+            {{ row.access === 1 ? '公开' : '受限' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="title" label="标题" min-width="180" />
       <el-table-column label="难度" width="140">
         <template #default="{ row }">
@@ -149,6 +167,7 @@ const pageSize = ref(20)
 const keyword = ref('')
 const visibilityFilter = ref('')
 const bankFilter = ref('')
+const kindFilter = ref('')
 const banks = ref([])
 const importVisible = ref(false)
 const importing = ref(false)
@@ -174,7 +193,8 @@ const load = async () => {
       page: page.value,
       page_size: pageSize.value,
       keyword: keyword.value || undefined,
-      bank_id: bankFilter.value || undefined
+      bank_id: bankFilter.value || undefined,
+      kind: kindFilter.value || undefined
     })
     items.value = data.items || []
     total.value = data.total || 0
@@ -202,6 +222,23 @@ const loadBanks = async () => {
 const search = () => {
   page.value = 1
   load()
+}
+
+const kindText = (kind) => {
+  if (kind === 'team') return '团队题目'
+  if (kind === 'personal') return '个人题目'
+  return '公共题目'
+}
+
+const kindTagType = (kind) => {
+  if (kind === 'team') return 'warning'
+  if (kind === 'personal') return 'success'
+  return 'info'
+}
+
+const ownerText = (row) => {
+  if (row.kind === 'team') return row.team_name || `团队 #${row.team_id}`
+  return row.owner_name || `用户 #${row.owner_id}`
 }
 
 // 新建题目时带上当前筛选的题库，避免建到别的题库里

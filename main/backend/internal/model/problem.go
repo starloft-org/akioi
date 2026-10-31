@@ -36,6 +36,10 @@ type Problem struct {
 	CreatedBy     uint    `gorm:"index" json:"created_by"`
 	// TeamID 归属团队；0 表示公共题目，团队题目仅该团队成员可见。
 	TeamID uint `gorm:"index;not null;default:0" json:"team_id"`
+	// OwnerID 是个人题目的创建者；0 表示非个人题目。个人题目仅创建者可见。
+	OwnerID uint `gorm:"index;not null;default:0" json:"owner_id"`
+	// Access 是访问权限，取值见 ProblemAccess* 常量。
+	Access int `gorm:"not null;default:1" json:"access"`
 	// BankID 归属题库；题号由题库前缀与定长序号生成。
 	BankID    uint      `gorm:"index;not null;default:0" json:"bank_id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -43,6 +47,24 @@ type Problem struct {
 }
 
 func (Problem) TableName() string { return "problems" }
+
+// IsTeamProblem 判断题目是否为团队题目。
+func (p *Problem) IsTeamProblem() bool { return p.TeamID > 0 }
+
+// IsPersonalProblem 判断题目是否为个人题目。
+func (p *Problem) IsPersonalProblem() bool { return p.TeamID == 0 && p.OwnerID > 0 }
+
+// Kind 返回题目归属类型：team、personal 或 public。
+func (p *Problem) Kind() string {
+	switch {
+	case p.TeamID > 0:
+		return ProblemKindTeam
+	case p.OwnerID > 0:
+		return ProblemKindPersonal
+	default:
+		return ProblemKindPublic
+	}
+}
 
 // Samples 返回题面样例列表。
 func (p *Problem) Samples() []Sample {

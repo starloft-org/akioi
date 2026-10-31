@@ -32,6 +32,12 @@ type adminProblemItem struct {
 	Points        int       `json:"points"`
 	Visibility    int       `json:"visibility"`
 	ContestOnly   bool      `json:"contest_only"`
+	TeamID        uint      `json:"team_id"`
+	TeamName      string    `json:"team_name"`
+	OwnerID       uint      `json:"owner_id"`
+	OwnerName     string    `json:"owner_name"`
+	Access        int       `json:"access"`
+	Kind          string    `json:"kind"`
 	TestcaseCount int       `json:"testcase_count"`
 	TotalScore    int       `json:"total_score"`
 	SubmitCount   int       `json:"submit_count"`
@@ -39,7 +45,8 @@ type adminProblemItem struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-// AdminListProblems 返回全部题目，包含隐藏题；可用 bank_id 只列某个题库。
+// AdminListProblems 返回全部题目，包含隐藏题；可用 bank_id 只列某个题库，
+// 用 kind 过滤公共题目、团队题目或个人题目。
 func (h *Handler) AdminListProblems(c *gin.Context) {
 	page, pageSize, offset := httpx.Pagination(c)
 
@@ -56,6 +63,14 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 		}
 		query = query.Where("bank_id = ?", id)
 	}
+	switch strings.TrimSpace(c.Query("kind")) {
+	case model.ProblemKindPublic:
+		query = query.Where("team_id = 0 AND owner_id = 0")
+	case model.ProblemKindTeam:
+		query = query.Where("team_id > 0")
+	case model.ProblemKindPersonal:
+		query = query.Where("team_id = 0 AND owner_id > 0")
+	}
 
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -69,6 +84,11 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 	}
 
 	bankNames, err := h.problemBankNames()
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
+	teamNames, ownerNames, err := h.problemOwnerNames(problems)
 	if err != nil {
 		httpx.ServerError(c, "查询题目失败")
 		return
@@ -89,6 +109,12 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 			Points:        p.Points,
 			Visibility:    p.Visibility,
 			ContestOnly:   p.ContestOnly,
+			TeamID:        p.TeamID,
+			TeamName:      teamNames[p.TeamID],
+			OwnerID:       p.OwnerID,
+			OwnerName:     ownerNames[p.OwnerID],
+			Access:        p.Access,
+			Kind:          p.Kind(),
 			TestcaseCount: p.TestcaseCount,
 			TotalScore:    totalScore(p),
 			SubmitCount:   p.SubmitCount,
@@ -118,6 +144,13 @@ func (h *Handler) AdminGetProblem(c *gin.Context) {
 	detail := adminProblemDetail(&p)
 	detail["bank_id"] = p.BankID
 	detail["bank_name"] = bankNames[p.BankID]
+	teamNames, ownerNames, err := h.problemOwnerNames([]model.Problem{p})
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
+	detail["team_name"] = teamNames[p.TeamID]
+	detail["owner_name"] = ownerNames[p.OwnerID]
 	httpx.OK(c, gin.H{"problem": detail})
 }
 
@@ -147,6 +180,9 @@ func adminProblemDetail(p *model.Problem) gin.H {
 		"created_at":      p.CreatedAt,
 		"updated_at":      p.UpdatedAt,
 		"team_id":         p.TeamID,
+		"owner_id":        p.OwnerID,
+		"access":          p.Access,
+		"kind":            p.Kind(),
 	}
 }
 
@@ -172,6 +208,10 @@ type adminProblemRequest struct {
 	FloatEps      *float64        `json:"float_eps"`
 	// TeamID 归属团队；0 或空表示公共题目
 	TeamID *uint `json:"team_id"`
+	// OwnerID 归属个人；0 或空表示非个人题目，与 TeamID 互斥
+	OwnerID *uint `json:"owner_id"`
+	// Access 访问权限：1 公开，2 仅团队成员或创建者
+	Access *int `json:"access"`
 }
 
 // AdminCreateProblem 创建题目，题号为空时自动生成。
@@ -246,8 +286,55 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		points = *req.Points
 	}
 
-	// 题号由所属题库按「前缀 + 定长序号」自动分配，不接受手工指定
-	bank, err := h.resolveProblemBank(req.BankID)
+	// 归属：团队题目与个人题目互斥，都为空时是公共题目
+	teamID := uint(0)
+	if req.TeamID != nil && *req.TeamID > 0 {
+		var teamCount int64
+		if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
+			httpx.ServerError(c, "创建题目失败")
+			return
+		}
+		if teamCount == 0 {
+			httpx.BadRequest(c, "归属团队不存在")
+			return
+		}
+		teamID = *req.TeamID
+	}
+	ownerID := uint(0)
+	if req.OwnerID != nil && *req.OwnerID > 0 {
+		var userCount int64
+		if err := h.DB.Model(&model.User{}).Where("id = ?", *req.OwnerID).Count(&userCount).Error; err != nil {
+			httpx.ServerError(c, "创建题目失败")
+			return
+		}
+		if userCount == 0 {
+			httpx.BadRequest(c, "归属用户不存在")
+			return
+		}
+		ownerID = *req.OwnerID
+	}
+	if teamID > 0 && ownerID > 0 {
+		httpx.BadRequest(c, "题目不能同时归属团队和用户")
+		return
+	}
+	access := defaultProblemAccess(teamID, ownerID)
+	if req.Access != nil {
+		if !validProblemAccessFor(teamID, ownerID, *req.Access) {
+			httpx.BadRequest(c, "访问权限取值非法")
+			return
+		}
+		access = *req.Access
+	}
+
+	// 题号由所属题库按「前缀 + 定长序号」自动分配，不接受手工指定；
+	// 团队题目用团队题库、个人题目用个人题库，公共题目用请求指定或默认题库。
+	var bank *model.ProblemBank
+	var err error
+	if teamID > 0 || ownerID > 0 {
+		bank, err = h.problemBankForOwner(teamID, ownerID)
+	} else {
+		bank, err = h.resolveProblemBank(req.BankID)
+	}
 	if err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
@@ -268,6 +355,9 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		Visibility:    visibility,
 		CompareMode:   compareMode,
 		FloatEps:      floatEps,
+		TeamID:        teamID,
+		OwnerID:       ownerID,
+		Access:        access,
 		CreatedBy:     u.ID,
 	}
 	if req.Description != nil {
@@ -298,18 +388,6 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		p.SetTags(*req.Tags)
 	} else {
 		p.SetTags(nil)
-	}
-	if req.TeamID != nil && *req.TeamID > 0 {
-		var teamCount int64
-		if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
-			httpx.ServerError(c, "创建题目失败")
-			return
-		}
-		if teamCount == 0 {
-			httpx.BadRequest(c, "归属团队不存在")
-			return
-		}
-		p.TeamID = *req.TeamID
 	}
 
 	if err := h.DB.Create(&p).Error; err != nil {
@@ -345,18 +423,67 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 		}
 		updates["title"] = title
 	}
+	// 归属：团队、个人与公共互斥，变更归属后按新归属的题库重新编号
+	teamID, ownerID := p.TeamID, p.OwnerID
+	ownershipChanged := false
+	if req.TeamID != nil && *req.TeamID != teamID {
+		teamID = *req.TeamID
+		ownershipChanged = true
+	}
+	if req.OwnerID != nil && *req.OwnerID != ownerID {
+		ownerID = *req.OwnerID
+		ownershipChanged = true
+	}
+	if teamID > 0 && ownerID > 0 {
+		httpx.BadRequest(c, "题目不能同时归属团队和用户")
+		return
+	}
+	if teamID > 0 {
+		var teamCount int64
+		if err := h.DB.Model(&model.Team{}).Where("id = ?", teamID).Count(&teamCount).Error; err != nil {
+			httpx.ServerError(c, "更新题目失败")
+			return
+		}
+		if teamCount == 0 {
+			httpx.BadRequest(c, "归属团队不存在")
+			return
+		}
+	}
+	if ownerID > 0 {
+		var userCount int64
+		if err := h.DB.Model(&model.User{}).Where("id = ?", ownerID).Count(&userCount).Error; err != nil {
+			httpx.ServerError(c, "更新题目失败")
+			return
+		}
+		if userCount == 0 {
+			httpx.BadRequest(c, "归属用户不存在")
+			return
+		}
+	}
+
 	// 归属题库：请求未指定时沿用原题库，原题库已不存在时回退默认题库
-	bank, err := h.resolveProblemBank(&p.BankID)
-	if err != nil {
-		bank, err = h.resolveProblemBank(nil)
+	var bank *model.ProblemBank
+	var err error
+	if ownershipChanged && (teamID > 0 || ownerID > 0) {
+		bank, err = h.problemBankForOwner(teamID, ownerID)
+	} else {
+		bank, err = h.resolveProblemBank(&p.BankID)
+		if err != nil {
+			bank, err = h.resolveProblemBank(nil)
+		}
 	}
 	if err != nil {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
-	// 换题库后题号需要按新题库规则重新分配
+	// 归属或题库变化后题号需要按新题库规则重新分配
 	renumber := false
-	if req.BankID != nil && *req.BankID != 0 && *req.BankID != p.BankID {
+	if ownershipChanged {
+		updates["team_id"] = teamID
+		updates["owner_id"] = ownerID
+		updates["bank_id"] = bank.ID
+		renumber = true
+	} else if req.BankID != nil && *req.BankID != 0 && *req.BankID != p.BankID {
 		bank, err = h.resolveProblemBank(req.BankID)
 		if err != nil {
 			httpx.BadRequest(c, err.Error())
@@ -465,20 +592,15 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	if req.FloatEps != nil {
 		updates["float_eps"] = *req.FloatEps
 	}
-	// 归属团队：传 0 表示移出团队，变为公共题目
-	if req.TeamID != nil {
-		if *req.TeamID > 0 {
-			var teamCount int64
-			if err := h.DB.Model(&model.Team{}).Where("id = ?", *req.TeamID).Count(&teamCount).Error; err != nil {
-				httpx.ServerError(c, "更新题目失败")
-				return
-			}
-			if teamCount == 0 {
-				httpx.BadRequest(c, "归属团队不存在")
-				return
-			}
+	// 访问权限：公共题目只能公开，变更归属时按新归属校正默认权限
+	if req.Access != nil {
+		if !validProblemAccessFor(teamID, ownerID, *req.Access) {
+			httpx.BadRequest(c, "访问权限取值非法")
+			return
 		}
-		updates["team_id"] = *req.TeamID
+		updates["access"] = *req.Access
+	} else if ownershipChanged && !validProblemAccessFor(teamID, ownerID, p.Access) {
+		updates["access"] = defaultProblemAccess(teamID, ownerID)
 	}
 
 	if len(updates) > 0 {
@@ -530,12 +652,59 @@ func (h *Handler) problemBankNames() (map[uint]string, error) {
 	return names, nil
 }
 
-// resolveProblemBank 取指定题库；id 为空或 0 时取默认题库（id 最小的题库）。
+// problemOwnerNames 返回题目涉及团队的名称与个人题创建者的用户名。
+func (h *Handler) problemOwnerNames(problems []model.Problem) (map[uint]string, map[uint]string, error) {
+	teamIDs := make([]uint, 0, len(problems))
+	ownerIDs := make([]uint, 0, len(problems))
+	seenTeam := map[uint]bool{}
+	seenOwner := map[uint]bool{}
+	for _, p := range problems {
+		if p.TeamID > 0 && !seenTeam[p.TeamID] {
+			seenTeam[p.TeamID] = true
+			teamIDs = append(teamIDs, p.TeamID)
+		}
+		if p.OwnerID > 0 && !seenOwner[p.OwnerID] {
+			seenOwner[p.OwnerID] = true
+			ownerIDs = append(ownerIDs, p.OwnerID)
+		}
+	}
+
+	teamNames := make(map[uint]string, len(teamIDs))
+	if len(teamIDs) > 0 {
+		var teams []model.Team
+		if err := h.DB.Select("id", "name").Where("id IN ?", teamIDs).Find(&teams).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, t := range teams {
+			teamNames[t.ID] = t.Name
+		}
+	}
+
+	ownerNames := make(map[uint]string, len(ownerIDs))
+	if len(ownerIDs) > 0 {
+		var users []model.User
+		if err := h.DB.Select("id", "username").Where("id IN ?", ownerIDs).Find(&users).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, u := range users {
+			ownerNames[u.ID] = u.Username
+		}
+	}
+	return teamNames, ownerNames, nil
+}
+
+// resolveProblemBank 取指定题库；id 为空或 0 时取默认题库。
 func (h *Handler) resolveProblemBank(id *uint) (*model.ProblemBank, error) {
 	var bank model.ProblemBank
 	if id == nil || *id == 0 {
-		if err := h.DB.Order("id asc").First(&bank).Error; err != nil {
-			return nil, fmt.Errorf("尚未创建题库，请先在题库管理中新建题库")
+		// 默认题库优先取非团队/个人预置题库，避免公共题目落到 T/P 前缀下
+		err := h.DB.
+			Where("prefix NOT IN ?", []string{model.ProblemBankTeamPrefix, model.ProblemBankPersonalPrefix}).
+			Order("id asc").First(&bank).Error
+		if err != nil {
+			if err := h.DB.Order("id asc").First(&bank).Error; err != nil {
+				return nil, fmt.Errorf("尚未创建题库，请先在题库管理中新建题库")
+			}
 		}
 		return &bank, nil
 	}
@@ -793,12 +962,7 @@ func (h *Handler) AdminListTestdata(c *gin.Context) {
 		httpx.NotFound(c, "题目不存在")
 		return
 	}
-	items, err := h.testcaseItems(p.ID)
-	if err != nil {
-		httpx.ServerError(c, "查询测试数据失败")
-		return
-	}
-	httpx.OK(c, gin.H{"total_score": testcaseTotalScore(items), "items": items})
+	h.respondProblemTestdata(c, &p)
 }
 
 func (h *Handler) testcaseItems(problemID uint) ([]testcaseItem, error) {
@@ -839,65 +1003,7 @@ func (h *Handler) AdminUploadTestdata(c *gin.Context) {
 		httpx.NotFound(c, "题目不存在")
 		return
 	}
-
-	form, err := c.MultipartForm()
-	if err != nil {
-		httpx.BadRequest(c, "解析上传内容失败")
-		return
-	}
-	files := form.File["files"]
-	if len(files) == 0 {
-		httpx.BadRequest(c, "缺少测试数据文件")
-		return
-	}
-	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
-
-	var data map[string][]byte
-	if len(files) == 1 && strings.EqualFold(filepath.Ext(files[0].Filename), ".zip") {
-		content, err := readUploadedFile(files[0], maxBytes)
-		if err != nil {
-			httpx.BadRequest(c, err.Error())
-			return
-		}
-		data, err = service.ExtractZip(content)
-		if err != nil {
-			httpx.BadRequest(c, err.Error())
-			return
-		}
-	} else {
-		data = make(map[string][]byte, len(files))
-		for _, fh := range files {
-			content, err := readUploadedFile(fh, maxBytes)
-			if err != nil {
-				httpx.BadRequest(c, err.Error())
-				return
-			}
-			data[fh.Filename] = content
-		}
-	}
-
-	var scores []int
-	if raw := form.Value["scores"]; len(raw) > 0 && strings.TrimSpace(raw[0]) != "" {
-		if err := json.Unmarshal([]byte(raw[0]), &scores); err != nil {
-			httpx.BadRequest(c, "分值格式错误")
-			return
-		}
-	}
-
-	if err := h.Testdata.Replace(&p, data, scores); err != nil {
-		httpx.BadRequest(c, err.Error())
-		return
-	}
-	items, err := h.testcaseItems(p.ID)
-	if err != nil {
-		httpx.ServerError(c, "查询测试数据失败")
-		return
-	}
-	httpx.OK(c, gin.H{
-		"items":       items,
-		"total_score": testcaseTotalScore(items),
-		"sync_failed": h.Testdata.SyncToNodes(syncContext(c), p.ID),
-	})
+	h.uploadProblemTestdata(c, &p)
 }
 
 // AdminDeleteTestdata 清空某题的测试数据。
@@ -911,11 +1017,7 @@ func (h *Handler) AdminDeleteTestdata(c *gin.Context) {
 		httpx.NotFound(c, "题目不存在")
 		return
 	}
-	if err := h.Testdata.Delete(p.ID); err != nil {
-		httpx.ServerError(c, "删除测试数据失败")
-		return
-	}
-	httpx.OK(c, gin.H{"sync_failed": h.Testdata.ClearOnNodes(syncContext(c), p.ID)})
+	h.clearProblemTestdata(c, &p)
 }
 
 // syncContext 以不随客户端断连取消的上下文同步数据，保证推送不会半途中断。

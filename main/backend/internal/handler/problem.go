@@ -18,6 +18,8 @@ type problemItem struct {
 	Tags           []string  `json:"tags"`
 	Source         string    `json:"source"`
 	Points         int       `json:"points"`
+	Kind           string    `json:"kind"`
+	Access         int       `json:"access"`
 	TimeLimitMS    int       `json:"time_limit_ms"`
 	MemoryLimitMB  int       `json:"memory_limit_mb"`
 	SubmitCount    int       `json:"submit_count"`
@@ -47,17 +49,18 @@ func (h *Handler) ListProblems(c *gin.Context) {
 	}
 
 	user := httpx.CurrentUser(c)
-	// 团队题目仅所在团队成员可见，管理员可见全部
+	// 访问权限：公开题目所有人可见；受限题目仅所属团队成员或创建者本人可见，管理员可见全部
 	switch {
 	case user != nil && user.IsAdmin():
 	case user != nil:
 		if ids := h.myTeamIDs(user.ID); len(ids) > 0 {
-			query = query.Where("(team_id = 0 OR team_id IN ?)", ids)
+			query = query.Where("(access = ? OR owner_id = ? OR team_id IN ?)",
+				model.ProblemAccessPublic, user.ID, ids)
 		} else {
-			query = query.Where("team_id = 0")
+			query = query.Where("(access = ? OR owner_id = ?)", model.ProblemAccessPublic, user.ID)
 		}
 	default:
-		query = query.Where("team_id = 0")
+		query = query.Where("access = ?", model.ProblemAccessPublic)
 	}
 	statusFilter := strings.TrimSpace(c.Query("status"))
 	var solvedSet, triedSet map[uint]bool
@@ -96,17 +99,19 @@ func (h *Handler) ListProblems(c *gin.Context) {
 	for i := range problems {
 		p := &problems[i]
 		item := problemItem{
-			ID:             p.ID,
-			DisplayID:      p.DisplayID,
-			Title:          p.Title,
-			Difficulty:     p.Difficulty,
-			Tags:           p.Tags(),
-			Source:         p.Source,
-			Points:         p.Points,
-			TimeLimitMS:    p.TimeLimitMS,
-			MemoryLimitMB:  p.MemoryLimitMB,
-			SubmitCount:    p.SubmitCount,
-			AcceptedCount:  p.AcceptedCount,
+			ID:            p.ID,
+			DisplayID:     p.DisplayID,
+			Title:         p.Title,
+			Difficulty:    p.Difficulty,
+			Tags:          p.Tags(),
+			Source:        p.Source,
+			Points:        p.Points,
+			Kind:          p.Kind(),
+			Access:        p.Access,
+			TimeLimitMS:   p.TimeLimitMS,
+			MemoryLimitMB: p.MemoryLimitMB,
+			SubmitCount:   p.SubmitCount,
+			AcceptedCount: p.AcceptedCount,
 			// 通过率 = 通过人数 / 提交过的人数，两者都按去重用户统计
 			AcceptanceRate: rate(p.AcceptedCount, submitters[p.ID]),
 			CreatedAt:      p.CreatedAt,
@@ -138,17 +143,17 @@ func (h *Handler) GetProblem(c *gin.Context) {
 	}
 
 	item := problemItem{
-		ID:             p.ID,
-		DisplayID:      p.DisplayID,
-		Title:          p.Title,
-		Difficulty:     p.Difficulty,
-		Tags:           p.Tags(),
-		Source:         p.Source,
-		Points:         p.Points,
-		TimeLimitMS:    p.TimeLimitMS,
-		MemoryLimitMB:  p.MemoryLimitMB,
-		SubmitCount:    p.SubmitCount,
-		AcceptedCount:  p.AcceptedCount,
+		ID:            p.ID,
+		DisplayID:     p.DisplayID,
+		Title:         p.Title,
+		Difficulty:    p.Difficulty,
+		Tags:          p.Tags(),
+		Source:        p.Source,
+		Points:        p.Points,
+		TimeLimitMS:   p.TimeLimitMS,
+		MemoryLimitMB: p.MemoryLimitMB,
+		SubmitCount:   p.SubmitCount,
+		AcceptedCount: p.AcceptedCount,
 		// 通过率 = 通过人数 / 提交过的人数
 		AcceptanceRate: rate(p.AcceptedCount, h.distinctSubmitters([]uint{p.ID})[p.ID]),
 		CreatedAt:      p.CreatedAt,
@@ -210,8 +215,8 @@ func (h *Handler) ListLanguages(c *gin.Context) {
 func (h *Handler) SiteInfo(c *gin.Context) {
 	settings := h.Settings.Current()
 	httpx.OK(c, gin.H{
-		"app_name":         settings.AppName,
-		"theme_color":      settings.ThemeColor,
+		"app_name":    settings.AppName,
+		"theme_color": settings.ThemeColor,
 		// 注册入口由后台开关与渠道状态共同决定：两个渠道都未开放时不支持注册。
 		"register_enabled": settings.RegisterEnabled,
 		"comments_enabled": settings.CommentsEnabled,
@@ -231,18 +236,23 @@ func (h *Handler) SiteInfo(c *gin.Context) {
 }
 
 func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
-	// 团队题目：仅所属团队成员与管理员可见
-	if p.TeamID > 0 {
-		u := httpx.CurrentUser(c)
+	u := httpx.CurrentUser(c)
+	if u != nil && u.IsAdmin() {
+		return true
+	}
+	// 受限题目：团队题目仅所属团队成员可见，个人题目仅创建者本人可见
+	if p.Access != model.ProblemAccessPublic {
 		if u == nil {
 			return false
 		}
-		return u.IsAdmin() || h.isTeamMember(u.ID, p.TeamID)
+		if p.IsTeamProblem() {
+			return h.isTeamMember(u.ID, p.TeamID)
+		}
+		if p.IsPersonalProblem() {
+			return p.OwnerID == u.ID
+		}
 	}
 	if p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly {
-		return true
-	}
-	if u := httpx.CurrentUser(c); u != nil && u.IsAdmin() {
 		return true
 	}
 	var count int64

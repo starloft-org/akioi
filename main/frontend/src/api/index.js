@@ -187,6 +187,34 @@ export const reviewTeamApplication = (id, aid, data) =>
 export const listTeamProblems = (id) => request.get(`/api/v1/teams/${id}/problems`)
 export const listTeamContests = (id) => request.get(`/api/v1/teams/${id}/contests`)
 export const listTeamSets = (id) => request.get(`/api/v1/teams/${id}/sets`)
+export const getTeamSet = (id, sid) => request.get(`/api/v1/teams/${id}/sets/${sid}`)
 export const createTeamSet = (id, data) => request.post(`/api/v1/teams/${id}/sets`, data)
 export const updateTeamSet = (id, sid, data) => request.put(`/api/v1/teams/${id}/sets/${sid}`, data)
 export const deleteTeamSet = (id, sid) => request.delete(`/api/v1/teams/${id}/sets/${sid}`)
+
+// 我的题目（团队题目 / 个人题目）与题单
+export const listMyProblems = (params) => request.get('/api/v1/my/problems', { params })
+export const getMyProblem = (id) => request.get(`/api/v1/my/problems/${id}`)
+export const createMyProblem = (data) => request.post('/api/v1/my/problems', data)
+export const updateMyProblem = (id, data) => request.put(`/api/v1/my/problems/${id}`, data)
+export const deleteMyProblem = (id) => request.delete(`/api/v1/my/problems/${id}`)
+export const listMyProblemTestdata = (id) => request.get(`/api/v1/my/problems/${id}/testdata`)
+export const uploadMyProblemTestdata = (id, files, scores) => {
+  const form = new FormData()
+  for (const f of files) {
+    form.append('files', f)
+  }
+  if (scores) {
+    form.append('scores', JSON.stringify(scores))
+  }
+  return request.post(`/api/v1/my/problems/${id}/testdata`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000
+  })
+}
+export const deleteMyProblemTestdata = (id) => request.delete(`/api/v1/my/problems/${id}/testdata`)
+export const listMyProblemSets = () => request.get('/api/v1/my/problem-sets')
+export const createMyProblemSet = (data) => request.post('/api/v1/my/problem-sets', data)
+export const getMyProblemSet = (id) => request.get(`/api/v1/my/problem-sets/${id}`)
+export const updateMyProblemSet = (id, data) => request.put(`/api/v1/my/problem-sets/${id}`, data)
+export const deleteMyProblemSet = (id) => request.delete(`/api/v1/my/problem-sets/${id}`)

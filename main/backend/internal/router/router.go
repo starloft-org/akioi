@@ -122,9 +122,29 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			teams.GET("/:id/problems", required, h.ListTeamProblems)
 			teams.GET("/:id/contests", required, h.ListTeamContests)
 			teams.GET("/:id/sets", required, h.ListTeamSets)
+			teams.GET("/:id/sets/:sid", required, h.GetTeamSet)
 			teams.POST("/:id/sets", required, h.CreateTeamSet)
 			teams.PUT("/:id/sets/:sid", required, h.UpdateTeamSet)
 			teams.DELETE("/:id/sets/:sid", required, h.DeleteTeamSet)
+		}
+
+		// 用户自建的团队题目、个人题目与题单
+		my := api.Group("/my")
+		my.Use(required)
+		{
+			my.GET("/problems", h.ListMyProblems)
+			my.POST("/problems", h.CreateMyProblem)
+			my.GET("/problems/:id", h.GetMyProblem)
+			my.PUT("/problems/:id", h.UpdateMyProblem)
+			my.DELETE("/problems/:id", h.DeleteMyProblem)
+			my.GET("/problems/:id/testdata", h.ListMyProblemTestdata)
+			my.POST("/problems/:id/testdata", h.UploadMyProblemTestdata)
+			my.DELETE("/problems/:id/testdata", h.DeleteMyProblemTestdata)
+			my.GET("/problem-sets", h.ListMyProblemSets)
+			my.POST("/problem-sets", h.CreateMyProblemSet)
+			my.GET("/problem-sets/:id", h.GetMyProblemSet)
+			my.PUT("/problem-sets/:id", h.UpdateMyProblemSet)
+			my.DELETE("/problem-sets/:id", h.DeleteMyProblemSet)
 		}
 
 		contests := api.Group("/contests")

@@ -37,6 +37,31 @@ const (
 	ProblemVisibilityHidden = 2
 )
 
+// 题目归属类型
+const (
+	ProblemKindPublic   = "public"
+	ProblemKindTeam     = "team"
+	ProblemKindPersonal = "personal"
+)
+
+// 题目访问权限：公开题目所有人可访问，受限题目仅所属团队成员或创建者本人可访问。
+const (
+	ProblemAccessPublic  = 1
+	ProblemAccessMembers = 2
+)
+
+// 团队题目与个人题目的题号前缀，对应迁移中预置的两个题库。
+const (
+	ProblemBankTeamPrefix     = "T"
+	ProblemBankPersonalPrefix = "P"
+	ProblemBankCodeLength     = 6
+)
+
+// ValidProblemAccess 判断访问权限取值是否合法。
+func ValidProblemAccess(access int) bool {
+	return access == ProblemAccessPublic || access == ProblemAccessMembers
+}
+
 // 比对模式
 const (
 	CompareModeDefault = "default"

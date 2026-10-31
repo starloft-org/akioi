@@ -53,6 +53,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.User{},
 		&model.OAuthBinding{},
 		&model.Problem{},
+		&model.ProblemBank{},
 		&model.Testcase{},
 		&model.Submission{},
 		&model.Contest{},
@@ -67,6 +68,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.TeamMember{},
 		&model.TeamApplication{},
 		&model.TeamProblemSet{},
+		&model.UserProblemSet{},
 	); err != nil {
 		return err
 	}
