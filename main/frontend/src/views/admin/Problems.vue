@@ -115,6 +115,13 @@
         <div class="el-upload__text">把题目包 zip 拖到这里（支持多选），或<em>点击选择</em></div>
       </el-upload>
 
+      <div v-if="importing" class="import-progress">
+        <el-progress :percentage="importProgress" :status="importProgress >= 100 ? 'success' : ''" />
+        <p class="muted">
+          {{ importProgress >= 100 ? '上传完成，正在解析题目包并写入数据库…' : `正在上传 ${importProgress}%` }}
+        </p>
+      </div>
+
       <div v-if="importResults.length" class="import-results">
         <p class="import-results__title">
           导入结果：成功 {{ resultsSummary.success }} 个，失败 {{ resultsSummary.failed }} 个
@@ -137,8 +144,13 @@ config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
       </div>
 
       <template #footer>
-        <el-button @click="closeImportDialog">关闭</el-button>
-        <el-button type="primary" :loading="importing" :disabled="!importFiles.length" @click="handleImport">
+        <el-button :disabled="importing" @click="closeImportDialog">关闭</el-button>
+        <el-button
+          type="primary"
+          :loading="importing"
+          :disabled="!importFiles.length || importing"
+          @click="handleImport"
+        >
           开始导入
         </el-button>
       </template>
@@ -174,6 +186,7 @@ const importing = ref(false)
 const importFiles = ref([])
 const importBankId = ref('')
 const importResults = ref([])
+const importProgress = ref(0)
 const resultsSummary = computed(() => {
   const success = importResults.value.filter((item) => item.ok).length
   return { success, failed: importResults.value.length - success }
@@ -272,8 +285,12 @@ const handleImport = async () => {
     return
   }
   importing.value = true
+  importProgress.value = 0
   try {
-    const data = await adminImportProblem(raws, importBankId.value || undefined)
+    const data = await adminImportProblem(raws, importBankId.value || undefined, (percent) => {
+      importProgress.value = percent
+    })
+    importProgress.value = 100
     importResults.value = data?.items || []
     load()
   } catch (e) {
@@ -287,6 +304,7 @@ const closeImportDialog = () => {
   importVisible.value = false
   importFiles.value = []
   importResults.value = []
+  importProgress.value = 0
 }
 
 onMounted(() => {
@@ -305,6 +323,15 @@ onMounted(() => {
 
 .import-hint {
   margin-top: 16px;
+}
+
+.import-progress {
+  margin-top: 12px;
+}
+
+.import-progress p {
+  margin: 6px 0 0;
+  font-size: 12px;
 }
 
 .import-hint p {

@@ -8,7 +8,12 @@
 
     <el-table v-loading="loading" :data="banks" border>
       <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="name" label="题库名称" min-width="160" />
+      <el-table-column label="题库名称" min-width="180">
+        <template #default="{ row }">
+          <span>{{ row.name }}</span>
+          <el-tag v-if="row.preset" size="small" type="info" style="margin-left: 6px">预置</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="prefix" label="前缀" width="90" />
       <el-table-column prop="code_length" label="题号长度" width="100" />
       <el-table-column prop="sample_display_id" label="题号示例" width="120" />
@@ -22,37 +27,53 @@
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" @click="removeBank(row)">删除</el-button>
+          <el-button size="small" :disabled="row.preset" @click="removeBank(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑题库' : '新建题库'" width="520px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
         <el-form-item label="题库名称" prop="name">
-          <el-input v-model="form.name" placeholder="例如 基础题、提高题" />
+          <el-input v-model="form.name" :disabled="editingPreset" placeholder="例如 基础题、提高题" />
         </el-form-item>
         <el-form-item label="题库前缀" prop="prefix">
           <el-input
             v-model="form.prefix"
-            :disabled="editing"
+            :disabled="editing && !editingPreset"
+            maxlength="8"
             placeholder="字母开头，可带数字，例如 A"
             style="width: 160px"
           />
         </el-form-item>
         <el-form-item label="题号长度" prop="code_length">
-          <el-input-number v-model="form.code_length" :min="1" :max="10" :disabled="editing" />
+          <el-input-number
+            v-model="form.code_length"
+            :min="1"
+            :max="10"
+            :disabled="editing && !editingPreset"
+          />
           <span class="muted" style="margin-left: 8px">序号左补零到该位数</span>
         </el-form-item>
         <el-form-item label="题号示例">
           <span>{{ sampleDisplayID || '—' }}</span>
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="255" show-word-limit />
+          <el-input
+            v-model="form.remark"
+            type="textarea"
+            :rows="2"
+            maxlength="255"
+            show-word-limit
+            :disabled="editingPreset"
+          />
         </el-form-item>
       </el-form>
 
-      <p v-if="editing" class="muted">前缀与题号长度决定历史题号格式，创建后不可修改。</p>
+      <p v-if="editingPreset" class="muted">
+        预置题库不能删除，只允许修改前缀与题号长度；保存后会按原序号重新生成该题库下的所有题号。
+      </p>
+      <p v-else-if="editing" class="muted">自建题库的前缀与题号长度决定已发出的题号格式，创建后不可修改。</p>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -77,6 +98,7 @@ const saving = ref(false)
 const banks = ref([])
 const dialogVisible = ref(false)
 const editing = ref(false)
+const editingPreset = ref(false)
 const editingID = ref(0)
 const formRef = ref(null)
 
@@ -87,11 +109,35 @@ const form = reactive({
   remark: ''
 })
 
+const dialogTitle = computed(() => {
+  if (!editing.value) {
+    return '新建题库'
+  }
+  return editingPreset.value ? '编辑预置题库' : '编辑题库'
+})
+
 const rules = {
   name: [{ required: true, message: '请填写题库名称', trigger: 'blur' }],
   prefix: [
     { required: true, message: '请填写题库前缀', trigger: 'blur' },
     { pattern: /^[A-Za-z][A-Za-z0-9]{0,7}$/, message: '以字母开头，只含字母或数字', trigger: 'blur' }
+  ],
+  code_length: [
+    {
+      validator: (rule, value, callback) => {
+        const width = Number(value) || 0
+        if (width < 1 || width > 10) {
+          callback(new Error('题号长度需在 1 到 10 位之间'))
+          return
+        }
+        if ((form.prefix || '').length + width > 16) {
+          callback(new Error('前缀与题号长度之和不能超过 16 位'))
+          return
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
   ]
 }
 
@@ -118,6 +164,7 @@ const load = async () => {
 
 const openCreate = () => {
   editing.value = false
+  editingPreset.value = false
   editingID.value = 0
   form.name = ''
   form.prefix = ''
@@ -128,6 +175,7 @@ const openCreate = () => {
 
 const openEdit = (row) => {
   editing.value = true
+  editingPreset.value = Boolean(row.preset)
   editingID.value = row.id
   form.name = row.name
   form.prefix = row.prefix
@@ -147,7 +195,12 @@ const save = async () => {
   }
   saving.value = true
   try {
-    if (editing.value) {
+    if (editing.value && editingPreset.value) {
+      await adminUpdateProblemBank(editingID.value, {
+        prefix: form.prefix,
+        code_length: form.code_length
+      })
+    } else if (editing.value) {
       await adminUpdateProblemBank(editingID.value, {
         name: form.name,
         remark: form.remark
@@ -171,6 +224,10 @@ const save = async () => {
 }
 
 const removeBank = async (row) => {
+  if (row.preset) {
+    ElMessage.warning('预置题库不能删除')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       `确认删除题库「${row.name}」？题库下仍有题目时无法删除。`,

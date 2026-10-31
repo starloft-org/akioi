@@ -15,23 +15,23 @@ import (
 
 // 题目归属与题库 -----------------------------------------------------------------
 
-// problemBankByPrefix 按题号前缀取题库；团队题用 T、个人题用 P。
-func (h *Handler) problemBankByPrefix(prefix string) (*model.ProblemBank, error) {
+// problemBankByRole 按预置角色取题库：团队题用团队库、个人题用个人库。
+func (h *Handler) problemBankByRole(role string) (*model.ProblemBank, error) {
 	var bank model.ProblemBank
-	if err := h.DB.Where("prefix = ?", prefix).First(&bank).Error; err != nil {
-		return nil, fmt.Errorf("题库前缀 %s 不存在，请先在题库管理中创建", prefix)
+	if err := h.DB.Where("preset_role = ?", role).Order("id asc").First(&bank).Error; err != nil {
+		return nil, fmt.Errorf("预置题库缺失，请检查题库管理中的主库、团队库与个人库")
 	}
 	return &bank, nil
 }
 
-// problemBankForOwner 按归属取题库：团队题用团队题号池，个人题用个人题号池，
-// 公共题目使用主库（前缀非 T/P 的题库中 id 最小的一个）。
+// problemBankForOwner 按归属取题库：团队题用团队库，个人题用个人库，
+// 公共题目使用主库（预置的主库）。
 func (h *Handler) problemBankForOwner(teamID, ownerID uint) (*model.ProblemBank, error) {
 	switch {
 	case teamID > 0:
-		return h.problemBankByPrefix(model.ProblemBankTeamPrefix)
+		return h.problemBankByRole(model.ProblemBankRoleTeam)
 	case ownerID > 0:
-		return h.problemBankByPrefix(model.ProblemBankPersonalPrefix)
+		return h.problemBankByRole(model.ProblemBankRolePersonal)
 	default:
 		return h.resolveProblemBank(nil)
 	}

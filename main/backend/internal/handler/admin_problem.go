@@ -697,9 +697,9 @@ func (h *Handler) problemOwnerNames(problems []model.Problem) (map[uint]string, 
 func (h *Handler) resolveProblemBank(id *uint) (*model.ProblemBank, error) {
 	var bank model.ProblemBank
 	if id == nil || *id == 0 {
-		// 主库优先取非团队/个人预置题库，避免公共题目落到 T/P 前缀下
+		// 主库是迁移预置的公共题目题库（角色 primary），公共题目默认落到这里
 		err := h.DB.
-			Where("prefix NOT IN ?", []string{model.ProblemBankTeamPrefix, model.ProblemBankPersonalPrefix}).
+			Where("preset_role = ?", model.ProblemBankRolePrimary).
 			Order("id asc").First(&bank).Error
 		if err != nil {
 			if err := h.DB.Order("id asc").First(&bank).Error; err != nil {

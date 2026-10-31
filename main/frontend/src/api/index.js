@@ -99,7 +99,7 @@ export const adminCreateProblemBank = (data) => request.post('/api/admin/v1/prob
 export const adminUpdateProblemBank = (id, data) => request.put(`/api/admin/v1/problem-banks/${id}`, data)
 export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/problem-banks/${id}`)
 
-export const adminImportProblem = (files, bankId) => {
+export const adminImportProblem = (files, bankId, onProgress) => {
   const form = new FormData()
   // 导入的题目统一归入所选题库，未选择时后端归入主库
   if (bankId) {
@@ -111,7 +111,14 @@ export const adminImportProblem = (files, bankId) => {
   }
   return request.post('/api/admin/v1/problems/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000
+    timeout: 300000,
+    // 上传进度按已发送字节数回调，onProgress 收到 0-100 的整数
+    onUploadProgress: (event) => {
+      if (typeof onProgress !== 'function' || !event.total) {
+        return
+      }
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+    }
   })
 }
 export const adminUpdateProblem = (id, data) => request.put(`/api/admin/v1/problems/${id}`, data)

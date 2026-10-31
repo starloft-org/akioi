@@ -61,3 +61,41 @@ func ValidProblemDisplayID(bank *model.ProblemBank, displayID string) bool {
 	}
 	return len(displayID) >= len(bank.Prefix)+bank.CodeLength
 }
+
+// RenumberProblemDisplayIDs 按题库调整后的前缀与题号长度重排已有题号：
+// 题号内的序号保持不变，只替换前缀与补零位数；序号无法解析或与其他题号重复时
+// 按出现顺序顺延到下一个空闲序号。返回的题号与传入顺序一一对应。
+func RenumberProblemDisplayIDs(bank *model.ProblemBank, oldPrefix string, displayIDs []string) []string {
+	seqs := make([]int, len(displayIDs))
+	used := make(map[int]bool, len(displayIDs))
+	maxSeq := -1
+	for i, displayID := range displayIDs {
+		seq, ok := ProblemDisplayIDSeq(displayID, oldPrefix)
+		if !ok || used[seq] {
+			seqs[i] = -1
+			continue
+		}
+		seqs[i] = seq
+		used[seq] = true
+		if seq > maxSeq {
+			maxSeq = seq
+		}
+	}
+	for i, seq := range seqs {
+		if seq >= 0 {
+			continue
+		}
+		next := maxSeq + 1
+		for used[next] {
+			next++
+		}
+		seqs[i] = next
+		used[next] = true
+		maxSeq = next
+	}
+	ids := make([]string, len(seqs))
+	for i, seq := range seqs {
+		ids[i] = FormatProblemDisplayID(bank, seq)
+	}
+	return ids
+}

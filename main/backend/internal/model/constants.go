@@ -50,12 +50,16 @@ const (
 	ProblemAccessMembers = 2
 )
 
-// 团队题目与个人题目的题号前缀，对应迁移中预置的两个题库。
+// 预置题库的角色：主库放公共题目，团队库与个人库分别放团队题目与个人题目。
+// 预置题库不能删除，但可以调整前缀与题号长度；后台自建题库的角色为空值。
 const (
-	ProblemBankTeamPrefix     = "T"
-	ProblemBankPersonalPrefix = "P"
-	ProblemBankCodeLength     = 6
+	ProblemBankRolePrimary  = "primary"
+	ProblemBankRoleTeam     = "team"
+	ProblemBankRolePersonal = "personal"
 )
+
+// ProblemBankMaxCodeLength 是题库前缀与题号长度之和的上限，对应题号字段的存储宽度。
+const ProblemBankMaxCodeLength = 16
 
 // ValidProblemAccess 判断访问权限取值是否合法。
 func ValidProblemAccess(access int) bool {
