@@ -91,11 +91,13 @@ import { useRoute, useRouter } from 'vue-router'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 import {
   deleteMyProblemSet,
+  deleteTeamSet,
   getMyProblemSet,
   getTeamSet,
   listMyProblems,
   listTeams,
-  updateMyProblemSet
+  updateMyProblemSet,
+  updateTeamSet
 } from '@/api'
 
 const route = useRoute()
@@ -174,16 +176,22 @@ async function save() {
     return
   }
   if (!editable.value) {
-    ElMessage.warning('只有题单创建者可以修改题单')
+    ElMessage.warning(isTeam.value ? '只有团队队长可以修改题单' : '只有题单创建者可以修改题单')
     return
   }
   saving.value = true
   try {
-    await updateMyProblemSet(setId.value, {
+    const payload = {
       title: form.value.title,
       description: form.value.description,
       problem_ids: form.value.problem_ids
-    })
+    }
+    // 团队题单由队长通过团队接口修改，个人题单走个人接口
+    if (isTeam.value) {
+      await updateTeamSet(teamId.value, setId.value, payload)
+    } else {
+      await updateMyProblemSet(setId.value, payload)
+    }
     ElMessage.success('题单已更新')
     dialog.value = false
     load()
@@ -203,7 +211,11 @@ async function remove() {
     return
   }
   try {
-    await deleteMyProblemSet(setId.value)
+    if (isTeam.value) {
+      await deleteTeamSet(teamId.value, setId.value)
+    } else {
+      await deleteMyProblemSet(setId.value)
+    }
     ElMessage.success('题单已删除')
     router.push('/problem-sets')
   } catch (e) {
