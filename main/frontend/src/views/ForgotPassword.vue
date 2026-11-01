@@ -169,8 +169,27 @@ onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <style scoped>
-.auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--akioi-bg); }
-.auth-card { width: 100%; max-width: 380px; padding: 32px 28px; background: #fff; border: 1px solid var(--akioi-border); border-radius: var(--akioi-radius); }
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--akioi-primary) 14%, white), transparent 45%),
+    radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--akioi-primary) 10%, white), transparent 50%),
+    var(--akioi-bg);
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px;
+  background: #fff;
+  border: 1px solid var(--akioi-border);
+  overflow: hidden;
+  border-radius: var(--akioi-radius-lg);
+  box-shadow: var(--akioi-shadow-md);
+}
 .auth-brand { font-size: 22px; font-weight: 600; text-align: center; }
 .auth-sub { margin: 4px 0 20px; text-align: center; font-size: 12px; color: var(--akioi-text-weak); }
 .auth-submit { width: 100%; }

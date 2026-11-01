@@ -10,7 +10,13 @@
   --akioi-text-weak: #86909c;
   --akioi-border: #e5e6eb;
   --akioi-bg: #f5f7fa;
+  --akioi-bg-soft: #f7f8fa;
+  --akioi-text-strong: #1d2129;
   --akioi-radius: 8px;
+  --akioi-radius-lg: 12px;
+  --akioi-shadow-xs: 0 1px 2px rgba(29, 33, 41, 0.05);
+  --akioi-shadow-sm: 0 2px 10px rgba(29, 33, 41, 0.06);
+  --akioi-shadow-md: 0 8px 24px rgba(29, 33, 41, 0.1);
 
   /* 统一 Element 组件圆角与表格观感 */
   --el-border-radius-base: 6px;
@@ -447,6 +453,202 @@ a {
 .code-editor .cm-editor {
   height: 380px;
   font-size: 13px;
+}
+
+/* 视觉细节：选中态、滚动条、圆角与交互反馈统一跟随主题色 */
+::selection {
+  color: var(--akioi-text-strong);
+  background: color-mix(in srgb, var(--akioi-primary) 24%, white);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d7dbe0 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #d7dbe0;
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #c2c7ce;
+  background-clip: content-box;
+}
+
+/* 顶栏固定在窗口顶部，长页面滚动时导航始终可见 */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 1px 0 rgba(29, 33, 41, 0.04);
+}
+
+.app-nav a {
+  transition: color 0.15s ease;
+}
+
+.app-nav a:hover {
+  color: var(--akioi-primary);
+}
+
+.app-nav a.router-link-active::after {
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+}
+
+/* 卡片：更柔和的圆角与投影，标题前加一条主色强调条 */
+.panel {
+  border-radius: var(--akioi-radius-lg);
+  box-shadow: var(--akioi-shadow-xs);
+}
+
+.panel__title {
+  position: relative;
+  padding-left: 12px;
+  color: var(--akioi-text-strong);
+  letter-spacing: 0.2px;
+}
+
+.panel__title::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 15px;
+  content: '';
+  background: var(--akioi-primary);
+  border-radius: 2px;
+  transform: translateY(-50%);
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 按钮：统一圆角，主按钮带一层主色阴影 */
+.el-button {
+  font-weight: 500;
+  border-radius: 6px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.el-button--primary:not(.is-text):not(.is-link) {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--akioi-primary) 30%, transparent);
+}
+
+.el-button--primary:not(.is-text):not(.is-link):hover {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--akioi-primary) 32%, transparent);
+}
+
+/* 输入框：聚焦时给一圈主色柔光，替代 Element 默认的灰边 */
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner {
+  border-radius: 6px;
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--akioi-primary),
+    0 0 0 3px color-mix(in srgb, var(--akioi-primary) 14%, transparent) !important;
+}
+
+/* 表格：表头加粗、行高亮更轻，去掉最后一行的分割线 */
+.el-table {
+  font-size: 13px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  color: var(--akioi-text-strong);
+}
+
+.el-table .el-table__row {
+  transition: background-color 0.15s ease;
+}
+
+.el-table__body tr:last-child td.el-table__cell {
+  border-bottom: none;
+}
+
+.el-tag {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+/* 弹层与下拉：与卡片同一套圆角与阴影 */
+.el-dialog {
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: var(--akioi-shadow-md);
+}
+
+.el-dialog__title {
+  font-weight: 600;
+  color: var(--akioi-text-strong);
+}
+
+.el-message-box {
+  border-radius: 12px;
+}
+
+.el-popper.is-light,
+.el-dropdown-menu,
+.el-select-dropdown {
+  border-radius: 10px;
+}
+
+.el-dropdown-menu__item {
+  margin: 0 4px;
+  border-radius: 6px;
+  line-height: 32px;
+}
+
+/* 统计卡：悬浮时轻微上浮，数字使用等宽数位 */
+.stat-card {
+  border-radius: var(--akioi-radius-lg);
+  box-shadow: var(--akioi-shadow-xs);
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.stat-card:hover {
+  box-shadow: var(--akioi-shadow-sm);
+  transform: translateY(-2px);
+}
+
+.stat-card__value {
+  color: var(--akioi-text-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.4px;
+}
+
+.el-empty__description p {
+  font-size: 13px;
+  color: var(--akioi-text-weak);
 }
 
 /* 移动端适配：窄屏下收起导航、压缩留白，并让表格与表单可操作 */

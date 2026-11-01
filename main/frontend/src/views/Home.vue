@@ -325,9 +325,12 @@ onMounted(() => {
   padding: 28px;
   overflow: hidden;
   color: var(--akioi-text);
-  background: var(--akioi-primary-light);
-  border: 1px solid rgba(28, 213, 199, 0.28);
-  border-radius: var(--akioi-radius);
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--akioi-primary) 20%, white), transparent 55%),
+    linear-gradient(135deg, color-mix(in srgb, var(--akioi-primary) 12%, white), #fff 65%);
+  border: 1px solid color-mix(in srgb, var(--akioi-primary) 26%, white);
+  border-radius: var(--akioi-radius-lg);
+  box-shadow: var(--akioi-shadow-sm);
 }
 
 .home-hero::after {
@@ -337,7 +340,7 @@ onMounted(() => {
   width: 240px;
   height: 240px;
   content: '';
-  background: rgba(28, 213, 199, 0.18);
+  background: color-mix(in srgb, var(--akioi-primary) 16%, white);
   border-radius: 50%;
 }
 
@@ -385,7 +388,7 @@ onMounted(() => {
 
 .home-hero__actions :deep(.el-button.is-text:hover) {
   color: var(--akioi-primary-hover);
-  background: rgba(28, 213, 199, 0.14);
+  background: color-mix(in srgb, var(--akioi-primary) 14%, white);
 }
 
 .home-hero__stats {
