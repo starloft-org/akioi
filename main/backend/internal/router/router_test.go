@@ -60,6 +60,7 @@ func TestSetupRegistersRoutes(t *testing.T) {
 		"POST /api/admin/v1/problem-banks",
 		"PUT /api/admin/v1/problem-banks/:id",
 		"DELETE /api/admin/v1/problem-banks/:id",
+		"GET /api/admin/v1/import-tasks/:id",
 		"GET /api/admin/v1/backups",
 		"POST /api/admin/v1/backups",
 		"GET /api/admin/v1/backups/:name",

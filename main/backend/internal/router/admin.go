@@ -53,6 +53,9 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
 	}
 
+	// 批量导入的任务进度单独挂一层，避免与 /problems/:id 的通配段冲突
+	admin.GET("/import-tasks/:id", middleware.RequirePermission(model.AdminPermissionProblems), h.AdminProblemImportStatus)
+
 	banks := admin.Group("/problem-banks", middleware.RequirePermission(model.AdminPermissionProblemBanks))
 	{
 		banks.GET("", h.AdminListProblemBanks)

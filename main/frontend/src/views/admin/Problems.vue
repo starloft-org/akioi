@@ -93,7 +93,14 @@
       />
     </div>
 
-    <el-dialog v-model="importVisible" title="导入题目" width="640px">
+    <el-dialog
+      v-model="importVisible"
+      title="导入题目"
+      width="640px"
+      :close-on-click-modal="!importing"
+      :close-on-press-escape="!importing"
+      :show-close="!importing"
+    >
       <div class="import-bank">
         <span class="muted">导入到题库</span>
         <el-select v-model="importBankId" placeholder="选择题库" style="width: 240px">
@@ -109,16 +116,28 @@
         v-model:file-list="importFiles"
         drag
         multiple
+        :limit="200"
+        :on-exceed="onImportExceed"
         :auto-upload="false"
         accept=".zip"
       >
         <div class="el-upload__text">把题目包 zip 拖到这里（支持多选），或<em>点击选择</em></div>
       </el-upload>
 
-      <div v-if="importing" class="import-progress">
-        <el-progress :percentage="importProgress" :status="importProgress >= 100 ? 'success' : ''" />
+      <div v-if="importPhase !== 'idle'" class="import-progress">
+        <el-progress
+          :percentage="importPercent"
+          :status="importPhase === 'done' ? 'success' : ''"
+        />
         <p class="muted">
-          {{ importProgress >= 100 ? '上传完成，正在解析题目包并写入数据库…' : `正在上传 ${importProgress}%` }}
+          <template v-if="importPhase === 'uploading'">正在上传 {{ importProgress }}%</template>
+          <template v-else-if="importPhase === 'processing'">
+            正在导入 {{ importDone }} / {{ importTotal }} 题，成功 {{ resultsSummary.success }} 个，失败
+            {{ resultsSummary.failed }} 个
+          </template>
+          <template v-else>
+            导入完成：成功 {{ resultsSummary.success }} 个，失败 {{ resultsSummary.failed }} 个
+          </template>
         </p>
       </div>
 
@@ -126,15 +145,21 @@
         <p class="import-results__title">
           导入结果：成功 {{ resultsSummary.success }} 个，失败 {{ resultsSummary.failed }} 个
         </p>
-        <div v-for="item in importResults" :key="item.filename" class="import-result-item">
+        <div v-for="item in importResultView" :key="item.filename" class="import-result-item">
           <span :class="item.ok ? 'result-ok' : 'result-fail'">{{ item.ok ? '✓' : '✗' }}</span>
           <span class="import-result__file">{{ item.filename }}</span>
           <span v-if="item.ok" class="muted">{{ item.display_id }} {{ item.title }}</span>
           <span v-else class="import-result__error">{{ item.error }}</span>
         </div>
+        <p v-if="importResults.length > importResultView.length" class="muted">
+          仅显示前 {{ importResultView.length }} 条，共 {{ importResults.length }} 条
+        </p>
       </div>
 
       <div class="import-hint">
+        <p class="muted">
+          导入在服务器后台执行，提交后关闭弹窗或浏览器也会继续；一次最多 200 个包，题目会逐包出现在结果里。
+        </p>
         <p class="muted">每个 zip 一个题目，包内结构：</p>
         <pre class="pre-block">problem.md        题面，可直接用洛谷「复制 Markdown」的内容
 config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
@@ -187,9 +212,28 @@ const importFiles = ref([])
 const importBankId = ref('')
 const importResults = ref([])
 const importProgress = ref(0)
+// idle：未开始；uploading：正在上传；processing：后台正在逐包导入；done：完成
+const importPhase = ref('idle')
+const importDone = ref(0)
+const importTotal = ref(0)
 const resultsSummary = computed(() => {
   const success = importResults.value.filter((item) => item.ok).length
   return { success, failed: importResults.value.length - success }
+})
+// 结果最多渲染前 50 条，失败项排在前面，避免一千题时列表卡顿
+const importResultView = computed(() => {
+  const failed = importResults.value.filter((item) => !item.ok)
+  const ok = importResults.value.filter((item) => item.ok)
+  return [...failed, ...ok].slice(0, 50)
+})
+const importPercent = computed(() => {
+  if (importPhase.value === 'uploading') {
+    return importProgress.value
+  }
+  if (!importTotal.value) {
+    return 0
+  }
+  return Math.min(100, Math.round((importDone.value / importTotal.value) * 100))
 })
 
 const visibleItems = computed(() => {
@@ -279,22 +323,57 @@ const removeProblem = async (row) => {
   load()
 }
 
+const onImportExceed = () => {
+  ElMessage.warning('一次最多上传 200 个题目包，请分批导入')
+}
+
+// 轮询后台导入任务，直到 status 变为 done
+const pollImportTask = (taskId) =>
+  new Promise((resolve) => {
+    const tick = async () => {
+      try {
+        const task = await adminGetImportTask(taskId)
+        importTotal.value = task.total || importTotal.value
+        importDone.value = task.done || 0
+        importResults.value = task.items || []
+        if (task.status === 'done') {
+          resolve(task)
+          return
+        }
+      } catch (e) {
+        // 单次轮询失败不中断，下次继续
+      }
+      setTimeout(tick, 1200)
+    }
+    tick()
+  })
+
 const handleImport = async () => {
   const raws = importFiles.value.map((item) => item.raw).filter(Boolean)
   if (!raws.length) {
     return
   }
   importing.value = true
+  importPhase.value = 'uploading'
   importProgress.value = 0
+  importResults.value = []
+  importDone.value = 0
+  importTotal.value = raws.length
   try {
     const data = await adminImportProblem(raws, importBankId.value || undefined, (percent) => {
       importProgress.value = percent
     })
     importProgress.value = 100
-    importResults.value = data?.items || []
+    importPhase.value = 'processing'
+    const task = await pollImportTask(data.task_id)
+    importResults.value = task.items || []
+    importDone.value = task.done || 0
+    importTotal.value = task.total || raws.length
+    importPhase.value = 'done'
+    ElMessage.success(`导入完成：成功 ${task.success_count} 个，失败 ${task.failed_count} 个`)
     load()
   } catch (e) {
-    // 错误提示由请求层统一处理
+    importPhase.value = 'idle'
   } finally {
     importing.value = false
   }
@@ -305,6 +384,9 @@ const closeImportDialog = () => {
   importFiles.value = []
   importResults.value = []
   importProgress.value = 0
+  importPhase.value = 'idle'
+  importDone.value = 0
+  importTotal.value = 0
 }
 
 onMounted(() => {

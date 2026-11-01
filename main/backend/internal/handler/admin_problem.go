@@ -775,6 +775,11 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		httpx.BadRequest(c, "请上传题目包 zip")
 		return
 	}
+	// 单次上传包数量上限，避免一次请求把临时目录和文件描述符打满
+	if len(fileHeaders) > maxImportFiles {
+		httpx.BadRequest(c, fmt.Sprintf("一次最多上传 %d 个题目包", maxImportFiles))
+		return
+	}
 
 	// 导入的题目统一归入请求指定的题库，未指定时归入主库
 	var bankID *uint
@@ -795,43 +800,28 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		return
 	}
 
+	// 导入在后台顺序执行：上传完立即返回任务号，前端轮询进度，避免大批量导入把请求拖到网关超时。
 	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
-	items := make([]importItem, 0, len(fileHeaders))
-	successCount := 0
-	for _, fh := range fileHeaders {
-		item := h.importOneProblem(c, fh, u, maxBytes, bank)
-		if item.OK {
-			successCount++
-		}
-		items = append(items, item)
+	staged, cleanup, err := saveStagedFiles(fileHeaders, maxBytes)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
 	}
-
-	resp := gin.H{
-		"items":         items,
-		"total":         len(fileHeaders),
-		"success_count": successCount,
-		"failed_count":  len(fileHeaders) - successCount,
-	}
-	// 单包时保留旧响应结构，兼容已有前端流程
-	if len(fileHeaders) == 1 && items[0].OK {
-		resp["problem"] = gin.H{"id": items[0].ProblemID, "display_id": items[0].DisplayID}
-		resp["title"] = items[0].Title
-		resp["testcase_count"] = items[0].TestcaseCount
-		resp["sync_failed"] = items[0].SyncFailed
-	}
-	httpx.OK(c, resp)
+	ip := c.ClientIP()
+	task := createImportTask(len(staged))
+	go func() {
+		defer cleanup()
+		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip)
+	}()
+	logger.Adminf("管理员 %s 开始批量导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
+	httpx.OK(c, gin.H{"task_id": task.ID, "total": task.Total, "status": task.Status})
 }
 
-// importOneProblem 导入单个题目包；测试数据失败时回滚已创建的题目。
-func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *model.User, maxBytes int64, bank *model.ProblemBank) importItem {
-	item := importItem{Filename: fh.Filename}
-	if !strings.EqualFold(filepath.Ext(fh.Filename), ".zip") {
+// importProblemContent 导入已经读入内存的题目包；测试数据失败时回滚已创建的题目。
+func (h *Handler) importProblemContent(ctx context.Context, filename string, content []byte, u *model.User, bank *model.ProblemBank, ip string) importItem {
+	item := importItem{Filename: filename}
+	if !strings.EqualFold(filepath.Ext(filename), ".zip") {
 		item.Error = "题目包必须是 zip 文件"
-		return item
-	}
-	content, err := readUploadedFile(fh, maxBytes)
-	if err != nil {
-		item.Error = err.Error()
 		return item
 	}
 	files, err := service.ExtractZip(content)
@@ -906,19 +896,20 @@ func (h *Handler) importOneProblem(c *gin.Context, fh *multipart.FileHeader, u *
 	}
 	if hasTestdata {
 		if err := h.Testdata.Replace(&p, files, nil); err != nil {
-			h.DB.Delete(&model.Problem{}, p.ID)
+			// 回滚用物理删除，避免软删除残留占用题号
+			h.DB.Unscoped().Delete(&model.Problem{}, p.ID)
 			item.Error = "导入测试数据失败: " + err.Error()
 			return item
 		}
 	}
 
-	logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, p.DisplayID, p.ID, c.ClientIP())
+	logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, p.DisplayID, p.ID, ip)
 	item.OK = true
 	item.ProblemID = p.ID
 	item.DisplayID = p.DisplayID
 	item.Title = p.Title
 	item.TestcaseCount = p.TestcaseCount
-	item.SyncFailed = h.Testdata.SyncToNodes(syncContext(c), p.ID)
+	item.SyncFailed = h.Testdata.SyncToNodes(ctx, p.ID)
 	return item
 }
 

@@ -113,6 +113,9 @@ export const adminCreateProblemBank = (data) => request.post('/api/admin/v1/prob
 export const adminUpdateProblemBank = (id, data) => request.put(`/api/admin/v1/problem-banks/${id}`, data)
 export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/problem-banks/${id}`)
 
+// 批量导入在后台执行，上传完返回 task_id，用这个接口轮询进度
+export const adminGetImportTask = (taskId) => request.get(`/api/admin/v1/import-tasks/${taskId}`)
+
 export const adminImportProblem = (files, bankId, onProgress) => {
   const form = new FormData()
   // 导入的题目统一归入所选题库，未选择时后端归入主库
@@ -125,7 +128,8 @@ export const adminImportProblem = (files, bankId, onProgress) => {
   }
   return request.post('/api/admin/v1/problems/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 300000,
+    // 只包含上传耗时，导入过程在后台执行并由任务接口轮询
+    timeout: 600000,
     // 上传进度按已发送字节数回调，onProgress 收到 0-100 的整数
     onUploadProgress: (event) => {
       if (typeof onProgress !== 'function' || !event.total) {
