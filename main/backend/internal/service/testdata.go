@@ -55,9 +55,15 @@ func (s *TestdataService) List(problemID uint) ([]model.Testcase, error) {
 	return out, err
 }
 
-// Replace 用新上传的文件整体替换测试数据，文件名为 {序号}.in / {序号}.out（或 .ans）。
-// scores 长度与测试点数不一致时按总分 100 均分。
-func (s *TestdataService) Replace(prob *model.Problem, files map[string][]byte, scores []int) error {
+// testdataPlan 是校验通过的测试数据布局：序号、成对的文件与每题得分。
+type testdataPlan struct {
+	indexes []int
+	grouped map[int]map[string][]byte
+	scores  []int
+}
+
+// planTestdata 校验测试数据是否成对、数量是否超限，不写文件也不动数据库。
+func (s *TestdataService) planTestdata(files map[string][]byte, scores []int) (*testdataPlan, error) {
 	grouped := make(map[int]map[string][]byte)
 	for name, content := range files {
 		base := strings.ToLower(filepath.Base(name))
@@ -79,77 +85,130 @@ func (s *TestdataService) Replace(prob *model.Problem, files map[string][]byte, 
 		grouped[idx][key] = content
 	}
 	if len(grouped) == 0 {
-		return fmt.Errorf("未找到形如 1.in / 1.out 的测试数据文件")
+		return nil, fmt.Errorf("未找到形如 1.in / 1.out 的测试数据文件")
 	}
 
 	indexes := make([]int, 0, len(grouped))
 	for idx, pair := range grouped {
 		if _, ok := pair["in"]; !ok {
-			return fmt.Errorf("测试点 %d 缺少输入文件 %d.in", idx, idx)
+			return nil, fmt.Errorf("测试点 %d 缺少输入文件 %d.in", idx, idx)
 		}
 		if _, ok := pair["out"]; !ok {
-			return fmt.Errorf("测试点 %d 缺少输出文件 %d.out", idx, idx)
+			return nil, fmt.Errorf("测试点 %d 缺少输出文件 %d.out", idx, idx)
 		}
 		indexes = append(indexes, idx)
 	}
 	sort.Ints(indexes)
 	maxTestcases := s.settings.Current().MaxTestcases
 	if len(indexes) > maxTestcases {
-		return fmt.Errorf("测试点数量 %d 超过上限 %d", len(indexes), maxTestcases)
+		return nil, fmt.Errorf("测试点数量 %d 超过上限 %d", len(indexes), maxTestcases)
 	}
+	return &testdataPlan{indexes: indexes, grouped: grouped, scores: normalizeScores(len(indexes), scores)}, nil
+}
 
-	dir := s.Dir(prob.ID)
+// Validate 只校验测试数据，不落盘也不写库，供导入前整体校验使用。
+func (s *TestdataService) Validate(files map[string][]byte) error {
+	_, err := s.planTestdata(files, nil)
+	return err
+}
+
+// writeFiles 把测试数据写到题目目录，返回测试点清单与数据哈希。
+func (p *testdataPlan) writeFiles(dir string) ([]model.Testcase, string, error) {
 	if err := os.RemoveAll(dir); err != nil {
-		return err
+		return nil, "", err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return nil, "", err
 	}
-
-	finalScores := normalizeScores(len(indexes), scores)
-	cases := make([]model.Testcase, 0, len(indexes))
+	cases := make([]model.Testcase, 0, len(p.indexes))
 	dataHasher := sha256.New()
-
-	for i, srcIdx := range indexes {
+	for i, srcIdx := range p.indexes {
 		newIdx := i + 1
-		in := grouped[srcIdx]["in"]
-		out := grouped[srcIdx]["out"]
+		in := p.grouped[srcIdx]["in"]
+		out := p.grouped[srcIdx]["out"]
 		if err := os.WriteFile(filepath.Join(dir, strconv.Itoa(newIdx)+".in"), in, 0o644); err != nil {
-			return err
+			return nil, "", err
 		}
 		if err := os.WriteFile(filepath.Join(dir, strconv.Itoa(newIdx)+".out"), out, 0o644); err != nil {
-			return err
+			return nil, "", err
 		}
 		inHash := hashBytes(in)
 		outHash := hashBytes(out)
 		_, _ = dataHasher.Write([]byte(inHash + outHash))
 		cases = append(cases, model.Testcase{
-			ProblemID:  prob.ID,
+			ProblemID:  0,
 			Index:      newIdx,
-			Score:      finalScores[i],
+			Score:      p.scores[i],
 			InputSize:  int64(len(in)),
 			OutputSize: int64(len(out)),
 			InputHash:  inHash,
 			OutputHash: outHash,
 		})
 	}
+	return cases, hex.EncodeToString(dataHasher.Sum(nil)), nil
+}
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("problem_id = ?", prob.ID).Delete(&model.Testcase{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Create(&cases).Error; err != nil {
-			return err
-		}
-		prob.TestcaseCount = len(cases)
-		prob.SetScores(finalScores)
-		prob.DataHash = hex.EncodeToString(dataHasher.Sum(nil))
-		return tx.Model(&model.Problem{}).Where("id = ?", prob.ID).Updates(map[string]any{
-			"testcase_count":  prob.TestcaseCount,
-			"testcase_scores": prob.ScoresJSON,
-			"data_hash":       prob.DataHash,
-		}).Error
-	})
+// persist 在给定连接或事务上写入测试点记录并回填题目的统计字段。
+func (s *TestdataService) persistTestdata(db *gorm.DB, prob *model.Problem, cases []model.Testcase, dataHash string, scores []int) error {
+	for i := range cases {
+		cases[i].ProblemID = prob.ID
+	}
+	prob.TestcaseCount = len(cases)
+	prob.SetScores(scores)
+	prob.DataHash = dataHash
+	if err := db.Where("problem_id = ?", prob.ID).Delete(&model.Testcase{}).Error; err != nil {
+		return err
+	}
+	if err := db.Create(&cases).Error; err != nil {
+		return err
+	}
+	return db.Model(&model.Problem{}).Where("id = ?", prob.ID).Updates(map[string]any{
+		"testcase_count":  prob.TestcaseCount,
+		"testcase_scores": prob.ScoresJSON,
+		"data_hash":       prob.DataHash,
+	}).Error
+}
+
+// Stage 在调用方给定的事务里写入测试数据文件与测试点记录。
+// 事务回滚时数据库记录会撤销，调用方需要自行删除题目目录。
+func (s *TestdataService) Stage(tx *gorm.DB, prob *model.Problem, files map[string][]byte, scores []int) error {
+	plan, err := s.planTestdata(files, scores)
+	if err != nil {
+		return err
+	}
+	dir := s.Dir(prob.ID)
+	cases, dataHash, err := plan.writeFiles(dir)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
+	if err := s.persistTestdata(tx, prob, cases, dataHash, plan.scores); err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
+	return nil
+}
+
+// Replace 用新上传的文件整体替换测试数据，文件名为 {序号}.in / {序号}.out（或 .ans）。
+// scores 长度与测试点数不一致时按总分 100 均分。
+func (s *TestdataService) Replace(prob *model.Problem, files map[string][]byte, scores []int) error {
+	plan, err := s.planTestdata(files, scores)
+	if err != nil {
+		return err
+	}
+	dir := s.Dir(prob.ID)
+	cases, dataHash, err := plan.writeFiles(dir)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		return s.persistTestdata(tx, prob, cases, dataHash, plan.scores)
+	}); err != nil {
+		_ = os.RemoveAll(dir)
+		return err
+	}
+	return nil
 }
 
 // Delete 删除某题全部测试数据。

@@ -155,20 +155,36 @@ func (h *Handler) AdminProblemImportStatus(c *gin.Context) {
 	httpx.OK(c, task)
 }
 
-// runProblemImport 顺序处理每个题目包，处理完一个就更新一次进度。
-func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string) {
+// runProblemImport 顺序处理题目包：atomic 为真时整组一个事务，任一题失败则全部不入库。
+// 非 atomic 时逐个包导入，每个包自身原子，处理一个就更新一次进度。
+func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, atomic bool) {
 	ctx := context.Background()
-	for _, file := range staged {
-		item := h.importStagedProblem(ctx, file, u, bank, maxBytes, ip)
+	if atomic {
+		items, _ := h.importPackageGroup(ctx, staged, u, bank, maxBytes, ip)
 		updateImportTask(taskID, func(task *ImportTask) {
-			task.Done++
-			if item.OK {
-				task.SuccessCount++
-			} else {
-				task.FailedCount++
+			for _, item := range items {
+				task.Done++
+				if item.OK {
+					task.SuccessCount++
+				} else {
+					task.FailedCount++
+				}
 			}
-			task.Items = append(task.Items, item)
+			task.Items = append(task.Items, items...)
 		})
+	} else {
+		for _, file := range staged {
+			item := h.importStagedProblem(ctx, file, u, bank, maxBytes, ip)
+			updateImportTask(taskID, func(task *ImportTask) {
+				task.Done++
+				if item.OK {
+					task.SuccessCount++
+				} else {
+					task.FailedCount++
+				}
+				task.Items = append(task.Items, item)
+			})
+		}
 	}
 	finished := time.Now()
 	updateImportTask(taskID, func(task *ImportTask) {
@@ -182,24 +198,17 @@ func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *
 	logger.Adminf("管理员 %s 批量导入题目完成：成功 %d / 共 %d ip=%s", u.Username, success, total, ip)
 }
 
-// importStagedProblem 从临时文件读取题目包并导入。
+// importStagedProblem 从临时文件读取单个题目包并导入；这个包要么整包成功，要么完全不入库。
 func (h *Handler) importStagedProblem(ctx context.Context, file stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string) importItem {
-	item := importItem{Filename: file.Name}
-	info, err := os.Stat(file.Path)
-	if err != nil {
-		item.Error = "读取题目包失败"
-		return item
+	items, err := h.importPackageGroup(ctx, []stagedImportFile{file}, u, bank, maxBytes, ip)
+	if err != nil || len(items) == 0 {
+		reason := "导入题目失败"
+		if err != nil {
+			reason = err.Error()
+		}
+		return importItem{Filename: file.Name, Error: reason}
 	}
-	if maxBytes > 0 && info.Size() > maxBytes {
-		item.Error = fmt.Sprintf("文件 %s 超过大小上限", file.Name)
-		return item
-	}
-	content, err := os.ReadFile(file.Path)
-	if err != nil {
-		item.Error = "读取题目包失败"
-		return item
-	}
-	return h.importProblemContent(ctx, file.Name, content, u, bank, ip)
+	return items[0]
 }
 
 // saveStagedFiles 把上传的题目包复制到临时目录，返回文件清单与清理函数。

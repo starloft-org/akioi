@@ -7,7 +7,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -716,21 +715,7 @@ func (h *Handler) resolveProblemBank(id *uint) (*model.ProblemBank, error) {
 
 // allocateProblemDisplayID 生成题库内的下一个题号；并发写入撞号时重试，仍冲突则报错。
 func (h *Handler) allocateProblemDisplayID(bank *model.ProblemBank) (string, error) {
-	for attempt := 0; attempt < 5; attempt++ {
-		displayID, err := service.NextProblemDisplayID(h.DB, bank)
-		if err != nil {
-			return "", err
-		}
-		var exists int64
-		// 已删除题目占用的题号仍算占用，所以查重也用 Unscoped 统计。
-		if err := h.DB.Unscoped().Model(&model.Problem{}).Where("display_id = ?", displayID).Count(&exists).Error; err != nil {
-			return "", err
-		}
-		if exists == 0 {
-			return displayID, nil
-		}
-	}
-	return "", fmt.Errorf("题号分配冲突")
+	return h.allocateProblemDisplayIDTx(h.DB, bank)
 }
 
 type testcaseItem struct {
@@ -825,7 +810,7 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 	waitInline := len(waitValues) > 0 &&
 		(waitValues[0] == "1" || strings.EqualFold(waitValues[0], "true"))
 	if waitInline && !packed {
-		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip)
+		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, false)
 		cleanup()
 		logger.Adminf("管理员 %s 导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
 		result, ok := snapshotImportTask(task.ID)
@@ -839,7 +824,7 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 
 	go func() {
 		defer cleanup()
-		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip)
+		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, packed)
 	}()
 	if packed {
 		logger.Adminf("管理员 %s 从打包文件开始导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
@@ -852,102 +837,6 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		"status":    task.Status,
 		"container": packed,
 	})
-}
-
-// importProblemContent 导入已经读入内存的题目包；测试数据失败时回滚已创建的题目。
-func (h *Handler) importProblemContent(ctx context.Context, filename string, content []byte, u *model.User, bank *model.ProblemBank, ip string) importItem {
-	item := importItem{Filename: filename}
-	if !strings.EqualFold(filepath.Ext(filename), ".zip") {
-		item.Error = "题目包必须是 zip 文件"
-		return item
-	}
-	files, err := service.ExtractZip(content)
-	if err != nil {
-		item.Error = err.Error()
-		return item
-	}
-	pkg, err := service.ParseProblemPackage(files)
-	if err != nil {
-		item.Error = err.Error()
-		return item
-	}
-
-	// 题号由所属题库自动分配，忽略导入包中的 display_id
-	displayID, err := h.allocateProblemDisplayID(bank)
-	if err != nil {
-		item.Error = "生成题号失败"
-		return item
-	}
-
-	timeLimit := pkg.Config.TimeLimitMS
-	if timeLimit < 100 || timeLimit > 30000 {
-		timeLimit = 1000
-	}
-	memoryLimit := pkg.Config.MemoryLimitMB
-	if memoryLimit < 16 || memoryLimit > 2048 {
-		memoryLimit = 256
-	}
-	visibility := pkg.Config.Visibility
-	if visibility != model.ProblemVisibilityHidden {
-		visibility = model.ProblemVisibilityPublic
-	}
-	difficulty := strings.TrimSpace(pkg.Config.Difficulty)
-	points := pkg.Config.Points
-	if points <= 0 {
-		points = model.DefaultPoints(difficulty)
-	}
-
-	p := model.Problem{
-		DisplayID:     displayID,
-		BankID:        bank.ID,
-		Title:         strings.TrimSpace(pkg.Config.Title),
-		Description:   pkg.Description,
-		InputFormat:   pkg.InputFormat,
-		OutputFormat:  pkg.OutputFormat,
-		Hint:          pkg.Hint,
-		TimeLimitMS:   timeLimit,
-		MemoryLimitMB: memoryLimit,
-		Difficulty:    difficulty,
-		Source:        strings.TrimSpace(pkg.Config.Source),
-		Points:        points,
-		Visibility:    visibility,
-		CompareMode:   model.CompareModeDefault,
-		FloatEps:      1e-6,
-		CreatedBy:     u.ID,
-	}
-	p.SetSamples(pkg.Samples)
-	p.SetTags(pkg.Config.Tags)
-
-	if err := h.DB.Create(&p).Error; err != nil {
-		item.Error = "导入题目失败"
-		return item
-	}
-
-	// 包里带测试数据才写入；只有题面时允许先建题，之后再单独上传数据。
-	hasTestdata := false
-	for name := range files {
-		switch strings.ToLower(filepath.Ext(name)) {
-		case ".in", ".out", ".ans":
-			hasTestdata = true
-		}
-	}
-	if hasTestdata {
-		if err := h.Testdata.Replace(&p, files, nil); err != nil {
-			// 回滚用物理删除，避免软删除残留占用题号
-			h.DB.Unscoped().Delete(&model.Problem{}, p.ID)
-			item.Error = "导入测试数据失败: " + err.Error()
-			return item
-		}
-	}
-
-	logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, p.DisplayID, p.ID, ip)
-	item.OK = true
-	item.ProblemID = p.ID
-	item.DisplayID = p.DisplayID
-	item.Title = p.Title
-	item.TestcaseCount = p.TestcaseCount
-	item.SyncFailed = h.Testdata.SyncToNodes(ctx, p.ID)
-	return item
 }
 
 // AdminSyncTestdata 主动把某题的测试数据推送到全部评测节点，用于节点恢复后的补推送。

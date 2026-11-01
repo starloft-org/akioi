@@ -124,7 +124,7 @@
           {{ importRemaining.length }} 个未导入。
         </p>
         <p class="import-resume__names">剩余：{{ remainingPreview }}</p>
-        <p>重新选择这些 zip 后点「开始导入」，已成功的包会被跳过，失败过的包会重试。</p>
+        <p>重新选择这些 zip 后点「开始导入」，已成功的包会被跳过，失败过的包会重试；也可以直接点「重试」从上次停下的包继续。</p>
         <el-button size="small" @click="discardImportRecord">丢弃记录</el-button>
       </el-alert>
 
@@ -139,17 +139,17 @@
       </el-upload>
 
       <div v-if="importPhase !== 'idle'" class="import-progress">
-        <el-progress
-          :percentage="importPercent"
-          :status="importPhase === 'done' ? 'success' : ''"
-        />
+        <el-progress :percentage="importPercent" :status="progressStatus" />
         <p class="muted">
           <template v-if="importPhase === 'importing'">
-            正在导入 {{ importDone }} / {{ importTotal }} 题，成功 {{ resultsSummary.success }} 个，失败
-            {{ resultsSummary.failed }} 个
+            正在导入第 {{ importDone + 1 }} 个 / 共 {{ importTotal }} 个包，成功
+            {{ resultsSummary.success }} 个
+          </template>
+          <template v-else-if="importPhase === 'failed'">
+            已停止：{{ importStopReason }}
           </template>
           <template v-else>
-            导入完成：成功 {{ resultsSummary.success }} 个，失败 {{ resultsSummary.failed }} 个
+            导入完成：成功 {{ resultsSummary.success }} 个
           </template>
         </p>
       </div>
@@ -171,7 +171,7 @@
 
       <div class="import-hint">
         <p class="muted">
-          导入在服务器后台执行，提交后关闭弹窗或浏览器也会继续，题目会逐包出现在结果里。
+          一次只上传一个包：服务端整包校验通过才入库，包内任一题目有问题则该包整体不导入；出错会停下来，可点「重试」从失败的包继续。
         </p>
         <p class="muted">
           每个 zip 一个题目；也可以把很多题目 zip 打成一个外层 zip 一次上传，服务端会自动展开。
@@ -186,6 +186,9 @@ config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
 
       <template #footer>
         <el-button :disabled="importing" @click="closeImportDialog">关闭</el-button>
+        <el-button v-if="importPhase === 'failed'" :disabled="importing" @click="retryImport">
+          重试
+        </el-button>
         <el-button
           type="primary"
           :loading="importing"
@@ -229,8 +232,8 @@ const importBankId = ref('')
 const importResults = ref([])
 // 持久化的批次记录：{ bankId, total, files: [{ name, status, display_id, title, error }] }
 const importState = ref(null)
-// idle：未开始；importing：正在逐包导入；done：完成
-// 一次选中的包会在前端拆成多个请求，每个请求只传一个 zip，避免单个请求体过大
+// idle：未开始；importing：正在逐个导入；done：全部完成；failed：出错停下，可重试
+// 一次只发一个包：上一个包整包校验通过并入库后才发下一个
 const importPhase = ref('idle')
 const importDone = ref(0)
 const importTotal = ref(0)
@@ -243,6 +246,15 @@ const importResultView = computed(() => {
   const failed = importResults.value.filter((item) => !item.ok)
   const ok = importResults.value.filter((item) => item.ok)
   return [...failed, ...ok].slice(0, 50)
+})
+const progressStatus = computed(() => {
+  if (importPhase.value === 'done') {
+    return 'success'
+  }
+  if (importPhase.value === 'failed') {
+    return 'exception'
+  }
+  return ''
 })
 const importPercent = computed(() => {
   if (!importTotal.value) {
@@ -338,8 +350,8 @@ const removeProblem = async (row) => {
   load()
 }
 
-// 每包一个请求，最多三个并发；单个包失败不影响其余包
-const IMPORT_CONCURRENCY = 3
+// 出错时记录停在哪一个包，供界面提示与重试
+const importStopReason = ref('')
 
 // 导入批次记录保存在 localStorage，刷新或断网后能看出哪些包还没导入
 const IMPORT_STATE_KEY = 'akioi:admin-import-state'
@@ -551,10 +563,9 @@ const handleImport = async () => {
 
   importing.value = true
   importPhase.value = 'importing'
-  const queue = [...targets]
-  const worker = async () => {
-    while (queue.length) {
-      const file = queue.shift()
+  importStopReason.value = ''
+  try {
+    for (const file of targets) {
       const base = importDone.value
       let expanded = false
       const res = await importOne(file, (task) => {
@@ -565,34 +576,42 @@ const handleImport = async () => {
         }
         importDone.value = base + (task?.done || 0)
       })
+      const failures = res.items.filter((item) => !item.ok)
       res.items.forEach((item) => recordImportResult(item.filename || file.name, item))
       if (res.container) {
         importDone.value = base + (res.total || res.items.length)
         importTotal.value = Math.max(importTotal.value, importDone.value)
         // 打包上传无法按内层包续传，整包记为已处理，失败的内层包由用户单独重新上传
-        markOuterFile(file.name, true)
+        markOuterFile(file.name, failures.length === 0)
       } else {
         importDone.value = base + 1
       }
+      if (failures.length) {
+        // 整包要么全入库、要么全不入库，失败时停下来等用户处理
+        importStopReason.value = `${file.name}：${failures[0].error || '包内题目未通过校验'}`
+        break
+      }
     }
-  }
-  try {
-    await Promise.all(
-      Array.from({ length: Math.min(IMPORT_CONCURRENCY, targets.length) }, () => worker())
-    )
-    const remaining = importRemaining.value.length
-    importPhase.value = remaining ? 'idle' : 'done'
-    if (remaining) {
-      ElMessage.warning(`还剩 ${remaining} 个包未导入，记录已保存，重新选择这些 zip 后可以继续`)
+    if (importStopReason.value) {
+      importPhase.value = 'failed'
+      ElMessage.error(`导入已停止：${importStopReason.value}`)
     } else {
-      // 以实际结果为准：打包上传时外层一个 zip 会展开成多个题目包
       const success = importResults.value.filter((item) => item.ok).length
-      ElMessage.success(`导入完成：成功 ${success} 个，失败 ${importResults.value.length - success} 个`)
+      importPhase.value = 'done'
+      ElMessage.success(`导入完成：成功 ${success} 个`)
     }
     load()
   } finally {
     importing.value = false
   }
+}
+
+// 出错停下后从失败的包继续，已成功的包会被跳过
+const retryImport = () => {
+  if (importing.value) {
+    return
+  }
+  handleImport()
 }
 
 const closeImportDialog = () => {
