@@ -23,7 +23,7 @@
       </el-select>
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="goCreate">新建题目</el-button>
-      <el-button @click="importVisible = true">导入题目</el-button>
+      <el-button @click="openImport">导入题目</el-button>
       <el-button @click="load">刷新</el-button>
     </div>
 
@@ -112,6 +112,22 @@
           />
         </el-select>
       </div>
+      <el-alert
+        v-if="importHasRemaining && !importing"
+        type="warning"
+        :closable="false"
+        class="import-resume"
+        title="上次导入还没有完成"
+      >
+        <p>
+          共 {{ importTotal || stateFiles.length }} 个包，已完成 {{ stateOkCount }} 个，还剩
+          {{ importRemaining.length }} 个未导入。
+        </p>
+        <p class="import-resume__names">剩余：{{ remainingPreview }}</p>
+        <p>重新选择这些 zip 后点「开始导入」，已成功的包会被跳过，失败过的包会重试。</p>
+        <el-button size="small" @click="discardImportRecord">丢弃记录</el-button>
+      </el-alert>
+
       <el-upload
         v-model:file-list="importFiles"
         drag
@@ -208,6 +224,8 @@ const importing = ref(false)
 const importFiles = ref([])
 const importBankId = ref('')
 const importResults = ref([])
+// 持久化的批次记录：{ bankId, total, files: [{ name, status, display_id, title, error }] }
+const importState = ref(null)
 // idle：未开始；importing：正在逐包导入；done：完成
 // 一次选中的包会在前端拆成多个请求，每个请求只传一个 zip，避免单个请求体过大
 const importPhase = ref('idle')
@@ -320,6 +338,120 @@ const removeProblem = async (row) => {
 // 每包一个请求，最多三个并发；单个包失败不影响其余包
 const IMPORT_CONCURRENCY = 3
 
+// 导入批次记录保存在 localStorage，刷新或断网后能看出哪些包还没导入
+const IMPORT_STATE_KEY = 'akioi:admin-import-state'
+
+const stateFiles = computed(() => importState.value?.files || [])
+const stateOkCount = computed(() => stateFiles.value.filter((item) => item.status === 'ok').length)
+const importRemaining = computed(() => stateFiles.value.filter((item) => item.status !== 'ok'))
+const importHasRemaining = computed(() => importRemaining.value.length > 0)
+const remainingPreview = computed(() => {
+  const names = importRemaining.value.map((item) => item.name)
+  const head = names.slice(0, 5).join('、')
+  return names.length > 5 ? `${head} 等 ${names.length} 个` : head
+})
+
+const loadImportState = () => {
+  try {
+    const raw = localStorage.getItem(IMPORT_STATE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw)
+    if (!parsed || !Array.isArray(parsed.files) || !parsed.files.length) {
+      return null
+    }
+    return parsed
+  } catch (e) {
+    return null
+  }
+}
+
+const persistImportState = () => {
+  try {
+    if (importState.value) {
+      localStorage.setItem(IMPORT_STATE_KEY, JSON.stringify(importState.value))
+    }
+  } catch (e) {
+    // 存储不可用时只影响刷新后的续传提示
+  }
+}
+
+const clearImportState = () => {
+  try {
+    localStorage.removeItem(IMPORT_STATE_KEY)
+  } catch (e) {
+    // 忽略存储异常
+  }
+  importState.value = null
+}
+
+// 从批次记录恢复弹窗里的结果列表与进度
+const restoreImportState = (saved) => {
+  importState.value = saved
+  const processed = saved.files.filter((item) => item.status !== 'pending')
+  importResults.value = processed.map((item) => ({
+    filename: item.name,
+    ok: item.status === 'ok',
+    display_id: item.display_id,
+    title: item.title,
+    error: item.error
+  }))
+  importDone.value = processed.length
+  importTotal.value = saved.total || saved.files.length
+  importPhase.value = importRemaining.value.length ? 'idle' : 'done'
+}
+
+const openImport = () => {
+  const saved = loadImportState()
+  if (saved) {
+    restoreImportState(saved)
+    if (saved.bankId && banks.value.some((bank) => bank.id === saved.bankId)) {
+      importBankId.value = saved.bankId
+    }
+  } else {
+    importState.value = null
+  }
+  importVisible.value = true
+}
+
+const recordImportResult = (fileName, item) => {
+  // 重试同一个包时替换掉上一条失败记录，避免结果里出现重复条目
+  const previous = importResults.value.findIndex((entry) => entry.filename === fileName && !entry.ok)
+  if (previous >= 0) {
+    importResults.value.splice(previous, 1, item)
+  } else {
+    importResults.value.push(item)
+  }
+  const target = stateFiles.value.find((entry) => entry.name === fileName && entry.status !== 'ok')
+  if (target) {
+    target.status = item.ok ? 'ok' : 'failed'
+    target.display_id = item.display_id
+    target.title = item.title
+    target.error = item.error
+  }
+  importDone.value = stateFiles.value.filter((entry) => entry.status !== 'pending').length
+  persistImportState()
+}
+
+const discardImportRecord = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '丢弃记录后需要重新选择全部题目包（已入库的题目不受影响）。',
+      '丢弃导入记录',
+      { type: 'warning' }
+    )
+  } catch (e) {
+    return
+  }
+  clearImportState()
+  importResults.value = []
+  importDone.value = 0
+  importTotal.value = 0
+  importPhase.value = 'idle'
+  ElMessage.success('已丢弃导入记录')
+}
+
 const importOne = async (file) => {
   try {
     const data = await adminImportProblemOne(file, importBankId.value || undefined)
@@ -340,34 +472,70 @@ const importOne = async (file) => {
 const handleImport = async () => {
   const raws = importFiles.value.map((item) => item.raw).filter(Boolean)
   if (!raws.length) {
+    ElMessage.warning('请先选择要导入的题目包')
     return
   }
+
+  let targets = raws
+  if (importHasRemaining.value) {
+    // 续传：只导入上次记录里还没成功的包，按文件名逐个匹配
+    const pending = new Map()
+    importRemaining.value.forEach((entry) => {
+      pending.set(entry.name, (pending.get(entry.name) || 0) + 1)
+    })
+    const ignored = []
+    targets = []
+    raws.forEach((file) => {
+      const left = pending.get(file.name) || 0
+      if (left > 0) {
+        targets.push(file)
+        pending.set(file.name, left - 1)
+      } else {
+        ignored.push(file.name)
+      }
+    })
+    if (!targets.length) {
+      ElMessage.warning('选中的包与记录的剩余文件不一致，请重新选择剩余的 zip')
+      return
+    }
+    if (ignored.length) {
+      ElMessage.info(`已跳过 ${ignored.length} 个不在待导入列表中的包`)
+    }
+  } else {
+    importState.value = {
+      bankId: importBankId.value || null,
+      total: raws.length,
+      createdAt: new Date().toISOString(),
+      files: raws.map((file) => ({ name: file.name, status: 'pending' }))
+    }
+    importResults.value = []
+    importDone.value = 0
+    importTotal.value = raws.length
+    persistImportState()
+  }
+
   importing.value = true
   importPhase.value = 'importing'
-  importResults.value = []
-  importDone.value = 0
-  importTotal.value = raws.length
-
-  const queue = [...raws]
+  const queue = [...targets]
   const worker = async () => {
     while (queue.length) {
       const file = queue.shift()
       const item = await importOne(file)
-      importResults.value.push(item)
-      importDone.value += 1
+      recordImportResult(file.name, item)
     }
   }
-  const workers = Array.from(
-    { length: Math.min(IMPORT_CONCURRENCY, raws.length) },
-    () => worker()
-  )
   try {
-    await Promise.all(workers)
-    importPhase.value = 'done'
-    const success = importResults.value.filter((item) => item.ok).length
-    ElMessage.success(
-      `导入完成：成功 ${success} 个，失败 ${importResults.value.length - success} 个`
+    await Promise.all(
+      Array.from({ length: Math.min(IMPORT_CONCURRENCY, targets.length) }, () => worker())
     )
+    const remaining = importRemaining.value.length
+    importPhase.value = remaining ? 'idle' : 'done'
+    if (remaining) {
+      ElMessage.warning(`还剩 ${remaining} 个包未导入，记录已保存，重新选择这些 zip 后可以继续`)
+    } else {
+      const success = stateOkCount.value
+      ElMessage.success(`导入完成：成功 ${success} 个，失败 ${importTotal.value - success} 个`)
+    }
     load()
   } finally {
     importing.value = false
@@ -377,6 +545,11 @@ const handleImport = async () => {
 const closeImportDialog = () => {
   importVisible.value = false
   importFiles.value = []
+  if (importHasRemaining.value) {
+    // 还差包没导，保留记录，下次打开继续
+    return
+  }
+  clearImportState()
   importResults.value = []
   importPhase.value = 'idle'
   importDone.value = 0
@@ -399,6 +572,21 @@ onMounted(() => {
 
 .import-hint {
   margin-top: 16px;
+}
+
+.import-resume {
+  margin-bottom: 12px;
+}
+
+.import-resume p {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.import-resume__names {
+  word-break: break-all;
+  color: var(--akioi-text-weak);
 }
 
 .import-progress {
