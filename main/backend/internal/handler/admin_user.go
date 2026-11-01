@@ -155,6 +155,10 @@ func (h *Handler) AdminUpdateUser(c *gin.Context) {
 		if role == model.RoleUser {
 			updates["admin_permissions"] = ""
 		}
+		// 从普通用户提升为管理员时默认授予全部权限，之后在管理员管理中裁剪
+		if role == model.RoleAdmin && u.Role != model.RoleAdmin && strings.TrimSpace(u.AdminPermissions) == "" {
+			updates["admin_permissions"] = strings.Join(model.AllAdminPermissions(), ",")
+		}
 	}
 	if req.Status != nil {
 		if *req.Status != model.UserStatusActive && *req.Status != model.UserStatusBanned {

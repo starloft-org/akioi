@@ -173,7 +173,8 @@ const changeRole = async (row, role) => {
   try {
     await adminUpdateUser(row.id, { role })
     row.role = role
-    ElMessage.success('角色已更新')
+    // 提升为管理员后默认拥有全部模块权限，可在「管理员管理」中裁剪
+    ElMessage.success(role === 'admin' ? '已设为管理员，可在管理员管理中调整权限' : '角色已更新')
   } catch (e) {
     load()
   }

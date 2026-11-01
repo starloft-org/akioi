@@ -6,10 +6,10 @@
       type="info"
       :closable="false"
       show-icon
-      title="超级管理员可以创建管理员，并按后台模块分配权限；管理员登录后台后只能看到并被允许操作被分配的模块。"
+      title="超级管理员可以把已有账号设为管理员，并按后台模块分配权限；管理员登录后台后只能看到并被允许操作被分配的模块。"
     />
     <div class="toolbar">
-      <el-button type="primary" @click="openCreate">新建管理员</el-button>
+      <el-button type="primary" @click="openCreate">添加管理员</el-button>
       <el-button @click="load">刷新</el-button>
     </div>
 
@@ -59,16 +59,28 @@
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="createVisible" title="新建管理员" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="createVisible" title="添加管理员" width="520px" :close-on-click-modal="false">
       <el-form :model="createForm" label-width="90px">
-        <el-form-item label="用户名">
-          <el-input v-model="createForm.username" placeholder="4-20 位字母、数字、下划线或短横线" />
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="createForm.nickname" placeholder="可留空，默认与用户名相同" />
-        </el-form-item>
-        <el-form-item label="初始密码">
-          <el-input v-model="createForm.password" type="password" show-password placeholder="至少 6 位" />
+        <el-form-item label="选择用户">
+          <el-select
+            v-model="createForm.user_id"
+            filterable
+            remote
+            reserve-keyword
+            :remote-method="searchUsers"
+            :loading="searching"
+            placeholder="输入用户名或昵称搜索"
+            style="width: 100%"
+            @focus="searchUsers('')"
+          >
+            <el-option
+              v-for="item in userOptions"
+              :key="item.id"
+              :label="item.nickname ? `${item.username}（${item.nickname}）` : item.username"
+              :value="item.id"
+            />
+          </el-select>
+          <p class="muted admin-note">把已有账号设为管理员，不会新建账号；账号的昵称、密码仍在用户管理中维护。</p>
         </el-form-item>
         <el-form-item label="权限">
           <div class="permission-groups">
@@ -85,7 +97,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitCreate">创建</el-button>
+        <el-button type="primary" :loading="saving" @click="submitCreate">设为管理员</el-button>
       </template>
     </el-dialog>
 
@@ -131,7 +143,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { adminCreateAdmin, adminDeleteAdmin, adminListAdmins, adminUpdateAdmin } from '@/api'
+import { adminCreateAdmin, adminDeleteAdmin, adminListAdmins, adminListUsers, adminUpdateAdmin } from '@/api'
 import { formatTime } from '@/utils/format'
 
 const FALLBACK_OPTIONS = [
@@ -184,34 +196,43 @@ const load = async () => {
 }
 
 const createVisible = ref(false)
-const createForm = reactive({ username: '', nickname: '', password: '', permissions: [] })
+const createForm = reactive({ user_id: null, permissions: [] })
+const userOptions = ref([])
+const searching = ref(false)
+
+// 只在普通用户里搜索候选账号，管理员已经在列表里
+const searchUsers = async (keyword) => {
+  searching.value = true
+  try {
+    const data = await adminListUsers({ keyword: keyword || undefined, role: 'user', page: 1, page_size: 20 })
+    userOptions.value = (data.items || []).filter((item) => item.role === 'user')
+  } catch (e) {
+    userOptions.value = []
+  } finally {
+    searching.value = false
+  }
+}
 
 const openCreate = () => {
-  createForm.username = ''
-  createForm.nickname = ''
-  createForm.password = ''
-  createForm.permissions = []
+  createForm.user_id = null
+  createForm.permissions = options.value.map((option) => option.key)
+  userOptions.value = []
   createVisible.value = true
+  searchUsers('')
 }
 
 const submitCreate = async () => {
-  if (!createForm.username.trim()) {
-    ElMessage.warning('请填写用户名')
-    return
-  }
-  if (!createForm.password || createForm.password.length < 6) {
-    ElMessage.warning('初始密码至少 6 位')
+  if (!createForm.user_id) {
+    ElMessage.warning('请选择要设为管理员的用户')
     return
   }
   saving.value = true
   try {
     await adminCreateAdmin({
-      username: createForm.username.trim(),
-      nickname: createForm.nickname.trim(),
-      password: createForm.password,
+      user_id: createForm.user_id,
       permissions: createForm.permissions
     })
-    ElMessage.success('管理员已创建')
+    ElMessage.success('已设为管理员')
     createVisible.value = false
     load()
   } catch (e) {
@@ -281,6 +302,11 @@ onMounted(load)
 <style scoped>
 .admin-tip {
   margin-bottom: 12px;
+}
+
+.admin-note {
+  margin: 6px 0 0;
+  font-size: 12px;
 }
 
 .permission-groups {

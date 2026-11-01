@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"akioi/internal/httpx"
+	"akioi/internal/logger"
 	"akioi/internal/model"
 
 	"github.com/gin-gonic/gin"
@@ -55,69 +56,55 @@ func (h *Handler) AdminListAdmins(c *gin.Context) {
 }
 
 type adminCreateAdminRequest struct {
-	Username    string   `json:"username"`
-	Password    string   `json:"password"`
-	Nickname    string   `json:"nickname"`
+	UserID      uint     `json:"user_id"`
 	Permissions []string `json:"permissions"`
 }
 
-// AdminCreateAdmin 新建管理员账号并分配权限。
+// AdminCreateAdmin 把已有账号提升为管理员并分配权限，不创建新账号。
 func (h *Handler) AdminCreateAdmin(c *gin.Context) {
 	var req adminCreateAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, "请求参数格式错误")
 		return
 	}
-	username := strings.TrimSpace(req.Username)
-	if err := validateUsername(username); err != nil {
-		httpx.BadRequest(c, err.Error())
-		return
-	}
-	if len(req.Password) < 6 || len(req.Password) > 64 {
-		httpx.BadRequest(c, "密码长度需在 6 到 64 个字符之间")
+	if req.UserID == 0 {
+		httpx.BadRequest(c, "请选择要设为管理员的用户")
 		return
 	}
 	if unknown := model.UnknownAdminPermissions(req.Permissions); len(unknown) > 0 {
 		httpx.BadRequest(c, "存在无效的权限项："+strings.Join(unknown, "、"))
 		return
 	}
-	nickname := strings.TrimSpace(req.Nickname)
-	if nickname == "" {
-		nickname = username
-	}
-	if len([]rune(nickname)) > 32 {
-		httpx.BadRequest(c, "昵称长度不能超过 32 个字符")
+	var target model.User
+	if err := h.DB.First(&target, req.UserID).Error; err != nil {
+		httpx.NotFound(c, "用户不存在")
 		return
 	}
-
-	var exists int64
-	if err := h.DB.Model(&model.User{}).Where("username = ?", username).Count(&exists).Error; err != nil {
-		httpx.ServerError(c, "新建管理员失败")
+	if target.IsAdmin() {
+		httpx.Conflict(c, "该用户已经是管理员")
 		return
 	}
-	if exists > 0 {
-		httpx.Conflict(c, "用户名已被占用")
+	// 未指定权限时默认授予全部后台模块，之后可以在编辑里裁剪。
+	permissions := req.Permissions
+	if len(permissions) == 0 {
+		permissions = model.AllAdminPermissions()
+	}
+	if err := h.DB.Model(&model.User{}).Where("id = ?", target.ID).Updates(map[string]any{
+		"role":              model.RoleAdmin,
+		"admin_permissions": strings.Join(model.NormalizeAdminPermissions(permissions), ","),
+	}).Error; err != nil {
+		httpx.ServerError(c, "设置管理员失败")
 		return
 	}
-
-	hash, err := h.Auth.HashPassword(req.Password)
-	if err != nil {
-		httpx.ServerError(c, "新建管理员失败")
+	if operator := httpx.CurrentUser(c); operator != nil {
+		logger.Adminf("管理员 %s 把用户 %s (id=%d) 设为管理员 ip=%s", operator.Username, target.Username, target.ID, c.ClientIP())
+	}
+	var fresh model.User
+	if err := h.DB.First(&fresh, target.ID).Error; err != nil {
+		httpx.ServerError(c, "设置管理员失败")
 		return
 	}
-	u := model.User{
-		Username:     username,
-		PasswordHash: hash,
-		Nickname:     nickname,
-		Role:         model.RoleAdmin,
-		Status:       model.UserStatusActive,
-	}
-	u.SetPermissions(req.Permissions)
-	if err := h.DB.Create(&u).Error; err != nil {
-		httpx.ServerError(c, "新建管理员失败")
-		return
-	}
-	httpx.OK(c, gin.H{"admin": newAdminAccountItem(&u)})
+	httpx.OK(c, gin.H{"admin": newAdminAccountItem(&fresh)})
 }
 
 type adminUpdateAdminRequest struct {
