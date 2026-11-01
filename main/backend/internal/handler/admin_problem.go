@@ -804,23 +804,8 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 	ip := c.ClientIP()
 	task := createImportTask(len(staged))
 
-	// wait=1（或 wait=true）时同步导入并直接返回结果，供前端按包拆分上传时逐包拿结果。
-	// 打包上传会展开成多个题目包，耗时不可预估，一律走后台任务由前端轮询。
-	waitValues := form.Value["wait"]
-	waitInline := len(waitValues) > 0 &&
-		(waitValues[0] == "1" || strings.EqualFold(waitValues[0], "true"))
-	if waitInline && !packed {
-		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, false)
-		cleanup()
-		logger.Adminf("管理员 %s 导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
-		result, ok := snapshotImportTask(task.ID)
-		if !ok {
-			httpx.ServerError(c, "导入任务已过期，请重试")
-			return
-		}
-		httpx.OK(c, importTaskResponse(result))
-		return
-	}
+	// 导入一律交给后台任务：上传完立刻返回任务号，前端轮询进度。
+	// 即使单个包很大（测试点多、需要推送评测节点），也不会有请求被网关或浏览器超时掐断。
 
 	go func() {
 		defer cleanup()

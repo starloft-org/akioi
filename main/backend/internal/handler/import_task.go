@@ -30,13 +30,18 @@ const (
 
 // ImportTask 是一次批量导入的进度快照。
 type ImportTask struct {
-	ID           string       `json:"task_id"`
-	Total        int          `json:"total"`
-	Done         int          `json:"done"`
-	SuccessCount int          `json:"success_count"`
-	FailedCount  int          `json:"failed_count"`
-	Status       string       `json:"status"`
-	Message      string       `json:"message,omitempty"`
+	ID           string `json:"task_id"`
+	Total        int    `json:"total"`
+	Done         int    `json:"done"`
+	SuccessCount int    `json:"success_count"`
+	FailedCount  int    `json:"failed_count"`
+	Status       string `json:"status"`
+	Message      string `json:"message,omitempty"`
+	// Current 是正在处理的包序号（从 1 开始），PackageTotal/PackageDone 是包内题目进度，
+	// 前端据此在单个大包导入期间也能看到进度而不是一直停在 0%。
+	Current      int          `json:"current"`
+	PackageTotal int          `json:"package_total"`
+	PackageDone  int          `json:"package_done"`
 	Items        []importItem `json:"items"`
 	CreatedAt    time.Time    `json:"created_at"`
 	FinishedAt   *time.Time   `json:"finished_at,omitempty"`
@@ -97,6 +102,10 @@ func importTaskResponse(task ImportTask) gin.H {
 		"success_count": task.SuccessCount,
 		"failed_count":  task.FailedCount,
 		"status":        task.Status,
+		"message":       task.Message,
+		"current":       task.Current,
+		"package_total": task.PackageTotal,
+		"package_done":  task.PackageDone,
 		"items":         task.Items,
 	}
 }
@@ -155,41 +164,62 @@ func (h *Handler) AdminProblemImportStatus(c *gin.Context) {
 	httpx.OK(c, task)
 }
 
+// importProgress 报告当前阶段内的进度：done/total 是本阶段的计数，note 是给前端看的提示。
+type importProgress func(done, total int, note string)
+
 // runProblemImport 顺序处理题目包：atomic 为真时整组一个事务，任一题失败则全部不入库。
 // 非 atomic 时逐个包导入，每个包自身原子，处理一个就更新一次进度。
 func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, atomic bool) {
 	ctx := context.Background()
-	if atomic {
-		items, _ := h.importPackageGroup(ctx, staged, u, bank, maxBytes, ip)
+	progress := func(done, total int, note string) {
 		updateImportTask(taskID, func(task *ImportTask) {
-			for _, item := range items {
-				task.Done++
-				if item.OK {
-					task.SuccessCount++
-				} else {
-					task.FailedCount++
-				}
+			task.PackageDone = done
+			task.PackageTotal = total
+			if note != "" {
+				task.Message = note
 			}
-			task.Items = append(task.Items, items...)
+		})
+	}
+	applyItem := func(item importItem) {
+		updateImportTask(taskID, func(task *ImportTask) {
+			task.Done++
+			if item.OK {
+				task.SuccessCount++
+			} else {
+				task.FailedCount++
+			}
+			task.Items = append(task.Items, item)
+			task.PackageDone = 0
+			task.PackageTotal = 0
+		})
+	}
+	if atomic {
+		items, _ := h.importPackageGroup(ctx, staged, u, bank, maxBytes, ip, progress)
+		for _, item := range items {
+			applyItem(item)
+		}
+		updateImportTask(taskID, func(task *ImportTask) {
+			task.Current = task.Total
 		})
 	} else {
-		for _, file := range staged {
-			item := h.importStagedProblem(ctx, file, u, bank, maxBytes, ip)
+		for i, file := range staged {
+			index := i + 1
 			updateImportTask(taskID, func(task *ImportTask) {
-				task.Done++
-				if item.OK {
-					task.SuccessCount++
-				} else {
-					task.FailedCount++
-				}
-				task.Items = append(task.Items, item)
+				task.Current = index
+				task.PackageDone = 0
+				task.PackageTotal = 0
+				task.Message = "正在导入 " + file.Name
 			})
+			applyItem(h.importStagedProblem(ctx, file, u, bank, maxBytes, ip, progress))
 		}
 	}
 	finished := time.Now()
 	updateImportTask(taskID, func(task *ImportTask) {
 		task.Status = importTaskDone
 		task.FinishedAt = &finished
+		task.PackageDone = 0
+		task.PackageTotal = 0
+		task.Message = ""
 	})
 	total, success := 0, 0
 	if task, ok := snapshotImportTask(taskID); ok {
@@ -199,8 +229,8 @@ func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *
 }
 
 // importStagedProblem 从临时文件读取单个题目包并导入；这个包要么整包成功，要么完全不入库。
-func (h *Handler) importStagedProblem(ctx context.Context, file stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string) importItem {
-	items, err := h.importPackageGroup(ctx, []stagedImportFile{file}, u, bank, maxBytes, ip)
+func (h *Handler) importStagedProblem(ctx context.Context, file stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, progress importProgress) importItem {
+	items, err := h.importPackageGroup(ctx, []stagedImportFile{file}, u, bank, maxBytes, ip, progress)
 	if err != nil || len(items) == 0 {
 		reason := "导入题目失败"
 		if err != nil {

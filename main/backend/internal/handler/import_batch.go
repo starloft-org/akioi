@@ -115,14 +115,20 @@ func (h *Handler) allocateProblemDisplayIDTx(tx *gorm.DB, bank *model.ProblemBan
 
 // importPreparedGroup 在一个事务里写入整组题目与测试数据；任一题失败则整组回滚。
 // 测试数据文件会先落盘，回滚时由这里删除，保证失败不留下半成品。
-func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProblem, u *model.User, bank *model.ProblemBank, ip string) ([]importItem, error) {
+func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProblem, u *model.User, bank *model.ProblemBank, ip string, progress importProgress) ([]importItem, error) {
 	items := make([]importItem, len(preps))
 	for i, prep := range preps {
 		items[i] = importItem{Filename: prep.filename}
 	}
+	report := func(done int, note string) {
+		if progress != nil {
+			progress(done, len(preps), note)
+		}
+	}
 	dirs := make([]string, 0, len(preps))
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		for i, prep := range preps {
+			report(i, "正在写入 "+prep.filename)
 			displayID, err := h.allocateProblemDisplayIDTx(tx, bank)
 			if err != nil {
 				return fmt.Errorf("%s：生成题号失败：%w", prep.filename, err)
@@ -143,6 +149,7 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 			items[i].DisplayID = p.DisplayID
 			items[i].Title = p.Title
 			items[i].TestcaseCount = p.TestcaseCount
+			report(i+1, "")
 		}
 		return nil
 	})
@@ -158,16 +165,21 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 
 	// 事务提交后再推送测试数据，避免回滚后节点上残留数据
 	for i := range items {
+		report(i, "正在推送测试数据 "+items[i].DisplayID)
 		logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, items[i].DisplayID, items[i].ProblemID, ip)
 		items[i].SyncFailed = h.Testdata.SyncToNodes(ctx, items[i].ProblemID)
+		report(i+1, "")
 	}
 	return items, nil
 }
 
 // importPackageGroup 读入并校验整组题目包，然后一次性导入；任一题有问题整组都不入库。
-func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string) ([]importItem, error) {
+func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, progress importProgress) ([]importItem, error) {
 	preps := make([]*preparedProblem, 0, len(staged))
-	for _, file := range staged {
+	for i, file := range staged {
+		if progress != nil {
+			progress(i, len(staged), "正在解析 "+file.Name)
+		}
 		content, err := readStagedFile(file, maxBytes)
 		if err != nil {
 			return failureItems(staged, err.Error()), err
@@ -177,8 +189,11 @@ func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportF
 			return failureItems(staged, fmt.Sprintf("%s：%s", file.Name, err.Error())), err
 		}
 		preps = append(preps, prep)
+		if progress != nil {
+			progress(i+1, len(staged), "")
+		}
 	}
-	return h.importPreparedGroup(ctx, preps, u, bank, ip)
+	return h.importPreparedGroup(ctx, preps, u, bank, ip, progress)
 }
 
 // readStagedFile 读取临时目录里的上传包并检查大小上限。

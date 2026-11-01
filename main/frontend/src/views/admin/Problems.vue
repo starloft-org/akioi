@@ -142,7 +142,7 @@
         <el-progress :percentage="importPercent" :status="progressStatus" />
         <p class="muted">
           <template v-if="importPhase === 'importing'">
-            正在导入第 {{ importDone + 1 }} 个 / 共 {{ importTotal }} 个包，成功
+            {{ importMessage || `正在导入第 ${Math.min(importDone + 1, importTotal)} 个 / 共 ${importTotal} 个包` }}，成功
             {{ resultsSummary.success }} 个
           </template>
           <template v-else-if="importPhase === 'failed'">
@@ -260,7 +260,12 @@ const importPercent = computed(() => {
   if (!importTotal.value) {
     return 0
   }
-  return Math.min(100, Math.round((importDone.value / importTotal.value) * 100))
+  // 一个包里可能有很多题：按包内进度折算，导入单个大包时进度条也会动
+  let done = importDone.value
+  if (importPackageTotal.value > 0) {
+    done += Math.min(1, importPackageDone.value / importPackageTotal.value)
+  }
+  return Math.min(100, Math.round((done / importTotal.value) * 100))
 })
 
 const visibleItems = computed(() => {
@@ -352,6 +357,9 @@ const removeProblem = async (row) => {
 
 // 出错时记录停在哪一个包，供界面提示与重试
 const importStopReason = ref('')
+const importMessage = ref('')
+const importPackageDone = ref(0)
+const importPackageTotal = ref(0)
 
 // 导入批次记录保存在 localStorage，刷新或断网后能看出哪些包还没导入
 const IMPORT_STATE_KEY = 'akioi:admin-import-state'
@@ -476,34 +484,64 @@ const discardImportRecord = async () => {
   ElMessage.success('已丢弃导入记录')
 }
 
-// 轮询后台导入任务的进度
+// 轮询后台导入任务的进度：任务在后端内存里，重启或过期后返回 404，
+// 这时必须明确失败并让用户重新上传，不能无限静默重试卡住界面。
 const pollImportTask = (taskId, onProgress) =>
-  new Promise((resolve) => {
+  new Promise((resolve, reject) => {
+    let timer = null
+    let misses = 0
+    const stop = () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
     const tick = async () => {
       try {
         const task = await adminGetImportTask(taskId)
+        misses = 0
         onProgress?.(task)
         if (task.status === 'done') {
+          stop()
           resolve(task)
           return
         }
+        if (task.status === 'failed') {
+          stop()
+          reject(new Error(task.message || '导入失败'))
+          return
+        }
       } catch (e) {
-        // 单次轮询失败不中断，下一轮继续
+        if (e?.response?.status === 404) {
+          stop()
+          reject(new Error('导入任务已不存在（后端可能重启过），请重新上传这个包'))
+          return
+        }
+        misses += 1
+        if (misses >= 10) {
+          stop()
+          reject(new Error(e?.response?.data?.message || e?.message || '查询导入进度失败'))
+          return
+        }
       }
-      setTimeout(tick, 1000)
+      timer = setTimeout(tick, 1000)
     }
     tick()
   })
 
-// 普通题目包同步返回结果；打包上传（外层 zip 里装多个题目包）由服务端展开后
-// 在后台导入，这里轮询任务直到结束。
+// 上传后服务端立刻返回任务号，解析/入库/推送测试数据都在后台进行，
+// 这里轮询任务直到结束（大包不会再有请求超时的问题）。
 const importOne = async (file, onProgress) => {
   try {
-    const data = await adminImportProblemOne(file, importBankId.value || undefined)
+    importMessage.value = `正在上传 ${file.name}`
+    const data = await adminImportProblemOne(file, importBankId.value || undefined, (percent) => {
+      importMessage.value = `正在上传 ${file.name} ${percent}%`
+    })
     if (Array.isArray(data?.items)) {
       return { items: data.items, container: false }
     }
     if (data?.task_id) {
+      importMessage.value = '上传完成，正在校验并导入…'
       const task = await pollImportTask(data.task_id, onProgress)
       return { items: task.items || [], container: true, total: task.total || 0 }
     }
@@ -575,6 +613,11 @@ const handleImport = async () => {
           expanded = true
         }
         importDone.value = base + (task?.done || 0)
+        importPackageDone.value = task?.package_done || 0
+        importPackageTotal.value = task?.package_total || 0
+        if (task?.message) {
+          importMessage.value = task.message
+        }
       })
       const failures = res.items.filter((item) => !item.ok)
       res.items.forEach((item) => recordImportResult(item.filename || file.name, item))
@@ -585,6 +628,8 @@ const handleImport = async () => {
         markOuterFile(file.name, failures.length === 0)
       } else {
         importDone.value = base + 1
+        importPackageDone.value = 0
+        importPackageTotal.value = 0
       }
       if (failures.length) {
         // 整包要么全入库、要么全不入库，失败时停下来等用户处理
@@ -594,6 +639,7 @@ const handleImport = async () => {
     }
     if (importStopReason.value) {
       importPhase.value = 'failed'
+      importMessage.value = ''
       ElMessage.error(`导入已停止：${importStopReason.value}`)
     } else {
       const success = importResults.value.filter((item) => item.ok).length
@@ -601,6 +647,12 @@ const handleImport = async () => {
       ElMessage.success(`导入完成：成功 ${success} 个`)
     }
     load()
+  } catch (e) {
+    // 轮询发现任务丢失（后端重启/过期）或接口异常时，明确停下来并提示重新上传
+    importStopReason.value = e?.message || '导入失败，请重试'
+    importPhase.value = 'failed'
+    importMessage.value = ''
+    ElMessage.error(`导入已停止：${importStopReason.value}`)
   } finally {
     importing.value = false
   }

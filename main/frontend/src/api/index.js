@@ -116,17 +116,25 @@ export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/prob
 // 批量导入在后台执行，上传完返回 task_id，用这个接口轮询进度
 export const adminGetImportTask = (taskId) => request.get(`/api/admin/v1/import-tasks/${taskId}`)
 
-// 单个题目包同步导入：前端按包拆分上传，每个请求只处理一个包并直接返回结果
-export const adminImportProblemOne = (file, bankId) => {
+// 单个题目包上传：服务端立刻返回 task_id，由前端轮询进度，避免大包请求超时
+export const adminImportProblemOne = (file, bankId, onUploadProgress) => {
   const form = new FormData()
   form.append('files', file)
   if (bankId) {
     form.append('bank_id', bankId)
   }
-  form.append('wait', '1')
   return request.post('/api/admin/v1/problems/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 600000
+    timeout: 600000,
+    onUploadProgress: (event) => {
+      if (!onUploadProgress) {
+        return
+      }
+      const total = event?.total || 0
+      if (total > 0) {
+        onUploadProgress(Math.min(100, Math.round((event.loaded / total) * 100)))
+      }
+    }
   })
 }
 
