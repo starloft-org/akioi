@@ -173,7 +173,10 @@
         <p class="muted">
           导入在服务器后台执行，提交后关闭弹窗或浏览器也会继续，题目会逐包出现在结果里。
         </p>
-        <p class="muted">每个 zip 一个题目，包内结构：</p>
+        <p class="muted">
+          每个 zip 一个题目；也可以把很多题目 zip 打成一个外层 zip 一次上传，服务端会自动展开。
+        </p>
+        <p class="muted">包内结构：</p>
         <pre class="pre-block">problem.md        题面，可直接用洛谷「复制 Markdown」的内容
 config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
                   / points / tags / source / visibility
@@ -429,8 +432,17 @@ const recordImportResult = (fileName, item) => {
     target.display_id = item.display_id
     target.title = item.title
     target.error = item.error
+    persistImportState()
   }
-  importDone.value = stateFiles.value.filter((entry) => entry.status !== 'pending').length
+}
+
+// 打包上传结束后，把外层 zip 在续传记录里的状态置为完成
+const markOuterFile = (fileName, ok) => {
+  const target = stateFiles.value.find((entry) => entry.name === fileName)
+  if (!target) {
+    return
+  }
+  target.status = ok ? 'ok' : 'failed'
   persistImportState()
 }
 
@@ -452,19 +464,42 @@ const discardImportRecord = async () => {
   ElMessage.success('已丢弃导入记录')
 }
 
-const importOne = async (file) => {
+// 轮询后台导入任务的进度
+const pollImportTask = (taskId, onProgress) =>
+  new Promise((resolve) => {
+    const tick = async () => {
+      try {
+        const task = await adminGetImportTask(taskId)
+        onProgress?.(task)
+        if (task.status === 'done') {
+          resolve(task)
+          return
+        }
+      } catch (e) {
+        // 单次轮询失败不中断，下一轮继续
+      }
+      setTimeout(tick, 1000)
+    }
+    tick()
+  })
+
+// 普通题目包同步返回结果；打包上传（外层 zip 里装多个题目包）由服务端展开后
+// 在后台导入，这里轮询任务直到结束。
+const importOne = async (file, onProgress) => {
   try {
     const data = await adminImportProblemOne(file, importBankId.value || undefined)
-    const item = (data?.items || [])[0]
-    if (item) {
-      return item
+    if (Array.isArray(data?.items)) {
+      return { items: data.items, container: false }
     }
-    return { filename: file.name, ok: false, error: '导入没有返回结果' }
+    if (data?.task_id) {
+      const task = await pollImportTask(data.task_id, onProgress)
+      return { items: task.items || [], container: true, total: task.total || 0 }
+    }
+    return { items: [{ filename: file.name, ok: false, error: '导入没有返回结果' }], container: false }
   } catch (e) {
     return {
-      filename: file.name,
-      ok: false,
-      error: e?.response?.data?.message || e?.message || '导入失败'
+      items: [{ filename: file.name, ok: false, error: e?.response?.data?.message || e?.message || '导入失败' }],
+      container: false
     }
   }
 }
@@ -520,8 +555,25 @@ const handleImport = async () => {
   const worker = async () => {
     while (queue.length) {
       const file = queue.shift()
-      const item = await importOne(file)
-      recordImportResult(file.name, item)
+      const base = importDone.value
+      let expanded = false
+      const res = await importOne(file, (task) => {
+        // 外层 zip 展开后题目包数量变多，进度按展开后的总数推进
+        if (!expanded && task?.total) {
+          importTotal.value += Math.max(0, task.total - 1)
+          expanded = true
+        }
+        importDone.value = base + (task?.done || 0)
+      })
+      res.items.forEach((item) => recordImportResult(item.filename || file.name, item))
+      if (res.container) {
+        importDone.value = base + (res.total || res.items.length)
+        importTotal.value = Math.max(importTotal.value, importDone.value)
+        // 打包上传无法按内层包续传，整包记为已处理，失败的内层包由用户单独重新上传
+        markOuterFile(file.name, true)
+      } else {
+        importDone.value = base + 1
+      }
     }
   }
   try {
@@ -533,8 +585,9 @@ const handleImport = async () => {
     if (remaining) {
       ElMessage.warning(`还剩 ${remaining} 个包未导入，记录已保存，重新选择这些 zip 后可以继续`)
     } else {
-      const success = stateOkCount.value
-      ElMessage.success(`导入完成：成功 ${success} 个，失败 ${importTotal.value - success} 个`)
+      // 以实际结果为准：打包上传时外层一个 zip 会展开成多个题目包
+      const success = importResults.value.filter((item) => item.ok).length
+      ElMessage.success(`导入完成：成功 ${success} 个，失败 ${importResults.value.length - success} 个`)
     }
     load()
   } finally {

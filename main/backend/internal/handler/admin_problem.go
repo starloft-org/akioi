@@ -801,14 +801,30 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		httpx.BadRequest(c, err.Error())
 		return
 	}
+	// 支持把多个题目包打成一个外层 zip 上传：这里先展开成一个个题目包再排队导入。
+	expanded, packed, packedCleanup, err := expandImportContainers(staged, maxBytes)
+	if err != nil {
+		cleanup()
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+	if packed {
+		savedCleanup := cleanup
+		cleanup = func() {
+			packedCleanup()
+			savedCleanup()
+		}
+		staged = expanded
+	}
 	ip := c.ClientIP()
 	task := createImportTask(len(staged))
 
 	// wait=1（或 wait=true）时同步导入并直接返回结果，供前端按包拆分上传时逐包拿结果。
+	// 打包上传会展开成多个题目包，耗时不可预估，一律走后台任务由前端轮询。
 	waitValues := form.Value["wait"]
 	waitInline := len(waitValues) > 0 &&
 		(waitValues[0] == "1" || strings.EqualFold(waitValues[0], "true"))
-	if waitInline {
+	if waitInline && !packed {
 		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip)
 		cleanup()
 		logger.Adminf("管理员 %s 导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
@@ -825,8 +841,17 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		defer cleanup()
 		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip)
 	}()
-	logger.Adminf("管理员 %s 开始批量导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
-	httpx.OK(c, gin.H{"task_id": task.ID, "total": task.Total, "status": task.Status})
+	if packed {
+		logger.Adminf("管理员 %s 从打包文件开始导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
+	} else {
+		logger.Adminf("管理员 %s 开始批量导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)
+	}
+	httpx.OK(c, gin.H{
+		"task_id":   task.ID,
+		"total":     task.Total,
+		"status":    task.Status,
+		"container": packed,
+	})
 }
 
 // importProblemContent 导入已经读入内存的题目包；测试数据失败时回滚已创建的题目。
