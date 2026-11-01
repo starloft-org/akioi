@@ -17,7 +17,11 @@ type User struct {
 	School       string  `gorm:"size:64" json:"school"`
 	Grade        string  `gorm:"size:32" json:"grade"`
 	Avatar       string  `gorm:"size:255" json:"avatar"`
-	Role         string  `gorm:"size:16;index;not null;default:user" json:"role"`
+	// CoverImage 是个人主页顶部背景图，仅在用户自己的资料与公开主页展示。
+	CoverImage string `gorm:"size:255" json:"cover_image"`
+	// ThemeColor 是用户自定义的主色，为空表示跟随站点主题色，不对外公开。
+	ThemeColor string `gorm:"size:16" json:"theme_color"`
+	Role       string `gorm:"size:16;index;not null;default:user" json:"role"`
 	// AdminPermissions 以逗号分隔保存后台权限键，超级管理员不依赖该字段。
 	AdminPermissions string     `gorm:"size:255;not null;default:''" json:"-"`
 	Status           int        `gorm:"not null;default:1" json:"status"`
@@ -88,6 +92,7 @@ type PublicUser struct {
 	School      string     `json:"school"`
 	Grade       string     `json:"grade"`
 	Avatar      string     `json:"avatar"`
+	CoverImage  string     `json:"cover_image"`
 	Role        string     `json:"role"`
 	Status      int        `json:"status"`
 	LastLoginAt *time.Time `json:"last_login_at"`
@@ -103,6 +108,7 @@ func NewPublicUser(u *User) PublicUser {
 		School:      u.School,
 		Grade:       u.Grade,
 		Avatar:      u.Avatar,
+		CoverImage:  u.CoverImage,
 		Role:        u.Role,
 		Status:      u.Status,
 		LastLoginAt: u.LastLoginAt,
@@ -115,6 +121,8 @@ type PrivateUser struct {
 	PublicUser
 	Phone       string   `json:"phone"`
 	Permissions []string `json:"permissions"`
+	// ThemeColor 只在本人视角返回，其他用户看到的是站点主题色。
+	ThemeColor string `json:"theme_color"`
 }
 
 func NewPrivateUser(u *User) PrivateUser {
@@ -122,7 +130,12 @@ func NewPrivateUser(u *User) PrivateUser {
 	if u.IsAdmin() {
 		permissions = u.Permissions()
 	}
-	return PrivateUser{PublicUser: NewPublicUser(u), Phone: PhoneString(u.Phone), Permissions: permissions}
+	return PrivateUser{
+		PublicUser:  NewPublicUser(u),
+		Phone:       PhoneString(u.Phone),
+		Permissions: permissions,
+		ThemeColor:  u.ThemeColor,
+	}
 }
 
 // PhonePointer 将空手机号表示为 NULL，确保唯一索引允许多个未绑定手机号的微信用户。

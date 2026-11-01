@@ -9,10 +9,10 @@ import { useUserStore } from '@/store/user'
 
 const store = useUserStore()
 
-// 站点主色变化时立即应用到根节点；衍生色由 CSS color-mix 自动跟随
+// 登录用户自定义过主题色就用它，否则跟随站点主色；衍生色由 CSS color-mix 自动跟随
 watch(
-  () => store.site.theme_color,
-  (color) => applyTheme(color),
+  [() => store.user?.theme_color, () => store.site.theme_color],
+  ([mine, site]) => applyTheme(mine || site),
   { immediate: true }
 )
 </script>

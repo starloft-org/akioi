@@ -38,6 +38,46 @@
     </div>
 
     <div class="panel">
+      <h3 class="panel__title">个性化</h3>
+      <el-form label-width="100px">
+        <el-form-item label="主题色">
+          <div class="appearance-row">
+            <el-color-picker
+              :model-value="appearance.theme_color"
+              :predefine="predefineColors"
+              @change="handleThemeColor"
+            />
+            <el-button link type="primary" :disabled="!appearance.theme_color" @click="resetThemeColor">
+              跟随站点主题色
+            </el-button>
+            <span class="muted">只影响你自己的界面，管理员修改站点主题色时未被自定义的页面照常跟随</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="主页背景">
+          <div class="cover-field">
+            <div class="cover-preview" :style="coverStyle">
+              <span v-if="!appearance.cover_image" class="muted">未设置</span>
+            </div>
+            <div class="cover-actions">
+              <el-upload
+                :auto-upload="false"
+                :show-file-list="false"
+                accept=".png,.jpg,.jpeg,.webp"
+                :on-change="handleCoverChange"
+              >
+                <el-button :loading="coverLoading">{{ appearance.cover_image ? '更换背景图' : '上传背景图' }}</el-button>
+              </el-upload>
+              <el-button v-if="appearance.cover_image" :loading="coverLoading" @click="handleRemoveCover">
+                移除背景
+              </el-button>
+              <div class="muted">支持 png/jpg/jpeg/webp，尺寸建议 1200×300，展示在你个人主页顶部</div>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
+    </div>
+
+    <div class="panel">
       <h3 class="panel__title">修改密码</h3>
       <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="100px">
         <el-form-item label="原密码" prop="old_password">
@@ -78,7 +118,16 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { changePassword, getWechatUrl, unbindWechat, updateMe, uploadAvatar, wechatCallback } from '@/api'
+import {
+  changePassword,
+  deleteCover,
+  getWechatUrl,
+  unbindWechat,
+  updateMe,
+  uploadAvatar,
+  uploadCover,
+  wechatCallback
+} from '@/api'
 import WechatQrDialog from '@/components/WechatQrDialog.vue'
 import { useUserStore } from '@/store/user'
 
@@ -95,6 +144,14 @@ const unbinding = ref(false)
 const wechatDialog = ref(null)
 
 const form = reactive({ nickname: '', signature: '', school: '', grade: '' })
+const appearance = reactive({ theme_color: '', cover_image: '' })
+const coverLoading = ref(false)
+const predefineColors = ['#1CD5C7', '#409EFF', '#5470C6', '#00A870', '#F7BA1E', '#F54A45', '#7B61FF', '#34495E']
+const coverStyle = computed(() =>
+  appearance.cover_image
+    ? { backgroundImage: `url(${appearance.cover_image})` }
+    : {}
+)
 const passwordForm = reactive({ old_password: '', new_password: '', confirm: '' })
 
 const initial = computed(() => (store.user?.nickname || store.user?.username || '?').charAt(0).toUpperCase())
@@ -159,6 +216,62 @@ const handleAvatarChange = async (uploadFile) => {
     // 错误提示由请求层统一处理
   } finally {
     avatarLoading.value = false
+  }
+}
+
+const saveThemeColor = async (value) => {
+  try {
+    const data = await updateMe({ theme_color: value })
+    store.user = data.user
+    ElMessage.success(value ? '主题色已更新' : '已跟随站点主题色')
+  } catch (e) {
+    // 失败时回退到服务端保存的值
+    appearance.theme_color = store.user?.theme_color || ''
+  }
+}
+
+const handleThemeColor = (value) => {
+  appearance.theme_color = value || ''
+  saveThemeColor(appearance.theme_color)
+}
+
+const resetThemeColor = () => {
+  appearance.theme_color = ''
+  saveThemeColor('')
+}
+
+const handleCoverChange = async (uploadFile) => {
+  if (!uploadFile?.raw) {
+    return
+  }
+  coverLoading.value = true
+  try {
+    const data = await uploadCover(uploadFile.raw)
+    appearance.cover_image = data.cover_image
+    if (store.user) {
+      store.user.cover_image = data.cover_image
+    }
+    ElMessage.success('背景图已更新')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    coverLoading.value = false
+  }
+}
+
+const handleRemoveCover = async () => {
+  coverLoading.value = true
+  try {
+    await deleteCover()
+    appearance.cover_image = ''
+    if (store.user) {
+      store.user.cover_image = ''
+    }
+    ElMessage.success('已移除背景图')
+  } catch (e) {
+    // 错误提示由请求层统一处理
+  } finally {
+    coverLoading.value = false
   }
 }
 
@@ -260,6 +373,8 @@ onMounted(() => {
   form.signature = user.signature || ''
   form.school = user.school || ''
   form.grade = user.grade || ''
+  appearance.theme_color = user.theme_color || ''
+  appearance.cover_image = user.cover_image || ''
   if (route.query.code && route.query.state) {
     handleWechatCallback()
   }
@@ -280,6 +395,51 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 4px 0;
+}
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cover-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+}
+
+.cover-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 240px;
+  height: 72px;
+  border: 1px dashed var(--akioi-border);
+  border-radius: 8px;
+  background-color: var(--akioi-bg-soft);
+  background-size: cover;
+  background-position: center;
+  font-size: 12px;
+}
+
+.cover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .cover-field {
+    flex-direction: column;
+  }
+
+  .cover-preview {
+    width: 100%;
+  }
 }
 
 .bind-name {

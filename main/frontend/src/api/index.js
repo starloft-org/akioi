@@ -73,6 +73,15 @@ export const uploadAvatar = (file) => {
     headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
+// 个人主页背景图，与头像共用上传大小限制
+export const uploadCover = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/api/v1/users/me/cover', form, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+export const deleteCover = () => request.delete('/api/v1/users/me/cover')
 
 // 管理后台
 export const adminGetStats = () => request.get('/api/admin/v1/stats')

@@ -164,6 +164,8 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			users.PUT("/me", h.UpdateMe)
 			users.PUT("/me/password", h.ChangePassword)
 			users.POST("/me/avatar", h.UploadAvatar)
+			users.POST("/me/cover", h.UploadCover)
+			users.DELETE("/me/cover", h.DeleteCover)
 		}
 	}
 

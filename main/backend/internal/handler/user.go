@@ -3,6 +3,7 @@ package handler
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,12 @@ type updateProfileRequest struct {
 	Signature *string `json:"signature"`
 	School    *string `json:"school"`
 	Grade     *string `json:"grade"`
+	// ThemeColor 传空字符串表示恢复站点主题色。
+	ThemeColor *string `json:"theme_color"`
 }
+
+// themeColorRe 限定主题色为 #RRGGBB，避免写入无法解析的颜色值。
+var themeColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 func (h *Handler) UpdateMe(c *gin.Context) {
 	u := httpx.MustUser(c)
@@ -91,6 +97,14 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 	}
 	if req.Grade != nil {
 		updates["grade"] = strings.TrimSpace(*req.Grade)
+	}
+	if req.ThemeColor != nil {
+		v := strings.TrimSpace(*req.ThemeColor)
+		if v != "" && !themeColorRe.MatchString(v) {
+			httpx.BadRequest(c, "主题色需为 #RRGGBB 格式")
+			return
+		}
+		updates["theme_color"] = v
 	}
 	if len(updates) == 0 {
 		httpx.OK(c, gin.H{"user": model.NewPrivateUser(u)})
@@ -189,6 +203,62 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"avatar": url})
+}
+
+var allowedCoverExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
+
+// UploadCover 保存个人主页背景图，与头像共用上传大小限制。
+func (h *Handler) UploadCover(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		httpx.BadRequest(c, "缺少背景图文件")
+		return
+	}
+	maxBytes := int64(h.Settings.Current().MaxAvatarMB) * 1024 * 1024
+	if file.Size > maxBytes {
+		httpx.BadRequest(c, "背景图文件过大")
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedCoverExt[ext] {
+		httpx.BadRequest(c, "背景图仅支持 png/jpg/jpeg/webp")
+		return
+	}
+
+	dir := filepath.Join(h.Cfg.UploadDir, "covers")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		httpx.ServerError(c, "背景图保存失败")
+		return
+	}
+	name := strconv.FormatUint(uint64(u.ID), 10) + "-" + strconv.FormatInt(time.Now().Unix(), 10) + ext
+	if err := c.SaveUploadedFile(file, filepath.Join(dir, name)); err != nil {
+		httpx.ServerError(c, "背景图保存失败")
+		return
+	}
+	url := "/uploads/covers/" + name
+	if err := h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("cover_image", url).Error; err != nil {
+		httpx.ServerError(c, "背景图保存失败")
+		return
+	}
+	logger.Businessf("用户 %s 更新个人主页背景 ip=%s", u.Username, c.ClientIP())
+	httpx.OK(c, gin.H{"cover_image": url})
+}
+
+// DeleteCover 清除个人主页背景图，恢复默认外观。
+func (h *Handler) DeleteCover(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	if err := h.DB.Model(&model.User{}).Where("id = ?", u.ID).UpdateColumn("cover_image", "").Error; err != nil {
+		httpx.ServerError(c, "清除背景图失败")
+		return
+	}
+	httpx.OK(c, gin.H{"cover_image": ""})
 }
 
 // decorateSubmissions 为提交附加用户名与题目信息。

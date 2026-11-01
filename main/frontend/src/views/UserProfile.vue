@@ -1,6 +1,7 @@
 <template>
   <div v-loading="loading">
     <template v-if="user">
+      <div v-if="user.cover_image" class="profile-cover" :style="coverStyle"></div>
       <div class="panel profile-head">
         <el-avatar :size="72" :src="user.avatar || undefined">{{ initial }}</el-avatar>
         <div class="profile-info">
@@ -76,6 +77,11 @@ const recentSubmissions = ref([])
 
 const initial = computed(() => (user.value?.nickname || user.value?.username || '?').charAt(0).toUpperCase())
 
+// 个人主页背景图由用户本人在「个人资料 → 个性化」中上传
+const coverStyle = computed(() =>
+  user.value?.cover_image ? { backgroundImage: `url(${user.value.cover_image})` } : {}
+)
+
 const load = async () => {
   loading.value = true
   try {
@@ -96,6 +102,21 @@ onMounted(load)
 </script>
 
 <style scoped>
+.profile-cover {
+  height: 180px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background-color: var(--akioi-bg-soft);
+  background-size: cover;
+  background-position: center;
+}
+
+@media (max-width: 640px) {
+  .profile-cover {
+    height: 120px;
+  }
+}
+
 .profile-head {
   display: flex;
   align-items: center;

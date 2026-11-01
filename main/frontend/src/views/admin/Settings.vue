@@ -276,6 +276,7 @@
             <el-form-item label="头像大小上限">
               <el-input-number v-model="form.max_avatar_mb" :min="1" :max="100" />
               <span class="unit">MB</span>
+              <span class="unit">同时限制个人主页背景图</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="12">
