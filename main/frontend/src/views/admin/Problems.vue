@@ -128,8 +128,7 @@
           :status="importPhase === 'done' ? 'success' : ''"
         />
         <p class="muted">
-          <template v-if="importPhase === 'uploading'">正在上传 {{ importProgress }}%</template>
-          <template v-else-if="importPhase === 'processing'">
+          <template v-if="importPhase === 'importing'">
             正在导入 {{ importDone }} / {{ importTotal }} 题，成功 {{ resultsSummary.success }} 个，失败
             {{ resultsSummary.failed }} 个
           </template>
@@ -187,7 +186,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   adminDeleteProblem,
-  adminImportProblem,
+  adminImportProblemOne,
   adminListProblemBanks,
   adminListProblems
 } from '@/api'
@@ -209,8 +208,8 @@ const importing = ref(false)
 const importFiles = ref([])
 const importBankId = ref('')
 const importResults = ref([])
-const importProgress = ref(0)
-// idle：未开始；uploading：正在上传；processing：后台正在逐包导入；done：完成
+// idle：未开始；importing：正在逐包导入；done：完成
+// 一次选中的包会在前端拆成多个请求，每个请求只传一个 zip，避免单个请求体过大
 const importPhase = ref('idle')
 const importDone = ref(0)
 const importTotal = ref(0)
@@ -225,9 +224,6 @@ const importResultView = computed(() => {
   return [...failed, ...ok].slice(0, 50)
 })
 const importPercent = computed(() => {
-  if (importPhase.value === 'uploading') {
-    return importProgress.value
-  }
   if (!importTotal.value) {
     return 0
   }
@@ -321,26 +317,25 @@ const removeProblem = async (row) => {
   load()
 }
 
-// 轮询后台导入任务，直到 status 变为 done
-const pollImportTask = (taskId) =>
-  new Promise((resolve) => {
-    const tick = async () => {
-      try {
-        const task = await adminGetImportTask(taskId)
-        importTotal.value = task.total || importTotal.value
-        importDone.value = task.done || 0
-        importResults.value = task.items || []
-        if (task.status === 'done') {
-          resolve(task)
-          return
-        }
-      } catch (e) {
-        // 单次轮询失败不中断，下次继续
-      }
-      setTimeout(tick, 1200)
+// 每包一个请求，最多三个并发；单个包失败不影响其余包
+const IMPORT_CONCURRENCY = 3
+
+const importOne = async (file) => {
+  try {
+    const data = await adminImportProblemOne(file, importBankId.value || undefined)
+    const item = (data?.items || [])[0]
+    if (item) {
+      return item
     }
-    tick()
-  })
+    return { filename: file.name, ok: false, error: '导入没有返回结果' }
+  } catch (e) {
+    return {
+      filename: file.name,
+      ok: false,
+      error: e?.response?.data?.message || e?.message || '导入失败'
+    }
+  }
+}
 
 const handleImport = async () => {
   const raws = importFiles.value.map((item) => item.raw).filter(Boolean)
@@ -348,26 +343,32 @@ const handleImport = async () => {
     return
   }
   importing.value = true
-  importPhase.value = 'uploading'
-  importProgress.value = 0
+  importPhase.value = 'importing'
   importResults.value = []
   importDone.value = 0
   importTotal.value = raws.length
+
+  const queue = [...raws]
+  const worker = async () => {
+    while (queue.length) {
+      const file = queue.shift()
+      const item = await importOne(file)
+      importResults.value.push(item)
+      importDone.value += 1
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(IMPORT_CONCURRENCY, raws.length) },
+    () => worker()
+  )
   try {
-    const data = await adminImportProblem(raws, importBankId.value || undefined, (percent) => {
-      importProgress.value = percent
-    })
-    importProgress.value = 100
-    importPhase.value = 'processing'
-    const task = await pollImportTask(data.task_id)
-    importResults.value = task.items || []
-    importDone.value = task.done || 0
-    importTotal.value = task.total || raws.length
+    await Promise.all(workers)
     importPhase.value = 'done'
-    ElMessage.success(`导入完成：成功 ${task.success_count} 个，失败 ${task.failed_count} 个`)
+    const success = importResults.value.filter((item) => item.ok).length
+    ElMessage.success(
+      `导入完成：成功 ${success} 个，失败 ${importResults.value.length - success} 个`
+    )
     load()
-  } catch (e) {
-    importPhase.value = 'idle'
   } finally {
     importing.value = false
   }
@@ -377,7 +378,6 @@ const closeImportDialog = () => {
   importVisible.value = false
   importFiles.value = []
   importResults.value = []
-  importProgress.value = 0
   importPhase.value = 'idle'
   importDone.value = 0
   importTotal.value = 0

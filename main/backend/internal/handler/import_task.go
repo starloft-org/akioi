@@ -88,6 +88,19 @@ func snapshotImportTask(id string) (ImportTask, bool) {
 	return snapshot, true
 }
 
+// importTaskResponse 把任务快照转成接口字段，同步导入与轮询共用同一份结构。
+func importTaskResponse(task ImportTask) gin.H {
+	return gin.H{
+		"task_id":       task.ID,
+		"total":         task.Total,
+		"done":          task.Done,
+		"success_count": task.SuccessCount,
+		"failed_count":  task.FailedCount,
+		"status":        task.Status,
+		"items":         task.Items,
+	}
+}
+
 // gcImportTasksLocked 清掉过期任务，同时限制内存里保留的任务数量。
 func gcImportTasksLocked(now time.Time) {
 	expired := make([]string, 0, len(importTasks))
