@@ -208,6 +208,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   adminDeleteProblem,
+  adminGetImportTask,
   adminImportProblemOne,
   adminListProblemBanks,
   adminListProblems
@@ -515,6 +516,12 @@ const pollImportTask = (taskId, onProgress) =>
         if (e?.response?.status === 404) {
           stop()
           reject(new Error('导入任务已不存在（后端可能重启过），请重新上传这个包'))
+          return
+        }
+        if (!e?.response) {
+          // 不是接口返回的错误（比如前端代码报错），立即停下来提示，不要静默重试
+          stop()
+          reject(e)
           return
         }
         misses += 1
