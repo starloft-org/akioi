@@ -775,12 +775,6 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		httpx.BadRequest(c, "请上传题目包 zip")
 		return
 	}
-	// 单次上传包数量上限，避免一次请求把临时目录和文件描述符打满
-	if len(fileHeaders) > maxImportFiles {
-		httpx.BadRequest(c, fmt.Sprintf("一次最多上传 %d 个题目包", maxImportFiles))
-		return
-	}
-
 	// 导入的题目统一归入请求指定的题库，未指定时归入主库
 	var bankID *uint
 	if vals := form.Value["bank_id"]; len(vals) > 0 {

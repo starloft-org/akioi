@@ -116,8 +116,6 @@
         v-model:file-list="importFiles"
         drag
         multiple
-        :limit="200"
-        :on-exceed="onImportExceed"
         :auto-upload="false"
         accept=".zip"
       >
@@ -158,7 +156,7 @@
 
       <div class="import-hint">
         <p class="muted">
-          导入在服务器后台执行，提交后关闭弹窗或浏览器也会继续；一次最多 200 个包，题目会逐包出现在结果里。
+          导入在服务器后台执行，提交后关闭弹窗或浏览器也会继续，题目会逐包出现在结果里。
         </p>
         <p class="muted">每个 zip 一个题目，包内结构：</p>
         <pre class="pre-block">problem.md        题面，可直接用洛谷「复制 Markdown」的内容
@@ -321,10 +319,6 @@ const removeProblem = async (row) => {
   }
   ElMessage.success('已删除')
   load()
-}
-
-const onImportExceed = () => {
-  ElMessage.warning('一次最多上传 200 个题目包，请分批导入')
 }
 
 // 轮询后台导入任务，直到 status 变为 done

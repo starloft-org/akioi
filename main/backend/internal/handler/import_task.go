@@ -21,9 +21,6 @@ import (
 
 // 批量导入题目在后台执行：上传完成后立即返回任务号，前端轮询进度。
 // 这样一千个题目包也不会卡住一个 HTTP 请求，避免网关超时导致 Network Error。
-// maxImportFiles 限制单次上传的题目包数量。
-const maxImportFiles = 200
-
 const (
 	importTaskRunning     = "running"
 	importTaskDone        = "done"
