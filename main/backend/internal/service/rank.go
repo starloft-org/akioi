@@ -52,6 +52,17 @@ func (s *RankService) Compute(contest *model.Contest, now time.Time, revealAll b
 		query = query.Where("created_at <= ?", contest.FreezeAt())
 	}
 
+	var adminIDs []uint
+	if err := s.db.Model(&model.User{}).
+		Where("role IN ?", []string{model.RoleAdmin, model.RoleSuperAdmin}).
+		Pluck("id", &adminIDs).Error; err != nil {
+		return nil, false, err
+	}
+	admins := make(map[uint]bool, len(adminIDs))
+	for _, id := range adminIDs {
+		admins[id] = true
+	}
+
 	var subs []model.Submission
 	if err := query.Order("created_at asc, id asc").Find(&subs).Error; err != nil {
 		return nil, frozen, err
@@ -67,6 +78,9 @@ func (s *RankService) Compute(contest *model.Contest, now time.Time, revealAll b
 	userLast := make(map[uint]int64)
 	for i := range subs {
 		sub := &subs[i]
+		if admins[sub.UserID] {
+			continue
+		}
 		cells, ok := userCells[sub.UserID]
 		if !ok {
 			cells = make(map[uint]*cell, len(order))

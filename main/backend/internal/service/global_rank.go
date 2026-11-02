@@ -26,7 +26,9 @@ type bestScoreRow struct {
 // ComputeGlobal 计算公开、非比赛专用题目的全站积分榜。
 func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 	var users []model.User
-	if err := s.db.Where("status = ?", model.UserStatusActive).Order("id asc").Find(&users).Error; err != nil {
+	if err := s.db.Where("status = ?", model.UserStatusActive).
+		Where("role NOT IN ?", []string{model.RoleAdmin, model.RoleSuperAdmin}).
+		Order("id asc").Find(&users).Error; err != nil {
 		return nil, err
 	}
 	var problems []model.Problem
