@@ -693,7 +693,7 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 		return
 	}
 	var problems []model.Problem
-	if err := h.DB.Where("team_id = ?", teamID).Order("id asc").Find(&problems).Error; err != nil {
+	if err := h.DB.Where("team_id = ?", teamID).Order("bank_id asc, display_id asc").Find(&problems).Error; err != nil {
 		httpx.ServerError(c, "查询团队题目失败")
 		return
 	}

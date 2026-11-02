@@ -128,7 +128,7 @@ func (h *Handler) ListMyProblems(c *gin.Context) {
 		return
 	}
 	var problems []model.Problem
-	if err := query.Order("id desc").Offset(offset).Limit(pageSize).Find(&problems).Error; err != nil {
+	if err := query.Order("bank_id asc, display_id asc").Offset(offset).Limit(pageSize).Find(&problems).Error; err != nil {
 		httpx.ServerError(c, "查询题目失败")
 		return
 	}
