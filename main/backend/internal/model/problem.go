@@ -34,10 +34,12 @@ type Problem struct {
 	FloatEps      float64 `gorm:"not null;default:0.000001" json:"float_eps"`
 	TestcaseCount int     `gorm:"not null;default:0" json:"testcase_count"`
 	ScoresJSON    string  `gorm:"column:testcase_scores;type:text" json:"-"`
-	DataHash      string  `gorm:"size:64" json:"data_hash"`
-	SubmitCount   int     `gorm:"not null;default:0" json:"submit_count"`
-	AcceptedCount int     `gorm:"not null;default:0" json:"accepted_count"`
-	CreatedBy     uint    `gorm:"index" json:"created_by"`
+	// SubtasksJSON 保存子任务定义（名称、分数、包含的测试点）。
+	SubtasksJSON  string `gorm:"column:subtasks;type:text" json:"-"`
+	DataHash      string `gorm:"size:64" json:"data_hash"`
+	SubmitCount   int    `gorm:"not null;default:0" json:"submit_count"`
+	AcceptedCount int    `gorm:"not null;default:0" json:"accepted_count"`
+	CreatedBy     uint   `gorm:"index" json:"created_by"`
 	// TeamID 归属团队；0 表示公共题目，团队题目仅该团队成员可见。
 	TeamID uint `gorm:"index;not null;default:0" json:"team_id"`
 	// OwnerID 是个人题目的创建者；0 表示非个人题目。个人题目仅创建者可见。
@@ -112,6 +114,44 @@ func (p *Problem) Scores() []int {
 	return out
 }
 
+// Subtask 是一个子任务：组内全部测试点通过才得该组的分数。
+type Subtask struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+	Cases []int  `json:"cases"`
+}
+
+// Subtasks 返回子任务定义。
+func (p *Problem) Subtasks() []Subtask {
+	var out []Subtask
+	unmarshalJSON(p.SubtasksJSON, &out)
+	if out == nil {
+		out = []Subtask{}
+	}
+	return out
+}
+
+// SetSubtasks 写入子任务定义。
+func (p *Problem) SetSubtasks(list []Subtask) {
+	if list == nil {
+		list = []Subtask{}
+	}
+	p.SubtasksJSON = marshalJSON(list)
+}
+
+// FullScore 返回题目满分：独立测试点的分值加上各子任务的分数。
+func (p *Problem) FullScore() int {
+	total := 0
+	for _, score := range p.Scores() {
+		total += score
+	}
+	for _, st := range p.Subtasks() {
+		total += st.Score
+	}
+	return total
+}
+
 func (p *Problem) SetScores(list []int) {
 	if list == nil {
 		list = []int{}
@@ -122,9 +162,13 @@ func (p *Problem) SetScores(list []int) {
 // Testcase 是测试点的元数据，输入输出文件落文件系统。
 // 数据库列名用 case_index，避免与 MySQL 保留字 index 冲突。
 type Testcase struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	ProblemID  uint      `gorm:"uniqueIndex:uk_problem_index;not null" json:"problem_id"`
-	Index      int       `gorm:"column:case_index;uniqueIndex:uk_problem_index;not null" json:"index"`
+	ID        uint `gorm:"primaryKey" json:"id"`
+	ProblemID uint `gorm:"uniqueIndex:uk_problem_index;not null" json:"problem_id"`
+	Index     int  `gorm:"column:case_index;uniqueIndex:uk_problem_index;not null" json:"index"`
+	// Name 是上传时的原始文件名（不含扩展名），只用于展示。
+	Name string `gorm:"size:128" json:"name"`
+	// GroupID 是所属子任务编号，0 表示独立测试点。
+	GroupID    int       `gorm:"column:group_id;not null;default:0" json:"group_id"`
 	Score      int       `gorm:"not null;default:0" json:"score"`
 	InputSize  int64     `gorm:"not null;default:0" json:"input_size"`
 	OutputSize int64     `gorm:"not null;default:0" json:"output_size"`

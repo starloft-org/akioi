@@ -172,8 +172,20 @@
         <el-button type="danger" :disabled="!testcases.length" @click="clearTestdata">清空测试数据</el-button>
         <span class="muted">总分 {{ totalScore }}</span>
       </div>
+      <el-input
+        v-model="mySubtasksInput"
+        type="textarea"
+        :rows="3"
+        placeholder='可选：子任务与按文件名分值（等价于 subtasks.json），例如 {"scores":{"sample":20},"subtasks":[{"name":"小数据","score":30,"cases":["sample"]}]}'
+        style="margin-top: 8px"
+      />
+      <p v-if="mySubtaskSummary" class="muted">{{ mySubtaskSummary }}</p>
       <el-table :data="testcases" size="small" style="margin-top: 12px">
         <el-table-column label="#" prop="index" width="60" />
+        <el-table-column label="文件名" prop="name" min-width="140" />
+        <el-table-column label="分组" width="100">
+          <template #default="{ row }">{{ row.group_id ? `子任务 ${row.group_id}` : '独立' }}</template>
+        </el-table-column>
         <el-table-column label="输入大小" width="120">
           <template #default="{ row }">{{ row.input_size }} B</template>
         </el-table-column>
@@ -307,11 +319,21 @@ const form = ref(emptyForm())
 const testdataDialog = ref(false)
 const testdataTarget = ref(null)
 const testcases = ref([])
+const subtasks = ref([])
+const mySubtasksInput = ref('')
 const fileList = ref([])
 const uploading = ref(false)
 
 const ownerTeams = computed(() => teams.value.filter((t) => t.my_role === 'owner'))
-const totalScore = computed(() => testcases.value.reduce((sum, tc) => sum + (tc.score || 0), 0))
+const totalScore = computed(() =>
+  testcases.value.reduce((sum, tc) => sum + (tc.score || 0), 0) +
+  subtasks.value.reduce((sum, st) => sum + (st.score || 0), 0)
+)
+const mySubtaskSummary = computed(() =>
+  subtasks.value
+    .map((st) => `${st.name}（${st.score} 分，${(st.cases || []).length} 个测试点）`)
+    .join('、')
+)
 
 const accessText = (access) => (access === 1 ? '公开' : '受限')
 
@@ -460,6 +482,21 @@ async function loadTestdata() {
   try {
     const data = await listMyProblemTestdata(testdataTarget.value.id)
     testcases.value = data.items || []
+    subtasks.value = data.subtasks || []
+    if (!mySubtasksInput.value && subtasks.value.length) {
+      const nameOf = (idx) => testcases.value.find((it) => it.index === idx)?.name || String(idx)
+      mySubtasksInput.value = JSON.stringify(
+        {
+          subtasks: subtasks.value.map((st) => ({
+            name: st.name,
+            score: st.score,
+            cases: (st.cases || []).map(nameOf)
+          }))
+        },
+        null,
+        2
+      )
+    }
   } catch (e) {
     testcases.value = []
     ElMessage.error(e?.response?.data?.message || '加载测试数据失败')
@@ -475,6 +512,17 @@ function onFileRemove(file, files) {
 }
 
 async function upload() {
+  let subtasksText = null
+  const specText = mySubtasksInput.value.trim()
+  if (specText) {
+    try {
+      JSON.parse(specText)
+    } catch (e) {
+      ElMessage.error('子任务与分值需为 JSON')
+      return
+    }
+    subtasksText = specText
+  }
   const files = fileList.value.map((f) => f.raw).filter(Boolean)
   if (!files.length) {
     ElMessage.warning('请选择文件')
@@ -482,8 +530,9 @@ async function upload() {
   }
   uploading.value = true
   try {
-    const data = await uploadMyProblemTestdata(testdataTarget.value.id, files)
+    const data = await uploadMyProblemTestdata(testdataTarget.value.id, files, null, subtasksText)
     testcases.value = data.items || []
+    subtasks.value = data.subtasks || []
     fileList.value = []
     ElMessage.success('测试数据已更新')
     if (data.sync_failed?.length) {

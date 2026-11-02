@@ -100,6 +100,8 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 	}
 
 	finalStatus := model.StatusAccepted
+	groupFailed := make(map[int]bool)
+	groupSeen := make(map[int]int)
 	totalScore := 0
 	maxTimeMS := 0
 	maxMemoryKB := 0
@@ -107,7 +109,14 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 	for _, tc := range task.Testcases {
 		item, fatal := e.runCase(ctx, task, lang, tc, paths)
 		res.Results = append(res.Results, item)
-		totalScore += item.Score
+		if tc.Group > 0 {
+			groupSeen[tc.Group]++
+			if item.Status != model.StatusAccepted {
+				groupFailed[tc.Group] = true
+			}
+		} else {
+			totalScore += item.Score
+		}
 		if item.TimeMS > maxTimeMS {
 			maxTimeMS = item.TimeMS
 		}
@@ -124,6 +133,14 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 		finalStatus = model.StatusSystemError
 		logger.Judgef("提交 %d 在测试点 #%d 遇到评测环境问题，提前结束", task.SubmissionID, item.Index)
 		break
+	}
+
+	// 子任务按「组内全部通过才给分」结算，独立测试点已经在上面的循环里累加。
+	for _, st := range task.Subtasks {
+		if groupFailed[st.ID] || groupSeen[st.ID] < len(st.Cases) {
+			continue
+		}
+		totalScore += st.Score
 	}
 
 	// 评测环境故障时不计分，也不让环境问题看起来像选手的运行时错误。
@@ -154,7 +171,7 @@ type casePaths struct {
 func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Language,
 	tc model.TaskTestcase, paths casePaths) (model.TestcaseResult, bool) {
 
-	item := model.TestcaseResult{Index: tc.Index, Status: model.StatusSystemError}
+	item := model.TestcaseResult{Index: tc.Index, Group: tc.Group, Status: model.StatusSystemError}
 	timeLimit := time.Duration(task.TimeLimitMS) * time.Millisecond
 	if timeLimit <= 0 {
 		timeLimit = time.Second

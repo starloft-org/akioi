@@ -164,19 +164,21 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 
 // dispatchTask 是下发给评测节点的完整任务，评测所需数据全部自带。
 type dispatchTask struct {
-	SubmissionID  uint           `json:"submission_id"`
-	JudgeToken    string         `json:"judge_token"`
-	ProblemID     uint           `json:"problem_id"`
-	Language      string         `json:"language"`
-	Code          string         `json:"code"`
-	TimeLimitMS   int            `json:"time_limit_ms"`
-	MemoryLimitMB int            `json:"memory_limit_mb"`
-	CompareMode   string         `json:"compare_mode"`
-	FloatEps      float64        `json:"float_eps"`
-	Testcases     []dispatchCase `json:"testcases"`
+	SubmissionID  uint            `json:"submission_id"`
+	JudgeToken    string          `json:"judge_token"`
+	ProblemID     uint            `json:"problem_id"`
+	Language      string          `json:"language"`
+	Code          string          `json:"code"`
+	TimeLimitMS   int             `json:"time_limit_ms"`
+	MemoryLimitMB int             `json:"memory_limit_mb"`
+	CompareMode   string          `json:"compare_mode"`
+	FloatEps      float64         `json:"float_eps"`
+	Testcases     []dispatchCase  `json:"testcases"`
+	Subtasks      []model.Subtask `json:"subtasks,omitempty"`
 }
 
 type dispatchCase struct {
+	Group int `json:"group,omitempty"`
 	Index int `json:"index"`
 	Score int `json:"score"`
 }
@@ -207,7 +209,7 @@ func (s *JudgeService) dispatch(ctx context.Context, sub *model.Submission, prob
 	}
 	items := make([]dispatchCase, 0, len(cases))
 	for _, tc := range cases {
-		items = append(items, dispatchCase{Index: tc.Index, Score: tc.Score})
+		items = append(items, dispatchCase{Index: tc.Index, Score: tc.Score, Group: tc.GroupID})
 	}
 
 	task := dispatchTask{
@@ -221,6 +223,7 @@ func (s *JudgeService) dispatch(ctx context.Context, sub *model.Submission, prob
 		CompareMode:   prob.CompareMode,
 		FloatEps:      prob.FloatEps,
 		Testcases:     items,
+		Subtasks:      prob.Subtasks(),
 	}
 	body, err := json.Marshal(task)
 	if err != nil {

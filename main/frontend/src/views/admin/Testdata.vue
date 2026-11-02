@@ -34,8 +34,21 @@
       </el-button>
     </div>
 
+    <el-input
+      v-model="subtasksInput"
+      type="textarea"
+      :rows="3"
+      placeholder='可选：子任务与按文件名分值（等价于 subtasks.json），例如 {"scores":{"sample":20},"subtasks":[{"name":"小数据","score":30,"cases":["sample"]}]}'
+      style="margin-bottom: 8px"
+    />
+    <p v-if="subtasks.length" class="muted">子任务：{{ subtaskSummary }}</p>
+
     <el-table v-loading="loading" :data="items" border>
       <el-table-column prop="index" label="测试点" width="90" />
+      <el-table-column prop="name" label="文件名" min-width="140" />
+      <el-table-column label="分组" width="100">
+        <template #default="{ row }">{{ row.group_id ? `子任务 ${row.group_id}` : '独立' }}</template>
+      </el-table-column>
       <el-table-column prop="score" label="分值" width="80" />
       <el-table-column label="输入大小" width="110">
         <template #default="{ row }">{{ formatFileSize(row.input_size) }}</template>
@@ -90,6 +103,13 @@ const items = ref([])
 const totalScore = ref(0)
 const fileList = ref([])
 const scoresInput = ref('')
+const subtasks = ref([])
+const subtasksInput = ref('')
+const subtaskSummary = computed(() =>
+  subtasks.value
+    .map((st) => `${st.name}（${st.score} 分，${(st.cases || []).length} 个测试点）`)
+    .join('、')
+)
 
 const shortHash = (hash) => (hash ? `${hash.slice(0, 12)}…` : '-')
 
@@ -109,8 +129,24 @@ const load = async () => {
     const data = await adminListTestdata(problemId.value)
     items.value = data.items || []
     totalScore.value = data.total_score ?? 0
+    subtasks.value = data.subtasks || []
+    if (!subtasksInput.value && subtasks.value.length) {
+      const nameOf = (idx) => items.value.find((it) => it.index === idx)?.name || String(idx)
+      subtasksInput.value = JSON.stringify(
+        {
+          subtasks: subtasks.value.map((st) => ({
+            name: st.name,
+            score: st.score,
+            cases: (st.cases || []).map(nameOf)
+          }))
+        },
+        null,
+        2
+      )
+    }
   } catch (e) {
     items.value = []
+    subtasks.value = []
     totalScore.value = 0
   } finally {
     loading.value = false
@@ -139,14 +175,26 @@ const handleUpload = async () => {
     }
     scores = parsed
   }
+  let subtasksText = null
+  const specText = subtasksInput.value.trim()
+  if (specText) {
+    try {
+      JSON.parse(specText)
+    } catch (e) {
+      ElMessage.error('子任务与分值需为 JSON，例如 {"subtasks":[{"name":"小数据","score":30,"cases":["sample"]}]}')
+      return
+    }
+    subtasksText = specText
+  }
   uploading.value = true
   try {
-    const res = await adminUploadTestdata(problemId.value, files, scores)
+    const res = await adminUploadTestdata(problemId.value, files, scores, subtasksText)
     if (!warnSyncFailed(res)) {
       ElMessage.success('测试数据已替换')
     }
     fileList.value = []
     scoresInput.value = ''
+    subtasksInput.value = ''
     load()
   } catch (e) {
     // 错误提示已由请求层处理

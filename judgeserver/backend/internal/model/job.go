@@ -30,12 +30,22 @@ type JudgeTask struct {
 	CompareMode   string         `json:"compare_mode"`
 	FloatEps      float64        `json:"float_eps"`
 	Testcases     []TaskTestcase `json:"testcases"`
+	Subtasks      []TaskSubtask  `json:"subtasks,omitempty"`
 }
 
 // TaskTestcase 描述一个测试点在本地数据目录中的序号与分值。
 type TaskTestcase struct {
+	Group int `json:"group,omitempty"`
 	Index int `json:"index"`
 	Score int `json:"score"`
+}
+
+// TaskSubtask 描述一个子任务：组内测试点全部通过才得该组的分数。
+type TaskSubtask struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Score int    `json:"score"`
+	Cases []int  `json:"cases"`
 }
 
 // JudgeResult 是评测节点回传给主站的结果。

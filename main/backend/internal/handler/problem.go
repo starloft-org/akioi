@@ -318,11 +318,7 @@ func (h *Handler) distinctSubmitters(ids []uint) map[uint]int {
 }
 
 func totalScore(p *model.Problem) int {
-	total := 0
-	for _, s := range p.Scores() {
-		total += s
-	}
-	return total
+	return p.FullScore()
 }
 
 func keysOf(m map[uint]bool) []uint {

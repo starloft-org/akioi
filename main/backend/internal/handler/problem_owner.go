@@ -112,6 +112,11 @@ func (h *Handler) uploadProblemTestdata(c *gin.Context, p *model.Problem) {
 		}
 	}
 
+	// subtasks 是前端编辑框里的子任务定义，直接当作 subtasks.json 参与校验与入库。
+	if raw := form.Value["subtasks"]; len(raw) > 0 && strings.TrimSpace(raw[0]) != "" {
+		data["subtasks.json"] = []byte(raw[0])
+	}
+
 	var scores []int
 	if raw := form.Value["scores"]; len(raw) > 0 && strings.TrimSpace(raw[0]) != "" {
 		if err := json.Unmarshal([]byte(raw[0]), &scores); err != nil {
@@ -131,7 +136,7 @@ func (h *Handler) uploadProblemTestdata(c *gin.Context, p *model.Problem) {
 	}
 	httpx.OK(c, gin.H{
 		"items":       items,
-		"total_score": testcaseTotalScore(items),
+		"total_score": p.FullScore(),
 		"sync_failed": h.Testdata.SyncToNodes(syncContext(c), p.ID),
 	})
 }
@@ -152,5 +157,5 @@ func (h *Handler) respondProblemTestdata(c *gin.Context, p *model.Problem) {
 		httpx.ServerError(c, "查询测试数据失败")
 		return
 	}
-	httpx.OK(c, gin.H{"total_score": testcaseTotalScore(items), "items": items})
+	httpx.OK(c, gin.H{"total_score": p.FullScore(), "items": items, "subtasks": p.Subtasks()})
 }

@@ -719,6 +719,8 @@ func (h *Handler) allocateProblemDisplayID(bank *model.ProblemBank) (string, err
 }
 
 type testcaseItem struct {
+	Name       string `json:"name"`
+	GroupID    int    `json:"group_id"`
 	Index      int    `json:"index"`
 	Score      int    `json:"score"`
 	InputSize  int64  `json:"input_size"`
@@ -876,6 +878,8 @@ func (h *Handler) testcaseItems(problemID uint) ([]testcaseItem, error) {
 	items := make([]testcaseItem, 0, len(cases))
 	for _, tc := range cases {
 		items = append(items, testcaseItem{
+			Name:       tc.Name,
+			GroupID:    tc.GroupID,
 			Index:      tc.Index,
 			Score:      tc.Score,
 			InputSize:  tc.InputSize,

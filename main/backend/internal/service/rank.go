@@ -43,11 +43,7 @@ func (s *RankService) Compute(contest *model.Contest, now time.Time, revealAll b
 		return nil, false, err
 	}
 	for i := range problems {
-		total := 0
-		for _, sc := range problems[i].Scores() {
-			total += sc
-		}
-		fullScore[problems[i].ID] = total
+		fullScore[problems[i].ID] = problems[i].FullScore()
 	}
 
 	frozen := contest.IsFrozen(now)

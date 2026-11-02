@@ -97,9 +97,5 @@ func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 }
 
 func problemFullScore(p *model.Problem) int {
-	total := 0
-	for _, score := range p.Scores() {
-		total += score
-	}
-	return total
+	return p.FullScore()
 }

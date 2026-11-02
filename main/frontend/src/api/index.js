@@ -190,13 +190,16 @@ export const adminListTestdata = (id) => request.get(`/api/admin/v1/problems/${i
 export const adminSyncTestdata = (id) => request.post(`/api/admin/v1/problems/${id}/testdata/sync`)
 export const adminJudgeNodesStatus = () => request.get('/api/admin/v1/judges/status')
 export const adminJudgeSyncAll = () => request.post('/api/admin/v1/judges/sync-all', null, { timeout: 600000 })
-export const adminUploadTestdata = (id, files, scores) => {
+export const adminUploadTestdata = (id, files, scores, subtasks) => {
   const form = new FormData()
   for (const f of files) {
     form.append('files', f)
   }
   if (scores) {
     form.append('scores', JSON.stringify(scores))
+  }
+  if (subtasks) {
+    form.append('subtasks', subtasks)
   }
   return request.post(`/api/admin/v1/problems/${id}/testdata`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -276,13 +279,16 @@ export const createMyProblem = (data) => request.post('/api/v1/my/problems', dat
 export const updateMyProblem = (id, data) => request.put(`/api/v1/my/problems/${id}`, data)
 export const deleteMyProblem = (id) => request.delete(`/api/v1/my/problems/${id}`)
 export const listMyProblemTestdata = (id) => request.get(`/api/v1/my/problems/${id}/testdata`)
-export const uploadMyProblemTestdata = (id, files, scores) => {
+export const uploadMyProblemTestdata = (id, files, scores, subtasks) => {
   const form = new FormData()
   for (const f of files) {
     form.append('files', f)
   }
   if (scores) {
     form.append('scores', JSON.stringify(scores))
+  }
+  if (subtasks) {
+    form.append('subtasks', subtasks)
   }
   return request.post(`/api/v1/my/problems/${id}/testdata`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
