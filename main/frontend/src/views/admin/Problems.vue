@@ -24,10 +24,14 @@
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="goCreate">新建题目</el-button>
       <el-button @click="openImport">导入题目</el-button>
+      <el-button :disabled="!selectedIds.length" @click="openMoveBank">
+        迁移到题库{{ selectedIds.length ? `（${selectedIds.length}）` : '' }}
+      </el-button>
       <el-button @click="load">刷新</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="visibleItems" border>
+    <el-table ref="tableRef" v-loading="loading" :data="visibleItems" border @selection-change="onSelectionChange">
+      <el-table-column type="selection" width="44" :selectable="() => true" />
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="display_id" label="题号" width="100" />
       <el-table-column prop="bank_name" label="题库" width="140" />
@@ -92,6 +96,27 @@
         @size-change="load"
       />
     </div>
+
+    <el-dialog v-model="moveBankVisible" title="迁移到题库" width="460px">
+      <p class="muted move-bank__hint">
+        已选 {{ selectedIds.length }} 道题目。迁移后题号会按目标题库的规则重新分配，原题号不再保留；
+        测试数据、提交记录和比赛引用都不受影响。
+      </p>
+      <el-select v-model="moveBankId" placeholder="选择目标题库" style="width: 100%">
+        <el-option
+          v-for="bank in moveBankOptions"
+          :key="bank.id"
+          :label="`${bank.name}（${bank.prefix} + ${bank.code_length} 位）`"
+          :value="bank.id"
+        />
+      </el-select>
+      <template #footer>
+        <el-button @click="moveBankVisible = false">取消</el-button>
+        <el-button type="primary" :loading="movingBank" :disabled="!moveBankId" @click="submitMoveBank">
+          开始迁移
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="importVisible"
@@ -249,7 +274,8 @@ import {
   adminGetImportTask,
   adminImportProblemOne,
   adminListProblemBanks,
-  adminListProblems
+  adminListProblems,
+  adminMoveProblemsBank
 } from '@/api'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 
@@ -264,6 +290,11 @@ const visibilityFilter = ref('')
 const bankFilter = ref('')
 const kindFilter = ref('')
 const banks = ref([])
+const tableRef = ref(null)
+const selectedIds = ref([])
+const moveBankVisible = ref(false)
+const moveBankId = ref('')
+const movingBank = ref(false)
 const importVisible = ref(false)
 const importing = ref(false)
 const importFiles = ref([])
@@ -341,6 +372,46 @@ const loadBanks = async () => {
     }
   } catch (e) {
     banks.value = []
+  }
+}
+
+// 只有公共题库能作为迁移目标：团队库、个人库只放对应归属的题目
+const moveBankOptions = computed(() => banks.value.filter((bank) => !bank.role || bank.role === 'primary'))
+
+const onSelectionChange = (rows) => {
+  selectedIds.value = (rows || []).map((row) => row.id)
+}
+
+const openMoveBank = () => {
+  if (!selectedIds.value.length) {
+    ElMessage.warning('请先勾选要迁移的题目')
+    return
+  }
+  moveBankId.value = ''
+  moveBankVisible.value = true
+}
+
+const submitMoveBank = async () => {
+  if (!moveBankId.value || !selectedIds.value.length) {
+    return
+  }
+  movingBank.value = true
+  try {
+    const data = await adminMoveProblemsBank({ problem_ids: selectedIds.value, bank_id: moveBankId.value })
+    const moved = data.moved_count || 0
+    const skipped = data.skipped_count || 0
+    ElMessage.success(
+      `已迁移 ${moved} 道题目到「${data.bank_name}」${skipped ? `，${skipped} 道本来就在该题库` : ''}`
+    )
+    moveBankVisible.value = false
+    tableRef.value?.clearSelection()
+    selectedIds.value = []
+    await loadBanks()
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.message || '迁移失败')
+  } finally {
+    movingBank.value = false
   }
 }
 
@@ -1031,5 +1102,11 @@ onMounted(() => {
 .result-fail,
 .import-result__error {
   color: #f53f3f;
+}
+
+.move-bank__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>

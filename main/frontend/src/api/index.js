@@ -104,6 +104,7 @@ export const adminUpdateAdmin = (id, data) => request.put(`/api/admin/v1/admins/
 export const adminDeleteAdmin = (id) => request.delete(`/api/admin/v1/admins/${id}`)
 
 export const adminListProblems = (params) => request.get('/api/admin/v1/problems', { params })
+export const adminMoveProblemsBank = (data) => request.post('/api/admin/v1/problems/move-bank', data)
 export const adminGetProblem = (id) => request.get(`/api/admin/v1/problems/${id}`)
 export const adminCreateProblem = (data) => request.post('/api/admin/v1/problems', data)
 
