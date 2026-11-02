@@ -32,11 +32,13 @@ type myProblemItem struct {
 	TotalScore    int       `json:"total_score"`
 	SubmitCount   int       `json:"submit_count"`
 	AcceptedCount int       `json:"accepted_count"`
+	AuthorID      uint      `json:"author_id"`
+	AuthorName    string    `json:"author_name"`
 	Visibility    int       `json:"visibility"`
 	CreatedAt     time.Time `json:"created_at"`
 }
 
-func toMyProblemItem(p *model.Problem, bankName string) myProblemItem {
+func toMyProblemItem(p *model.Problem, bankName, authorName string) myProblemItem {
 	return myProblemItem{
 		ID:            p.ID,
 		DisplayID:     p.DisplayID,
@@ -56,6 +58,8 @@ func toMyProblemItem(p *model.Problem, bankName string) myProblemItem {
 		TotalScore:    totalScore(p),
 		SubmitCount:   p.SubmitCount,
 		AcceptedCount: p.AcceptedCount,
+		AuthorID:      p.CreatedBy,
+		AuthorName:    authorName,
 		Visibility:    p.Visibility,
 		CreatedAt:     p.CreatedAt,
 	}
@@ -139,9 +143,14 @@ func (h *Handler) ListMyProblems(c *gin.Context) {
 	}
 
 	items := make([]myProblemItem, 0, len(problems))
+	authorNames, err := h.problemAuthorNames(problems)
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
 	for i := range problems {
 		p := &problems[i]
-		items = append(items, toMyProblemItem(p, bankNames[p.BankID]))
+		items = append(items, toMyProblemItem(p, bankNames[p.BankID], authorNames[p.CreatedBy]))
 	}
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
 }

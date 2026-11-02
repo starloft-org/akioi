@@ -76,7 +76,12 @@ func AutoMigrate(db *gorm.DB) error {
 	}
 
 	// 历史版本中的出题人角色已取消，降级为普通用户以避免意外提权。
-	return db.Model(&model.User{}).Where("role = ?", "setter").Update("role", model.RoleUser).Error
+	if err := db.Model(&model.User{}).Where("role = ?", "setter").Update("role", model.RoleUser).Error; err != nil {
+		return err
+	}
+
+	// 历史题目可能没有作者信息：按约定 A0001–A0009 归用户 3，其余归用户 1。
+	return backfillProblemAuthors(db)
 }
 
 // Seed 幂等写入初始数据：确保存在超级管理员，并为存量管理员补齐默认权限。
@@ -154,4 +159,27 @@ func getEnvDefault(key, def string) string {
 		return def
 	}
 	return v
+}
+
+// backfillProblemAuthors 为缺少作者的存量题目补上作者。
+func backfillProblemAuthors(db *gorm.DB) error {
+	var missing int64
+	if err := db.Model(&model.Problem{}).Where("created_by = 0").Count(&missing).Error; err != nil {
+		return err
+	}
+	if missing == 0 {
+		return nil
+	}
+	var users int64
+	if err := db.Model(&model.User{}).Where("id IN ?", []uint{1, 3}).Count(&users).Error; err != nil {
+		return err
+	}
+	if users < 2 {
+		return nil
+	}
+	if err := db.Exec("UPDATE problems SET created_by = CASE WHEN display_id BETWEEN 'A0001' AND 'A0009' THEN 3 ELSE 1 END WHERE created_by = 0").Error; err != nil {
+		return err
+	}
+	logger.Businessf("已为 %d 道历史题目补上作者", missing)
+	return nil
 }

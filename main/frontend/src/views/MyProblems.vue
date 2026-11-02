@@ -44,6 +44,12 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="作者" width="120">
+        <template #default="{ row }">
+          <span v-if="row.author_name">{{ row.author_name }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="访问权限" width="110">
         <template #default="{ row }">
           <el-tag size="small" :type="row.access === 1 ? 'success' : 'info'">

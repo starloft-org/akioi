@@ -66,6 +66,12 @@
                   <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
                 </template>
               </el-table-column>
+              <el-table-column label="作者" width="120">
+                <template #default="{ row }">
+                  <span v-if="row.author_name">{{ row.author_name }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </el-table-column>
               <el-table-column label="测试点" width="90" prop="testcase_count" align="right" />
               <el-table-column label="提交 / 通过" width="130" align="right">
                 <template #default="{ row }">{{ row.submit_count }} / {{ row.accepted_count }}</template>

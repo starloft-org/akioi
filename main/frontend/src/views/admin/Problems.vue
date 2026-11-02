@@ -55,6 +55,12 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
+      <el-table-column label="作者" width="130">
+        <template #default="{ row }">
+          <span v-if="row.author_name">{{ row.author_name }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="points" label="积分" width="80" />
       <el-table-column label="标签" min-width="160">
         <template #default="{ row }">

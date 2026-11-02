@@ -25,6 +25,8 @@ type problemItem struct {
 	SubmitCount    int       `json:"submit_count"`
 	AcceptedCount  int       `json:"accepted_count"`
 	AcceptanceRate float64   `json:"acceptance_rate"`
+	AuthorID       uint      `json:"author_id"`
+	AuthorName     string    `json:"author_name"`
 	MyStatus       string    `json:"my_status"`
 	CreatedAt      time.Time `json:"created_at"`
 }
@@ -88,6 +90,11 @@ func (h *Handler) ListProblems(c *gin.Context) {
 		ids = append(ids, problems[i].ID)
 	}
 	submitters := h.distinctSubmitters(ids)
+	authorNames, err := h.problemAuthorNames(problems)
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
 
 	items := make([]problemItem, 0, len(problems))
 	for i := range problems {
@@ -108,6 +115,8 @@ func (h *Handler) ListProblems(c *gin.Context) {
 			AcceptedCount: p.AcceptedCount,
 			// 通过率 = 通过人数 / 提交过的人数，两者都按去重用户统计
 			AcceptanceRate: rate(p.AcceptedCount, submitters[p.ID]),
+			AuthorID:       p.CreatedBy,
+			AuthorName:     authorNames[p.CreatedBy],
 			CreatedAt:      p.CreatedAt,
 		}
 		if solvedSet[p.ID] {
@@ -184,6 +193,8 @@ func (h *Handler) GetProblem(c *gin.Context) {
 			"total_score":     totalScore(&p),
 			"created_at":      p.CreatedAt,
 			"compare_mode":    p.CompareMode,
+			"author_id":       p.CreatedBy,
+			"author_name":     h.problemAuthorName(&p),
 		},
 		"my_status": item.MyStatus,
 		"languages": model.SupportedLanguages(),
@@ -330,4 +341,39 @@ func keysOf(m map[uint]bool) []uint {
 		out = append(out, 0)
 	}
 	return out
+}
+
+// problemAuthorNames 批量取题目作者（上传者）的用户名。
+func (h *Handler) problemAuthorNames(problems []model.Problem) (map[uint]string, error) {
+	ids := make([]uint, 0, len(problems))
+	seen := make(map[uint]bool, len(problems))
+	for i := range problems {
+		id := problems[i].CreatedBy
+		if id == 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	names := make(map[uint]string, len(ids))
+	if len(ids) == 0 {
+		return names, nil
+	}
+	var users []model.User
+	if err := h.DB.Select("id", "username").Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for _, u := range users {
+		names[u.ID] = u.Username
+	}
+	return names, nil
+}
+
+// problemAuthorName 取单道题目的作者用户名。
+func (h *Handler) problemAuthorName(p *model.Problem) string {
+	names, err := h.problemAuthorNames([]model.Problem{*p})
+	if err != nil {
+		return ""
+	}
+	return names[p.CreatedBy]
 }

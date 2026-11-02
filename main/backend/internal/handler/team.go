@@ -698,6 +698,11 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 		return
 	}
 	items := make([]gin.H, 0, len(problems))
+	authorNames, err := h.problemAuthorNames(problems)
+	if err != nil {
+		httpx.ServerError(c, "查询团队题目失败")
+		return
+	}
 	for i := range problems {
 		p := &problems[i]
 		items = append(items, gin.H{
@@ -709,6 +714,8 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 			"submit_count":   p.SubmitCount,
 			"accepted_count": p.AcceptedCount,
 			"testcase_count": p.TestcaseCount,
+			"author_id":      p.CreatedBy,
+			"author_name":    authorNames[p.CreatedBy],
 			"created_at":     p.CreatedAt,
 		})
 	}

@@ -37,6 +37,8 @@ type adminProblemItem struct {
 	OwnerName     string    `json:"owner_name"`
 	Access        int       `json:"access"`
 	Kind          string    `json:"kind"`
+	AuthorID      uint      `json:"author_id"`
+	AuthorName    string    `json:"author_name"`
 	TestcaseCount int       `json:"testcase_count"`
 	TotalScore    int       `json:"total_score"`
 	SubmitCount   int       `json:"submit_count"`
@@ -92,6 +94,11 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 		httpx.ServerError(c, "查询题目失败")
 		return
 	}
+	authorNames, err := h.problemAuthorNames(problems)
+	if err != nil {
+		httpx.ServerError(c, "查询题目失败")
+		return
+	}
 
 	items := make([]adminProblemItem, 0, len(problems))
 	for i := range problems {
@@ -114,6 +121,8 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 			OwnerName:     ownerNames[p.OwnerID],
 			Access:        p.Access,
 			Kind:          p.Kind(),
+			AuthorID:      p.CreatedBy,
+			AuthorName:    authorNames[p.CreatedBy],
 			TestcaseCount: p.TestcaseCount,
 			TotalScore:    totalScore(p),
 			SubmitCount:   p.SubmitCount,
@@ -150,6 +159,8 @@ func (h *Handler) AdminGetProblem(c *gin.Context) {
 	}
 	detail["team_name"] = teamNames[p.TeamID]
 	detail["owner_name"] = ownerNames[p.OwnerID]
+	detail["author_id"] = p.CreatedBy
+	detail["author_name"] = h.problemAuthorName(&p)
 	httpx.OK(c, gin.H{"problem": detail})
 }
 

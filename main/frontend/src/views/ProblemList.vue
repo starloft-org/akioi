@@ -60,6 +60,12 @@
           <DifficultyTag v-if="row.difficulty" :difficulty="row.difficulty" />
         </template>
       </el-table-column>
+      <el-table-column label="作者" width="120">
+        <template #default="{ row }">
+          <span v-if="row.author_name">{{ row.author_name }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="通过率" width="150">
         <template #default="{ row }">
           <div class="rate-cell">

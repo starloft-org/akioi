@@ -15,6 +15,7 @@
             <el-tag v-if="problem.contest_only" type="warning" size="small">比赛专用</el-tag>
             <span>通过率 {{ rateText(problem.acceptance_rate) }}</span>
             <span>提交 {{ problem.submit_count }} · 通过 {{ problem.accepted_count }}</span>
+            <span v-if="problem.author_name">作者 {{ problem.author_name }}</span>
             <span v-if="problem.source">来源 {{ problem.source }}</span>
           </div>
           <div class="toolbar" style="margin-top: 16px">
