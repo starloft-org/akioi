@@ -12,7 +12,7 @@ import (
 
 // TestImportTaskLifecycle 覆盖任务登记、进度更新、快照与状态收尾。
 func TestImportTaskLifecycle(t *testing.T) {
-	task := createImportTask(3)
+	task := createImportTask(3, 0)
 	if task.ID == "" || task.Total != 3 || task.Status != importTaskRunning {
 		t.Fatalf("unexpected task: %+v", task)
 	}
@@ -48,7 +48,7 @@ func TestImportTaskLifecycle(t *testing.T) {
 
 // TestImportTaskGC 清理过期任务，避免内存里长期保留大量导入结果。
 func TestImportTaskGC(t *testing.T) {
-	task := createImportTask(1)
+	task := createImportTask(1, 0)
 	old := time.Now().Add(-2 * time.Hour)
 	updateImportTask(task.ID, func(current *ImportTask) {
 		current.Status = importTaskDone

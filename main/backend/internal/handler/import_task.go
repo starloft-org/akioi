@@ -45,6 +45,8 @@ type ImportTask struct {
 	Items        []importItem `json:"items"`
 	CreatedAt    time.Time    `json:"created_at"`
 	FinishedAt   *time.Time   `json:"finished_at,omitempty"`
+	// OwnerID 是发起导入的用户；后台导入为 0，只允许管理员查看进度。
+	OwnerID uint `json:"-"`
 }
 
 var (
@@ -53,11 +55,12 @@ var (
 )
 
 // createImportTask 登记一个新任务并返回快照。
-func createImportTask(total int) ImportTask {
+func createImportTask(total int, ownerID uint) ImportTask {
 	task := &ImportTask{
 		ID:        newImportTaskID(),
 		Total:     total,
 		Status:    importTaskRunning,
+		OwnerID:   ownerID,
 		Items:     make([]importItem, 0, total),
 		CreatedAt: time.Now(),
 	}
@@ -169,7 +172,7 @@ type importProgress func(done, total int, note string)
 
 // runProblemImport 顺序处理题目包：atomic 为真时整组一个事务，任一题失败则全部不入库。
 // 非 atomic 时逐个包导入，每个包自身原子，处理一个就更新一次进度。
-func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, atomic bool) {
+func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, owner importOwner, atomic bool) {
 	ctx := context.Background()
 	progress := func(done, total int, note string) {
 		updateImportTask(taskID, func(task *ImportTask) {
@@ -194,7 +197,7 @@ func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *
 		})
 	}
 	if atomic {
-		items, _ := h.importPackageGroup(ctx, staged, u, bank, maxBytes, ip, progress)
+		items, _ := h.importPackageGroup(ctx, staged, u, bank, maxBytes, ip, owner, progress)
 		for _, item := range items {
 			applyItem(item)
 		}
@@ -210,7 +213,7 @@ func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *
 				task.PackageTotal = 0
 				task.Message = "正在导入 " + file.Name
 			})
-			applyItem(h.importStagedProblem(ctx, file, u, bank, maxBytes, ip, progress))
+			applyItem(h.importStagedProblem(ctx, file, u, bank, maxBytes, ip, owner, progress))
 		}
 	}
 	finished := time.Now()
@@ -225,12 +228,12 @@ func (h *Handler) runProblemImport(taskID string, staged []stagedImportFile, u *
 	if task, ok := snapshotImportTask(taskID); ok {
 		total, success = task.Total, task.SuccessCount
 	}
-	logger.Adminf("管理员 %s 批量导入题目完成：成功 %d / 共 %d ip=%s", u.Username, success, total, ip)
+	logger.Adminf("用户 %s 批量导入题目完成：成功 %d / 共 %d ip=%s", u.Username, success, total, ip)
 }
 
 // importStagedProblem 从临时文件读取单个题目包并导入；这个包要么整包成功，要么完全不入库。
-func (h *Handler) importStagedProblem(ctx context.Context, file stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, progress importProgress) importItem {
-	items, err := h.importPackageGroup(ctx, []stagedImportFile{file}, u, bank, maxBytes, ip, progress)
+func (h *Handler) importStagedProblem(ctx context.Context, file stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, owner importOwner, progress importProgress) importItem {
+	items, err := h.importPackageGroup(ctx, []stagedImportFile{file}, u, bank, maxBytes, ip, owner, progress)
 	if err != nil || len(items) == 0 {
 		reason := "导入题目失败"
 		if err != nil {

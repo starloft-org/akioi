@@ -23,6 +23,7 @@
       </el-select>
       <el-button type="primary" @click="search">筛选</el-button>
       <el-button type="success" @click="openCreate">新建题目</el-button>
+      <el-button type="warning" @click="openImport">批量导入</el-button>
     </div>
 
     <el-table v-loading="loading" :data="items" size="small">
@@ -185,6 +186,73 @@
       </el-table>
     </el-dialog>
   </div>
+    <el-dialog v-model="importDialog" title="批量导入个人题目" width="760px" :close-on-click-modal="false">
+      <p class="panel__hint">
+        题目包是包含 <code>problem.md</code> 与 <code>*.in</code> / <code>*.out</code> 测试数据的 zip。
+        可以一次选一个目录里的所有包，也可以直接选多个 zip；导入成功的包会从待导入列表里移除，失败后可以重试剩下的包。
+      </p>
+
+      <div class="toolbar">
+        <el-button type="primary" @click="pickDirectory">选择题目包目录</el-button>
+        <input ref="dirInputRef" type="file" webkitdirectory multiple class="dir-input" @change="onDirectoryChange" />
+        <el-upload :auto-upload="false" :show-file-list="false" multiple accept=".zip" @change="onUploadChange">
+          <el-button>选择 zip 文件</el-button>
+        </el-upload>
+        <span v-if="importDirName" class="muted">目录：{{ importDirName }}</span>
+        <el-button v-if="importState" link type="danger" @click="discardImportRecord">丢弃记录</el-button>
+      </div>
+
+      <el-alert
+        v-if="importHasRemaining && !importing"
+        type="warning"
+        :closable="false"
+        title="还有包没有导入完成"
+        class="import-resume"
+      >
+        <p>共 {{ importTotal || stateFiles.length }} 个包，已完成 {{ stateOkCount }} 个，还剩 {{ importRemaining.length }} 个没有导完。</p>
+        <p>重新选择上次的目录后点「开始导入」，已经导进去的包会自动跳过。</p>
+      </el-alert>
+
+      <div v-if="pendingEntries.length" class="import-queue">
+        <div class="import-queue__title">待导入：{{ pendingEntries.length }} 个包</div>
+        <div v-for="entry in pendingEntries.slice(0, 50)" :key="entry.key" class="import-queue__row">
+          <span class="muted">{{ entry.index }}.</span>
+          <span class="import-queue__name">{{ entry.relPath || entry.name }}</span>
+          <el-tag v-if="entry.status === 'failed'" type="danger" size="small">上次失败</el-tag>
+          <el-tag v-else-if="entry.status === 'running'" type="warning" size="small">上传中</el-tag>
+          <el-tag v-else type="info" size="small">待上传</el-tag>
+          <span v-if="entry.error" class="import-queue__error">{{ entry.error }}</span>
+        </div>
+        <p v-if="pendingEntries.length > 50" class="muted">还有 {{ pendingEntries.length - 50 }} 个未显示</p>
+      </div>
+
+      <div v-if="importPhase !== 'idle'" class="import-progress">
+        <el-progress :percentage="importCurrentPercent" :status="progressStatus" />
+        <p class="muted">
+          <template v-if="importPhase === 'importing'">
+            {{ importMessage || `正在上传 ${importCurrentName}` }}（第
+            {{ Math.min(importDone + 1, importTotal) }} / {{ importTotal }} 个包，已成功
+            {{ stateOkCount }} 个）
+          </template>
+          <template v-else-if="importPhase === 'failed'">
+            已停止：{{ importStopReason }}
+          </template>
+          <template v-else>
+            导入完成：成功 {{ stateOkCount }} 个
+          </template>
+        </p>
+      </div>
+
+      <template #footer>
+        <el-button @click="importDialog = false">关闭</el-button>
+        <el-button v-if="importPhase === 'failed'" type="warning" :loading="importing" @click="retryImport">
+          重试剩余 {{ importRemaining.length || pendingEntries.length }} 个包
+        </el-button>
+        <el-button v-else type="primary" :loading="importing" :disabled="!importTargets.length" @click="handleImport">
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script setup>
@@ -198,6 +266,8 @@ import {
   listMyProblemTestdata,
   listMyProblems,
   listTeams,
+  myGetImportTask,
+  myImportProblemsOne,
   updateMyProblem,
   uploadMyProblemTestdata
 } from '@/api'
@@ -443,6 +513,420 @@ async function clearTestdata() {
   }
 }
 
+// 个人题目批量导入：记录里只保留没导完的包，导成功的包直接丢掉
+const IMPORT_STATE_KEY = 'akioi:my-import-state'
+
+const importDialog = ref(false)
+const importing = ref(false)
+const importFiles = ref([])
+const importDirFiles = ref([])
+const importDirName = ref('')
+const dirInputRef = ref(null)
+const importState = ref(null)
+const importPhase = ref('idle')
+const importDone = ref(0)
+const importTotal = ref(0)
+const importCurrentPercent = ref(0)
+const importCurrentName = ref('')
+const importMessage = ref('')
+const importStopReason = ref('')
+const importOkCount = ref(0)
+
+const entryKey = (entry) => entry.relPath || entry.name
+
+const loadImportState = () => {
+  try {
+    const raw = localStorage.getItem(IMPORT_STATE_KEY)
+    if (!raw) {
+      return null
+    }
+    const saved = JSON.parse(raw)
+    return saved && Array.isArray(saved.files) ? saved : null
+  } catch {
+    return null
+  }
+}
+
+const persistImportState = () => {
+  if (!importState.value) {
+    return
+  }
+  try {
+    localStorage.setItem(IMPORT_STATE_KEY, JSON.stringify(importState.value))
+  } catch {
+    // 配额满了就不记了，不影响本次导入
+  }
+}
+
+const clearImportState = () => {
+  importState.value = null
+  try {
+    localStorage.removeItem(IMPORT_STATE_KEY)
+  } catch {
+    // 忽略
+  }
+}
+
+const stateFiles = computed(() => importState.value?.files || [])
+const stateOkCount = computed(() => importOkCount.value)
+const importRemaining = computed(() => stateFiles.value)
+const importHasRemaining = computed(() => importRemaining.value.length > 0)
+const progressStatus = computed(() => {
+  if (importPhase.value === 'failed') {
+    return 'exception'
+  }
+  return importPhase.value === 'done' ? 'success' : undefined
+})
+
+// 目录导入时优先用目录里选到的 zip，否则用 el-upload 里选中的包
+const importTargets = computed(() => {
+  if (importDirFiles.value.length) {
+    return importDirFiles.value
+  }
+  return importFiles.value
+    .filter((item) => item.raw)
+    .map((item) => ({
+      name: item.name,
+      relPath: item.webkitRelativePath || item.name,
+      raw: item.raw
+    }))
+})
+
+const pendingEntries = computed(() => {
+  const failed = new Map()
+  stateFiles.value.forEach((entry) => failed.set(entryKey(entry), entry))
+  return importTargets.value.map((file, index) => {
+    const key = file.relPath || file.name
+    const entry = failed.get(key)
+    const running = importing.value && importCurrentName.value === file.name && !entry
+    return {
+      key,
+      index: index + 1,
+      name: file.name,
+      relPath: file.relPath && file.relPath !== file.name ? file.relPath : '',
+      status: entry?.status === 'failed' ? 'failed' : running ? 'running' : 'waiting',
+      error: entry?.error || ''
+    }
+  })
+})
+
+const topDirName = (entries) => {
+  const first = entries[0]?.relPath || ''
+  const index = first.indexOf('/')
+  return index > 0 ? first.slice(0, index) : ''
+}
+
+const restoreImportState = (saved) => {
+  importState.value = saved
+  importDirName.value = saved.dir || ''
+  importOkCount.value = saved.done || 0
+  importDone.value = saved.done || 0
+  importTotal.value = saved.total || (saved.files || []).length
+  importPhase.value = importHasRemaining.value ? 'idle' : 'done'
+}
+
+const openImport = () => {
+  const saved = loadImportState()
+  if (saved) {
+    restoreImportState(saved)
+    if (importHasRemaining.value) {
+      ElMessage.info(`上次还有 ${saved.files.length} 个包没有导入完成，重新选择目录后可以接着导`)
+    }
+  }
+  importDialog.value = true
+}
+
+const pickDirectory = () => {
+  dirInputRef.value?.click()
+}
+
+const onDirectoryChange = (event) => {
+  const picked = Array.from(event.target.files || [])
+  // 允许再次选择同一个目录：先清空，否则浏览器不会再触发 change
+  event.target.value = ''
+  if (!picked.length) {
+    return
+  }
+  const zips = picked.filter((file) => /\.zip$/i.test(file.name))
+  if (!zips.length) {
+    ElMessage.warning('选中的目录里没有 zip 题目包')
+    return
+  }
+  importDirFiles.value = zips.map((file) => ({
+    name: file.name,
+    relPath: file.webkitRelativePath || file.name,
+    raw: file
+  }))
+  importFiles.value = []
+  importDirName.value = topDirName(importDirFiles.value)
+  const savedDir = importState.value?.dir
+  if (savedDir && importDirName.value && savedDir !== importDirName.value) {
+    ElMessage.warning(`这次选的是「${importDirName.value}」，和上次的「${savedDir}」不一样，续传可能对不上`)
+  }
+  importPhase.value = 'idle'
+  importMessage.value = ''
+  importStopReason.value = ''
+  ElMessage.success(`已选择「${importDirName.value || '当前目录'}」里的 ${zips.length} 个题目包`)
+}
+
+const onUploadChange = (file, files) => {
+  importDirFiles.value = []
+  importDirName.value = ''
+  importFiles.value = files
+}
+
+const discardImportRecord = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '丢弃记录后需要重新选择全部题目包（已经导入的题目不受影响）。',
+      '丢弃导入记录',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  clearImportState()
+  importDone.value = 0
+  importTotal.value = 0
+  importOkCount.value = 0
+  importPhase.value = 'idle'
+  ElMessage.success('已丢弃导入记录')
+}
+
+// 轮询后台导入任务：任务只存在服务端内存里，重启或过期后返回 404，要明确失败
+const pollImportTask = (taskId, onProgress) =>
+  new Promise((resolve, reject) => {
+    let timer = null
+    let misses = 0
+    const stop = () => {
+      if (timer) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+    const tick = async () => {
+      try {
+        const task = await myGetImportTask(taskId)
+        misses = 0
+        onProgress?.(task)
+        if (task.status === 'done') {
+          stop()
+          resolve(task)
+          return
+        }
+        if (task.status === 'failed') {
+          stop()
+          reject(new Error(task.message || '导入失败'))
+          return
+        }
+      } catch (e) {
+        if (e?.response?.status === 404) {
+          stop()
+          reject(new Error('导入任务已不存在（后端可能重启过），请重新上传这个包'))
+          return
+        }
+        if (!e?.response) {
+          stop()
+          reject(e)
+          return
+        }
+        misses += 1
+        if (misses >= 10) {
+          stop()
+          reject(new Error(e?.response?.data?.message || e?.message || '查询导入进度失败'))
+          return
+        }
+      }
+      timer = setTimeout(tick, 1000)
+    }
+    tick()
+  })
+
+const importOne = async (file, onProgress) => {
+  try {
+    importCurrentName.value = file.name
+    importCurrentPercent.value = 0
+    importMessage.value = `正在上传 ${file.name}`
+    const data = await myImportProblemsOne(file, (percent) => {
+      importCurrentPercent.value = Math.min(30, Math.round(percent * 0.3))
+      importMessage.value = `正在上传 ${file.name} ${percent}%`
+    })
+    if (Array.isArray(data?.items)) {
+      importCurrentPercent.value = 100
+      return { items: data.items, container: false }
+    }
+    if (data?.task_id) {
+      importCurrentPercent.value = Math.max(importCurrentPercent.value, 30)
+      importMessage.value = '上传完成，正在校验并导入…'
+      const task = await pollImportTask(data.task_id, onProgress)
+      importCurrentPercent.value = 100
+      return { items: task.items || [], container: true, total: task.total || 0 }
+    }
+    return { items: [{ filename: file.name, ok: false, error: '导入没有返回结果' }], container: false }
+  } catch (e) {
+    importCurrentPercent.value = 100
+    return {
+      items: [{ filename: file.name, ok: false, error: e?.response?.data?.message || e?.message || '导入失败' }],
+      container: false
+    }
+  }
+}
+
+// 导完的包从待导入列表和记录里一起删掉
+const removeImportedFile = (key) => {
+  importDirFiles.value = importDirFiles.value.filter((entry) => (entry.relPath || entry.name) !== key)
+  importFiles.value = importFiles.value.filter((entry) => (entry.webkitRelativePath || entry.name) !== key)
+  const saved = importState.value
+  if (!saved) {
+    return
+  }
+  const done = saved.files.find((entry) => entryKey(entry) === key)
+  if (!done) {
+    return
+  }
+  saved.files = saved.files.filter((entry) => entryKey(entry) !== key)
+  saved.done = (saved.done || 0) + 1
+  importOkCount.value += 1
+  persistImportState()
+}
+
+const markOuterFile = (key, ok) => {
+  const target = stateFiles.value.find((entry) => entryKey(entry) === key)
+  if (!target) {
+    return
+  }
+  target.status = ok ? 'ok' : 'failed'
+  persistImportState()
+}
+
+const retryImport = () => {
+  if (!importTargets.value.length) {
+    ElMessage.info('请重新选择上次的目录或需要重试的 zip，然后点「开始导入」')
+    return
+  }
+  handleImport()
+}
+
+const handleImport = async () => {
+  let targets = importTargets.value
+  if (!targets.length) {
+    ElMessage.warning('请先选择题目包目录或 zip 文件')
+    return
+  }
+  if (importState.value && importHasRemaining.value) {
+    const pending = new Map()
+    stateFiles.value.forEach((entry) => {
+      const key = entryKey(entry)
+      pending.set(key, (pending.get(key) || 0) + 1)
+    })
+    const ignored = []
+    const picked = []
+    targets.forEach((file) => {
+      const key = file.relPath || file.name
+      const left = pending.get(key) || 0
+      if (left > 0) {
+        picked.push(file)
+        pending.set(key, left - 1)
+      } else {
+        ignored.push(key)
+      }
+    })
+    if (!picked.length) {
+      ElMessage.warning('选中的包和记录里剩余的不一致，请重新选择上次的目录')
+      return
+    }
+    if (ignored.length) {
+      ElMessage.info(`已跳过 ${ignored.length} 个已经导入过的包`)
+    }
+    targets = picked
+  } else {
+    importState.value = {
+      dir: importDirName.value || '',
+      total: targets.length,
+      done: 0,
+      createdAt: new Date().toISOString(),
+      files: targets.map((file) => ({
+        name: file.name,
+        relPath: file.relPath || '',
+        status: 'pending'
+      }))
+    }
+    importOkCount.value = 0
+    importDone.value = 0
+    importTotal.value = targets.length
+    persistImportState()
+  }
+
+  importing.value = true
+  importPhase.value = 'importing'
+  importStopReason.value = ''
+  importMessage.value = ''
+  try {
+    for (const file of targets) {
+      const key = file.relPath || file.name
+      const base = importDone.value
+      let expanded = false
+      const res = await importOne(file.raw || file, (task) => {
+        if (!expanded && task?.total) {
+          importTotal.value += Math.max(0, task.total - 1)
+          expanded = true
+        }
+        const packageTotal = task?.package_total || 0
+        if (packageTotal > 0) {
+          const ratio = Math.min(1, (task?.package_done || 0) / packageTotal)
+          importCurrentPercent.value = Math.max(importCurrentPercent.value, 30 + Math.round(ratio * 70))
+        } else if (task?.message) {
+          importCurrentPercent.value = Math.max(importCurrentPercent.value, 35)
+        }
+        if (task?.message) {
+          importMessage.value = task.message
+        }
+      })
+      const failures = res.items.filter((item) => !item.ok)
+      if (res.container) {
+        importDone.value = base + (res.total || res.items.length)
+        importTotal.value = Math.max(importTotal.value, importDone.value)
+        markOuterFile(key, failures.length === 0)
+      } else {
+        importDone.value = base + 1
+      }
+      if (failures.length) {
+        const failedItem = failures[0]
+        const target = stateFiles.value.find((entry) => entryKey(entry) === key)
+        if (target) {
+          target.status = 'failed'
+          target.error = failedItem.error || '包内题目未通过校验'
+        }
+        importStopReason.value = `${file.name}：${failedItem.error || '包内题目未通过校验'}`
+        persistImportState()
+        break
+      }
+      removeImportedFile(key)
+    }
+    importCurrentName.value = ''
+    if (importStopReason.value) {
+      importPhase.value = 'failed'
+      importMessage.value = ''
+      ElMessage.error(`导入已停止：${importStopReason.value}`)
+    } else {
+      importPhase.value = 'done'
+      importMessage.value = ''
+      if (!importHasRemaining.value) {
+        clearImportState()
+      }
+      ElMessage.success(`导入完成：成功 ${importOkCount.value} 个`)
+    }
+    load()
+  } catch (e) {
+    importCurrentName.value = ''
+    importStopReason.value = e?.message || '导入失败，请重试'
+    importPhase.value = 'failed'
+    importMessage.value = ''
+    ElMessage.error(`导入已停止：${importStopReason.value}`)
+  } finally {
+    importing.value = false
+  }
+}
 onMounted(() => {
   load()
   loadTeams()
@@ -478,5 +962,66 @@ onMounted(() => {
   .sample-row__index {
     padding-top: 0;
   }
+}
+.dir-input {
+  display: none;
+}
+
+.import-resume {
+  margin-top: 8px;
+}
+
+.import-resume p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.import-queue {
+  margin-top: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.import-queue__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.import-queue__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+
+.import-queue__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-queue__error {
+  color: var(--el-color-danger);
+  font-size: 12px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-progress {
+  margin-top: 10px;
+}
+
+.import-progress p {
+  margin: 6px 0 0;
+  font-size: 13px;
 }
 </style>

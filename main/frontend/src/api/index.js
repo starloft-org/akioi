@@ -139,6 +139,27 @@ export const adminImportProblemOne = (file, bankId, onUploadProgress) => {
   })
 }
 
+// 个人题目批量导入：上传完立刻返回 task_id，再用 myGetImportTask 轮询进度
+export const myGetImportTask = (taskId) => request.get(`/api/v1/my/import-tasks/${taskId}`)
+
+export const myImportProblemsOne = (file, onUploadProgress) => {
+  const form = new FormData()
+  form.append('files', file)
+  return request.post('/api/v1/my/problems/import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 600000,
+    onUploadProgress: (event) => {
+      if (!onUploadProgress) {
+        return
+      }
+      const total = event?.total || 0
+      if (total > 0) {
+        onUploadProgress(Math.min(100, Math.round((event.loaded / total) * 100)))
+      }
+    }
+  })
+}
+
 export const adminImportProblem = (files, bankId, onProgress) => {
   const form = new FormData()
   // 导入的题目统一归入所选题库，未选择时后端归入主库

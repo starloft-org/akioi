@@ -164,7 +164,7 @@
         title="还有包没有导入完成"
       >
         <p>
-          共 {{ importTotal || stateImported.length + stateFiles.length }} 个包，已完成
+          共 {{ importTotal || stateFiles.length }} 个包，已完成
           {{ stateOkCount }} 个，还剩 {{ importRemaining.length }} 个没有导完。
         </p>
         <p class="import-resume__names">剩余：{{ remainingPreview }}</p>
@@ -207,13 +207,13 @@
           <template v-if="importPhase === 'importing'">
             {{ importMessage || `正在上传 ${importCurrentName}` }}（第
             {{ Math.min(importDone + 1, importTotal) }} / {{ importTotal }} 个包，已成功
-            {{ resultsSummary.success }} 个）
+            {{ stateOkCount }} 个）
           </template>
           <template v-else-if="importPhase === 'failed'">
             已停止：{{ importStopReason }}
           </template>
-          <template v-else>
-            导入完成：成功 {{ resultsSummary.success }} 个
+<template v-else>
+            导入完成：成功 {{ stateOkCount }} 个
           </template>
         </p>
       </div>
@@ -306,7 +306,7 @@ const dirInputRef = ref(null)
 const pendingRetry = ref(false)
 const importBankId = ref('')
 const importResults = ref([])
-// 持久化的批次记录：{ bankId, dir, total, done, files: [还没导完的包], imported: [已完成的包] }
+// 持久化的批次记录：{ bankId, dir, total, done, files: [还没导完的包] }
 const importState = ref(null)
 // idle：未开始；importing：正在逐个导入；done：全部完成；failed：出错停下，可重试
 // 一次只发一个包：上一个包整包校验通过并入库后才发下一个
@@ -472,9 +472,9 @@ const importMessage = ref('')
 const IMPORT_STATE_KEY = 'akioi:admin-import-state'
 
 const stateFiles = computed(() => importState.value?.files || [])
-const stateImported = computed(() => importState.value?.imported || [])
-// 记录里只保留没导完的包，已完成的数量单独累计
-const stateOkCount = computed(() => stateImported.value.length)
+// 记录里只保留没导完的包；导成功的包不再写进记录，成功数只在本次会话里累计
+const importOkCount = ref(0)
+const stateOkCount = computed(() => importOkCount.value)
 const importRemaining = computed(() => stateFiles.value)
 const importHasRemaining = computed(() => importRemaining.value.length > 0)
 const remainingPreview = computed(() => {
@@ -527,20 +527,15 @@ const entryKey = (entry) => entry.relPath || entry.name
 const restoreImportState = (saved) => {
   importState.value = saved
   importDirName.value = saved.dir || ''
-  const imported = (saved.imported || []).map((item) => ({
-    filename: entryKey(item),
-    ok: true,
-    display_id: item.display_id,
-    title: item.title
-  }))
   const failed = (saved.files || []).map((item) => ({
     filename: entryKey(item),
     ok: false,
     error: item.error
   }))
-  importResults.value = [...failed, ...imported]
-  importDone.value = saved.done || imported.length
-  importTotal.value = saved.total || imported.length + (saved.files || []).length
+  importResults.value = failed
+  importOkCount.value = saved.done || 0
+  importDone.value = saved.done || 0
+  importTotal.value = saved.total || (saved.files || []).length
   importPhase.value = importHasRemaining.value ? 'idle' : 'done'
 }
 
@@ -594,11 +589,8 @@ const removeImportedFile = (key) => {
     return
   }
   saved.files = saved.files.filter((entry) => entryKey(entry) !== key)
-  saved.imported = [
-    ...(saved.imported || []),
-    { name: done.name, relPath: done.relPath || '', display_id: done.display_id, title: done.title }
-  ]
   saved.done = (saved.done || 0) + 1
+  importOkCount.value += 1
   persistImportState()
 }
 
@@ -853,10 +845,10 @@ const handleImport = async () => {
         name: file.name,
         relPath: file.relPath || '',
         status: 'pending'
-      })),
-      imported: []
+      }))
     }
     importResults.value = []
+    importOkCount.value = 0
     importDone.value = 0
     importTotal.value = targets.length
     persistImportState()
@@ -913,10 +905,12 @@ const handleImport = async () => {
       importMessage.value = ''
       ElMessage.error(`导入已停止：${importStopReason.value}`)
     } else {
-      const success = importResults.value.filter((item) => item.ok).length
       importPhase.value = 'done'
       importMessage.value = ''
-      ElMessage.success(`导入完成：成功 ${success} 个`)
+      if (!importHasRemaining.value) {
+        clearImportState()
+      }
+      ElMessage.success(`导入完成：成功 ${importOkCount.value} 个`)
     }
     load()
   } catch (e) {

@@ -802,14 +802,14 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		staged = expanded
 	}
 	ip := c.ClientIP()
-	task := createImportTask(len(staged))
+	task := createImportTask(len(staged), 0)
 
 	// 导入一律交给后台任务：上传完立刻返回任务号，前端轮询进度。
 	// 即使单个包很大（测试点多、需要推送评测节点），也不会有请求被网关或浏览器超时掐断。
 
 	go func() {
 		defer cleanup()
-		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, packed)
+		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, importOwnerPublic(), packed)
 	}()
 	if packed {
 		logger.Adminf("管理员 %s 从打包文件开始导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)

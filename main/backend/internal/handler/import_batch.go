@@ -22,6 +22,23 @@ type preparedProblem struct {
 	hasTestdata bool
 }
 
+// importOwner 描述导入出来的题目归属：后台导入建公共题目，用户端导入建个人题目。
+type importOwner struct {
+	TeamID  uint
+	OwnerID uint
+	Access  int
+}
+
+// importOwnerPublic 是后台导入用的归属：题目进入公共题库，所有人可见。
+func importOwnerPublic() importOwner {
+	return importOwner{Access: model.ProblemAccessPublic}
+}
+
+// importOwnerPersonal 是用户端导入用的归属：题目归到导入者名下，默认仅自己可见。
+func importOwnerPersonal(u *model.User) importOwner {
+	return importOwner{OwnerID: u.ID, Access: defaultProblemAccess(0, u.ID)}
+}
+
 // prepareProblem 解析题目包并校验测试数据，任何失败都不会留下副作用。
 func (h *Handler) prepareProblem(filename string, content []byte) (*preparedProblem, error) {
 	if !strings.EqualFold(filepath.Ext(filename), ".zip") {
@@ -52,7 +69,7 @@ func (h *Handler) prepareProblem(filename string, content []byte) (*preparedProb
 }
 
 // buildImportedProblem 把解析结果转成待插入的题目；题号由调用方在事务内分配。
-func buildImportedProblem(prep *preparedProblem, u *model.User, bank *model.ProblemBank, displayID string) model.Problem {
+func buildImportedProblem(prep *preparedProblem, u *model.User, bank *model.ProblemBank, displayID string, owner importOwner) model.Problem {
 	pkg := prep.pkg
 	timeLimit := pkg.Config.TimeLimitMS
 	if timeLimit < 100 || timeLimit > 30000 {
@@ -88,6 +105,9 @@ func buildImportedProblem(prep *preparedProblem, u *model.User, bank *model.Prob
 		CompareMode:   model.CompareModeDefault,
 		FloatEps:      1e-6,
 		CreatedBy:     u.ID,
+		TeamID:        owner.TeamID,
+		OwnerID:       owner.OwnerID,
+		Access:        owner.Access,
 	}
 	p.SetSamples(pkg.Samples)
 	p.SetTags(pkg.Config.Tags)
@@ -115,7 +135,7 @@ func (h *Handler) allocateProblemDisplayIDTx(tx *gorm.DB, bank *model.ProblemBan
 
 // importPreparedGroup 在一个事务里写入整组题目与测试数据；任一题失败则整组回滚。
 // 测试数据文件会先落盘，回滚时由这里删除，保证失败不留下半成品。
-func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProblem, u *model.User, bank *model.ProblemBank, ip string, progress importProgress) ([]importItem, error) {
+func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProblem, u *model.User, bank *model.ProblemBank, ip string, owner importOwner, progress importProgress) ([]importItem, error) {
 	items := make([]importItem, len(preps))
 	for i, prep := range preps {
 		items[i] = importItem{Filename: prep.filename}
@@ -133,7 +153,7 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 			if err != nil {
 				return fmt.Errorf("%s：生成题号失败：%w", prep.filename, err)
 			}
-			p := buildImportedProblem(prep, u, bank, displayID)
+			p := buildImportedProblem(prep, u, bank, displayID, owner)
 			if err := tx.Create(&p).Error; err != nil {
 				return fmt.Errorf("%s：写入题目失败", prep.filename)
 			}
@@ -174,7 +194,7 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 }
 
 // importPackageGroup 读入并校验整组题目包，然后一次性导入；任一题有问题整组都不入库。
-func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, progress importProgress) ([]importItem, error) {
+func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportFile, u *model.User, bank *model.ProblemBank, maxBytes int64, ip string, owner importOwner, progress importProgress) ([]importItem, error) {
 	preps := make([]*preparedProblem, 0, len(staged))
 	for i, file := range staged {
 		if progress != nil {
@@ -193,7 +213,7 @@ func (h *Handler) importPackageGroup(ctx context.Context, staged []stagedImportF
 			progress(i+1, len(staged), "")
 		}
 	}
-	return h.importPreparedGroup(ctx, preps, u, bank, ip, progress)
+	return h.importPreparedGroup(ctx, preps, u, bank, ip, owner, progress)
 }
 
 // readStagedFile 读取临时目录里的上传包并检查大小上限。

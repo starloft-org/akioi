@@ -140,6 +140,9 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			my.GET("/problems/:id/testdata", h.ListMyProblemTestdata)
 			my.POST("/problems/:id/testdata", h.UploadMyProblemTestdata)
 			my.DELETE("/problems/:id/testdata", h.DeleteMyProblemTestdata)
+			// 用户端批量导入个人题目：上传完返回任务号，再轮询进度
+			my.POST("/problems/import", h.MyImportProblem)
+			my.GET("/import-tasks/:id", h.MyProblemImportStatus)
 			my.GET("/problem-sets", h.ListMyProblemSets)
 			my.POST("/problem-sets", h.CreateMyProblemSet)
 			my.GET("/problem-sets/:id", h.GetMyProblemSet)

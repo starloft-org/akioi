@@ -50,6 +50,8 @@ func TestSetupRegistersRoutes(t *testing.T) {
 		"DELETE /api/v1/my/problems/:id",
 		"POST /api/v1/my/problems/:id/testdata",
 		"DELETE /api/v1/my/problems/:id/testdata",
+		"POST /api/v1/my/problems/import",
+		"GET /api/v1/my/import-tasks/:id",
 		"GET /api/v1/my/problem-sets",
 		"POST /api/v1/my/problem-sets",
 		"GET /api/v1/my/problem-sets/:id",
