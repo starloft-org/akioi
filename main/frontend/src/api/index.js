@@ -273,6 +273,8 @@ export const reviewTeamApplication = (id, aid, data) =>
 export const listTeamProblems = (id) => request.get(`/api/v1/teams/${id}/problems`)
 export const listTeamContests = (id) => request.get(`/api/v1/teams/${id}/contests`)
 export const listTeamSets = (id) => request.get(`/api/v1/teams/${id}/sets`)
+export const listMyTeams = () => request.get('/api/v1/my/teams')
+export const convertMyProblems = (data) => request.post('/api/v1/my/problems/convert', data)
 export const getTeamSet = (id, sid) => request.get(`/api/v1/teams/${id}/sets/${sid}`)
 export const createTeamSet = (id, data) => request.post(`/api/v1/teams/${id}/sets`, data)
 export const updateTeamSet = (id, sid, data) => request.put(`/api/v1/teams/${id}/sets/${sid}`, data)

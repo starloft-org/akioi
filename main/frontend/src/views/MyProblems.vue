@@ -16,9 +16,13 @@
       />
       <el-button type="success" @click="openCreate">新建题目</el-button>
       <el-button type="warning" @click="openImport">批量导入</el-button>
+      <el-button type="primary" :disabled="selectedProblems.length === 0" @click="openConvert">
+        导入到团队（{{ selectedProblems.length }}）
+      </el-button>
     </div>
 
     <el-table v-loading="loading" :data="items" size="small">
+      <el-table-column type="selection" width="44" @selection-change="onSelectionChange" />
       <el-table-column label="题号" width="110">
         <template #default="{ row }">
           <router-link class="mono" :to="`/problems/${row.id}`">{{ row.display_id }}</router-link>
@@ -256,6 +260,18 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="convertDialog" title="导入到团队" width="440px">
+      <p class="muted">题目会变成团队题目，进入团队题库并重新分配题号；只有团队成员能在团队页面看到。</p>
+      <el-select v-model="convertTeamId" placeholder="选择团队" style="width: 100%">
+        <el-option v-for="team in convertTeams" :key="team.id" :label="team.name" :value="team.id" />
+      </el-select>
+      <p v-if="convertTeams.length === 0" class="muted" style="margin-top: 8px">你还没有加入任何团队，可以先在团队页面创建或加入团队。</p>
+      <template #footer>
+        <el-button @click="convertDialog = false">取消</el-button>
+        <el-button type="primary" :loading="converting" :disabled="!convertTeamId" @click="confirmConvert">导入</el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script setup>
@@ -263,11 +279,13 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 import {
+  convertMyProblems,
   createMyProblem,
   deleteMyProblem,
   deleteMyProblemTestdata,
   listMyProblemTestdata,
   listMyProblems,
+  listMyTeams,
   listTeams,
   myGetImportTask,
   myImportProblemsOne,
@@ -285,6 +303,12 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const query = ref({ keyword: '' })
+
+const selectedProblems = ref([])
+const convertDialog = ref(false)
+const convertTeams = ref([])
+const convertTeamId = ref('')
+const converting = ref(false)
 
 const dialog = ref(false)
 const editing = ref(null)
@@ -357,6 +381,47 @@ async function loadTeams() {
 function search() {
   page.value = 1
   load()
+}
+
+function onSelectionChange(rows) {
+  selectedProblems.value = rows
+}
+
+async function openConvert() {
+  if (selectedProblems.value.length === 0) {
+    return
+  }
+  try {
+    const data = await listMyTeams()
+    convertTeams.value = data.items || []
+  } catch {
+    convertTeams.value = []
+  }
+  convertTeamId.value = convertTeams.value.length > 0 ? convertTeams.value[0].id : ''
+  convertDialog.value = true
+}
+
+async function confirmConvert() {
+  if (!convertTeamId.value) {
+    ElMessage.warning('请选择团队')
+    return
+  }
+  converting.value = true
+  try {
+    const data = await convertMyProblems({
+      problem_ids: selectedProblems.value.map((row) => row.id),
+      target: 'team',
+      team_id: convertTeamId.value
+    })
+    ElMessage.success(`已导入团队：${data.converted_count} 道题目，题号已重新分配`)
+    convertDialog.value = false
+    selectedProblems.value = []
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '导入团队失败')
+  } finally {
+    converting.value = false
+  }
 }
 
 function openCreate() {

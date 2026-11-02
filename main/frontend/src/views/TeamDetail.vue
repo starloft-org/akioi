@@ -50,7 +50,19 @@
 
           <el-tab-pane label="题目" name="problems">
             <el-empty v-if="problems.length === 0" description="暂无团队题目，由管理员在后台创建时指定归属团队" />
-            <el-table v-else :data="problems" size="small">
+            <div v-if="problems.length > 0" class="toolbar">
+              <span class="muted">勾选你自己上传的题目可以转回个人题目</span>
+              <el-button
+                type="primary"
+                :disabled="selectedProblemIds.length === 0"
+                :loading="convertingProblems"
+                @click="convertToPersonal"
+              >
+                转为个人题目（{{ selectedProblemIds.length }}）
+              </el-button>
+            </div>
+            <el-table v-if="problems.length > 0" :data="problems" size="small">
+              <el-table-column type="selection" width="44" :selectable="canTakeBack" @selection-change="onProblemSelection" />
               <el-table-column label="题号" width="90">
                 <template #default="{ row }">
                   <router-link class="mono" :to="`/problems/${row.id}`">{{ row.display_id }}</router-link>
@@ -217,6 +229,7 @@ import {
   listTeamApplications,
   listTeamContests,
   listTeamMembers,
+  convertMyProblems,
   listTeamProblems,
   listTeamSets,
   removeTeamMember,
@@ -240,6 +253,8 @@ const tab = ref('members')
 
 const members = ref([])
 const problems = ref([])
+const selectedProblemIds = ref([])
+const convertingProblems = ref(false)
 const sets = ref([])
 const contests = ref([])
 const applications = ref([])
@@ -287,6 +302,40 @@ const loadMembers = async () => {
   const data = await listTeamMembers(teamId.value).catch(() => ({ items: [] }))
   members.value = data.items || []
 }
+const canTakeBack = (row) => !!store.user && row.created_by === store.user.id
+function onProblemSelection(rows) {
+  selectedProblemIds.value = rows.map((row) => row.id)
+}
+async function convertToPersonal() {
+  if (selectedProblemIds.value.length === 0) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确定把选中的 ${selectedProblemIds.value.length} 道题目转为个人题目吗？题号会重新分配到个人题库。`,
+      '转为个人题目',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  convertingProblems.value = true
+  try {
+    const data = await convertMyProblems({
+      problem_ids: selectedProblemIds.value,
+      target: 'personal'
+    })
+    ElMessage.success(`已转为个人题目：${data.converted_count} 道`)
+    selectedProblemIds.value = []
+    await loadProblems()
+    await loadSets()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '转换失败')
+  } finally {
+    convertingProblems.value = false
+  }
+}
+
 const loadProblems = async () => {
   const data = await listTeamProblems(teamId.value).catch(() => ({ items: [] }))
   problems.value = data.items || []

@@ -714,6 +714,7 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 			"accepted_count": p.AcceptedCount,
 			"testcase_count": p.TestcaseCount,
 			"author_id":      team.ID,
+			"created_by":     p.CreatedBy,
 			"author_name":    team.Name,
 			"created_at":     p.CreatedAt,
 		})

@@ -33,6 +33,7 @@ type myProblemItem struct {
 	SubmitCount   int       `json:"submit_count"`
 	AcceptedCount int       `json:"accepted_count"`
 	AuthorID      uint      `json:"author_id"`
+	CreatedBy     uint      `json:"created_by"`
 	AuthorName    string    `json:"author_name"`
 	Visibility    int       `json:"visibility"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -59,6 +60,7 @@ func toMyProblemItem(p *model.Problem, bankName, authorName string) myProblemIte
 		SubmitCount:   p.SubmitCount,
 		AcceptedCount: p.AcceptedCount,
 		AuthorID:      p.CreatedBy,
+		CreatedBy:     p.CreatedBy,
 		AuthorName:    authorName,
 		Visibility:    p.Visibility,
 		CreatedAt:     p.CreatedAt,
