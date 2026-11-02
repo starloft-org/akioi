@@ -24,14 +24,16 @@ type preparedProblem struct {
 
 // importOwner 描述导入出来的题目归属：后台导入建公共题目，用户端导入建个人题目。
 type importOwner struct {
-	TeamID  uint
-	OwnerID uint
-	Access  int
+	TeamID     uint
+	OwnerID    uint
+	Access     int
+	Visibility int
 }
 
-// importOwnerPublic 是后台导入用的归属：题目进入公共题库，所有人可见。
-func importOwnerPublic() importOwner {
-	return importOwner{Access: model.ProblemAccessPublic}
+// importOwnerPublic 是后台导入用的归属：题目进入公共题库。
+// visibility 为 0 时按题目包 config.json 的设置，显示为隐藏题时整批都隐藏。
+func importOwnerPublic(visibility int) importOwner {
+	return importOwner{Access: model.ProblemAccessPublic, Visibility: visibility}
 }
 
 // importOwnerPersonal 是用户端导入用的归属：题目归到导入者名下，默认仅自己可见。
@@ -82,6 +84,10 @@ func buildImportedProblem(prep *preparedProblem, u *model.User, bank *model.Prob
 	visibility := pkg.Config.Visibility
 	if visibility != model.ProblemVisibilityHidden {
 		visibility = model.ProblemVisibilityPublic
+	}
+	// 导入时选了「隐藏」则整批都是隐藏题，优先于包内 config.json
+	if owner.Visibility == model.ProblemVisibilityHidden {
+		visibility = model.ProblemVisibilityHidden
 	}
 	difficulty := strings.TrimSpace(pkg.Config.Difficulty)
 	points := pkg.Config.Points

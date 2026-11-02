@@ -792,6 +792,20 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 		return
 	}
 
+	// 可选：整批导入为隐藏题。隐藏题不出现在公共题单，普通用户看不到也提交不了，
+	// 只有在已开始的比赛里引用该题时才可访问。
+	visibility := model.ProblemVisibilityPublic
+	if vals := form.Value["visibility"]; len(vals) > 0 {
+		switch strings.ToLower(strings.TrimSpace(vals[0])) {
+		case "hidden", "2":
+			visibility = model.ProblemVisibilityHidden
+		case "", "public", "1":
+		default:
+			httpx.BadRequest(c, "可见性参数非法")
+			return
+		}
+	}
+
 	// 导入在后台顺序执行：上传完立即返回任务号，前端轮询进度，避免大批量导入把请求拖到网关超时。
 	maxBytes := int64(h.Settings.Current().MaxTestdataMB) * 1024 * 1024
 	staged, cleanup, err := saveStagedFiles(fileHeaders, maxBytes)
@@ -822,7 +836,7 @@ func (h *Handler) AdminImportProblem(c *gin.Context) {
 
 	go func() {
 		defer cleanup()
-		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, importOwnerPublic(), packed)
+		h.runProblemImport(task.ID, staged, u, bank, maxBytes, ip, importOwnerPublic(visibility), packed)
 	}()
 	if packed {
 		logger.Adminf("管理员 %s 从打包文件开始导入 %d 个题目包 ip=%s", u.Username, task.Total, ip)

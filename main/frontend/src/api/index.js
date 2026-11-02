@@ -119,11 +119,14 @@ export const adminDeleteProblemBank = (id) => request.delete(`/api/admin/v1/prob
 export const adminGetImportTask = (taskId) => request.get(`/api/admin/v1/import-tasks/${taskId}`)
 
 // 单个题目包上传：服务端立刻返回 task_id，由前端轮询进度，避免大包请求超时
-export const adminImportProblemOne = (file, bankId, onUploadProgress) => {
+export const adminImportProblemOne = (file, bankId, onUploadProgress, visibility) => {
   const form = new FormData()
   form.append('files', file)
   if (bankId) {
     form.append('bank_id', bankId)
+  if (visibility) {
+    form.append('visibility', visibility)
+  }
   }
   return request.post('/api/admin/v1/problems/import', form, {
     headers: { 'Content-Type': 'multipart/form-data' },

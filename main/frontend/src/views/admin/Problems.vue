@@ -143,6 +143,13 @@
           />
         </el-select>
       </div>
+      <div class="import-bank">
+        <span class="muted">导入为</span>
+        <el-select v-model="importVisibility" style="width: 240px">
+          <el-option label="公开题目（默认）" value="public" />
+          <el-option label="隐藏题目（普通用户看不到）" value="hidden" />
+        </el-select>
+      </div>
       <div class="import-dir">
         <el-button size="small" :disabled="importing" @click="pickDirectory">选择题目包目录</el-button>
         <span class="muted">
@@ -310,6 +317,7 @@ const dirInputRef = ref(null)
 // 点了「重试/继续导入」但文件已不在内存（刷新过页面）时，重新选完目录就自动接着导入
 const pendingRetry = ref(false)
 const importBankId = ref('')
+const importVisibility = ref('public')
 const importResults = ref([])
 // 持久化的批次记录：{ bankId, dir, total, done, files: [还没导完的包] }
 const importState = ref(null)
@@ -530,6 +538,9 @@ const entryKey = (entry) => entry.relPath || entry.name
 
 // 从批次记录恢复弹窗：已完成的包进结果列表，没完成的包进待导入列表
 const restoreImportState = (saved) => {
+  if (saved.visibility) {
+    importVisibility.value = saved.visibility
+  }
   importState.value = saved
   importDirName.value = saved.dir || ''
   const failed = (saved.files || []).map((item) => ({
@@ -691,7 +702,7 @@ const importOne = async (file, onProgress) => {
       // 上传只占这个包进度的前 30%，剩下的看服务端解析入库
       importCurrentPercent.value = Math.min(30, Math.round(percent * 0.3))
       importMessage.value = `正在上传 ${file.name} ${percent}%`
-    })
+    }, importVisibility.value)
     if (Array.isArray(data?.items)) {
       importCurrentPercent.value = 100
       return { items: data.items, container: false }
@@ -842,6 +853,7 @@ const handleImport = async () => {
   } else {
     importState.value = {
       bankId: importBankId.value || null,
+      visibility: importVisibility.value,
       dir: importDirName.value || '',
       total: targets.length,
       done: 0,
