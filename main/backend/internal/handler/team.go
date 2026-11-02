@@ -541,13 +541,14 @@ type teamSetRequest struct {
 	ProblemIDs  []uint `json:"problem_ids"`
 }
 
-// ListTeamSets 返回团队题单（成员可见）。
+// ListTeamSets 返回团队题单（成员可见），作者显示团队名。
 func (h *Handler) ListTeamSets(c *gin.Context) {
 	teamID, ok := httpx.PathID(c, "id")
 	if !ok {
 		return
 	}
-	if _, ok := h.requireTeamMember(c, teamID); !ok {
+	team, ok := h.requireTeamMember(c, teamID)
+	if !ok {
 		return
 	}
 	var sets []model.TeamProblemSet
@@ -565,6 +566,8 @@ func (h *Handler) ListTeamSets(c *gin.Context) {
 			"problem_count": len(ids),
 			"problem_ids":   ids,
 			"created_by":    s.CreatedBy,
+			"author_id":     team.ID,
+			"author_name":   team.Name,
 			"created_at":    s.CreatedAt,
 		})
 	}
@@ -683,13 +686,14 @@ func (h *Handler) DeleteTeamSet(c *gin.Context) {
 
 // 团队内容 ---------------------------------------------------------------------
 
-// ListTeamProblems 返回团队专属题目（成员可见）。
+// ListTeamProblems 返回团队专属题目（成员可见），作者显示团队名。
 func (h *Handler) ListTeamProblems(c *gin.Context) {
 	teamID, ok := httpx.PathID(c, "id")
 	if !ok {
 		return
 	}
-	if _, ok := h.requireTeamMember(c, teamID); !ok {
+	team, ok := h.requireTeamMember(c, teamID)
+	if !ok {
 		return
 	}
 	var problems []model.Problem
@@ -698,11 +702,6 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 		return
 	}
 	items := make([]gin.H, 0, len(problems))
-	authorNames, err := h.problemAuthorNames(problems)
-	if err != nil {
-		httpx.ServerError(c, "查询团队题目失败")
-		return
-	}
 	for i := range problems {
 		p := &problems[i]
 		items = append(items, gin.H{
@@ -714,8 +713,8 @@ func (h *Handler) ListTeamProblems(c *gin.Context) {
 			"submit_count":   p.SubmitCount,
 			"accepted_count": p.AcceptedCount,
 			"testcase_count": p.TestcaseCount,
-			"author_id":      p.CreatedBy,
-			"author_name":    authorNames[p.CreatedBy],
+			"author_id":      team.ID,
+			"author_name":    team.Name,
 			"created_at":     p.CreatedAt,
 		})
 	}

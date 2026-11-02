@@ -32,7 +32,7 @@ type problemSetItem struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// ListMyProblemSets 返回个人题单与所在团队的团队题单。
+// ListMyProblemSets 只返回当前用户的个人题单；团队题单请在团队页面查看。
 func (h *Handler) ListMyProblemSets(c *gin.Context) {
 	u := httpx.MustUser(c)
 	if u == nil {
@@ -56,29 +56,6 @@ func (h *Handler) ListMyProblemSets(c *gin.Context) {
 			CreatedAt:    s.CreatedAt,
 			UpdatedAt:    s.UpdatedAt,
 		})
-	}
-
-	teamIDs := h.myTeamIDs(u.ID)
-	if len(teamIDs) > 0 {
-		var teams []model.TeamProblemSet
-		if err := h.DB.Where("team_id IN ?", teamIDs).Order("id desc").Find(&teams).Error; err != nil {
-			httpx.ServerError(c, "查询题单失败")
-			return
-		}
-		for i := range teams {
-			s := &teams[i]
-			items = append(items, problemSetItem{
-				ID:           s.ID,
-				Kind:         model.ProblemKindTeam,
-				TeamID:       s.TeamID,
-				Title:        s.Title,
-				Description:  s.Description,
-				ProblemCount: len(s.Problems()),
-				CreatedBy:    s.CreatedBy,
-				CreatedAt:    s.CreatedAt,
-				UpdatedAt:    s.UpdatedAt,
-			})
-		}
 	}
 	httpx.OK(c, gin.H{"items": items})
 }

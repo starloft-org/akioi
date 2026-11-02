@@ -73,7 +73,7 @@
               :value="item.id"
             />
           </el-select>
-          <p class="form-hint">列表来自「我的题目」，可输入题号或标题搜索。</p>
+          <p class="form-hint">列表来自{{ isTeam ? '团队题目' : '「我的题目」' }}，可输入题号或标题搜索。</p>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -95,6 +95,7 @@ import {
   getMyProblemSet,
   getTeamSet,
   listMyProblems,
+  listTeamProblems,
   listTeams,
   updateMyProblemSet,
   updateTeamSet
@@ -151,7 +152,9 @@ async function load() {
 
 async function loadCandidates() {
   try {
-    const data = await listMyProblems({ page: 1, page_size: 200 })
+    const data = isTeam.value
+      ? await listTeamProblems(teamId.value)
+      : await listMyProblems({ page: 1, page_size: 200 })
     candidates.value = data.items || []
   } catch {
     candidates.value = []

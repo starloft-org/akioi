@@ -85,7 +85,7 @@ func (h *Handler) canReadProblem(u *model.User, p *model.Problem) bool {
 	return true
 }
 
-// ListMyProblems 返回当前用户可管理的题目：自己创建的个人题目与所在团队的团队题目。
+// ListMyProblems 返回当前用户上传的个人题目；团队题目请到团队页面查看。
 func (h *Handler) ListMyProblems(c *gin.Context) {
 	u := httpx.MustUser(c)
 	if u == nil {
@@ -93,11 +93,7 @@ func (h *Handler) ListMyProblems(c *gin.Context) {
 	}
 	page, pageSize, offset := httpx.Pagination(c)
 
-	teamIDs := h.myTeamIDs(u.ID)
-	if len(teamIDs) == 0 {
-		teamIDs = []uint{0}
-	}
-	query := h.DB.Model(&model.Problem{}).Where("owner_id = ? OR team_id IN ?", u.ID, teamIDs)
+	query := h.DB.Model(&model.Problem{}).Where("team_id = 0 AND owner_id = ?", u.ID)
 
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
@@ -110,20 +106,6 @@ func (h *Handler) ListMyProblems(c *gin.Context) {
 			return
 		}
 		query = query.Where("bank_id = ?", id)
-	}
-	switch strings.TrimSpace(c.Query("kind")) {
-	case model.ProblemKindTeam:
-		query = query.Where("team_id > 0")
-	case model.ProblemKindPersonal:
-		query = query.Where("team_id = 0 AND owner_id > 0")
-	}
-	if raw := strings.TrimSpace(c.Query("team_id")); raw != "" {
-		id, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil {
-			httpx.BadRequest(c, "团队参数非法")
-			return
-		}
-		query = query.Where("team_id = ?", id)
 	}
 
 	var total int64

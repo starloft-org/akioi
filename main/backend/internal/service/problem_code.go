@@ -38,18 +38,22 @@ func ProblemDisplayIDSeq(displayID, prefix string) (int, bool) {
 	return seq, true
 }
 
-// NextProblemDisplayID 返回题库内的下一个题号：取现有最大序号加一，空题库从 0 开始。
-// 统计包含已删除的题目，题号删除后不会被再次分配。
+// NextProblemDisplayID 返回题库内的下一个题号：取题库里最小的空闲序号，题号有缺口时自动补位。
+// 统计包含已删除的题目，删除后题号仍被占用；题目被迁移到别的题库后原题号会重新可用。
 func NextProblemDisplayID(db *gorm.DB, bank *model.ProblemBank) (string, error) {
 	var ids []string
 	if err := db.Unscoped().Model(&model.Problem{}).Where("bank_id = ?", bank.ID).Pluck("display_id", &ids).Error; err != nil {
 		return "", err
 	}
-	next := 0
+	used := make(map[int]bool, len(ids))
 	for _, id := range ids {
-		if seq, ok := ProblemDisplayIDSeq(id, bank.Prefix); ok && seq >= next {
-			next = seq + 1
+		if seq, ok := ProblemDisplayIDSeq(id, bank.Prefix); ok {
+			used[seq] = true
 		}
+	}
+	next := 0
+	for used[next] {
+		next++
 	}
 	return FormatProblemDisplayID(bank, next), nil
 }

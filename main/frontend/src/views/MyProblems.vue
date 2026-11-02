@@ -2,8 +2,8 @@
   <div class="panel">
     <h3 class="panel__title">我的题目</h3>
     <p class="panel__hint">
-      团队题目由队长创建、题号以 T 开头；个人题目由自己创建、题号以 P 开头。题号由题库自动分配，
-      访问权限可设为「公开」或「仅团队/仅自己」。
+      这里只显示你自己上传的个人题目；团队题目请到团队页面查看。题号由题库自动分配，
+      访问权限可设为「公开」或「仅自己」。
     </p>
 
     <div class="toolbar">
@@ -14,14 +14,6 @@
         style="width: 200px"
         @keyup.enter="search"
       />
-      <el-select v-model="query.kind" placeholder="类型" clearable style="width: 130px">
-        <el-option label="团队题目" value="team" />
-        <el-option label="个人题目" value="personal" />
-      </el-select>
-      <el-select v-model="query.team_id" placeholder="团队" clearable style="width: 170px">
-        <el-option v-for="t in teams" :key="t.id" :label="t.name" :value="t.id" />
-      </el-select>
-      <el-button type="primary" @click="search">筛选</el-button>
       <el-button type="success" @click="openCreate">新建题目</el-button>
       <el-button type="warning" @click="openImport">批量导入</el-button>
     </div>
@@ -35,13 +27,6 @@
       <el-table-column label="标题" min-width="200">
         <template #default="{ row }">
           <router-link class="problem-link" :to="`/problems/${row.id}`">{{ row.title }}</router-link>
-        </template>
-      </el-table-column>
-      <el-table-column label="类型" width="100">
-        <template #default="{ row }">
-          <el-tag size="small" :type="row.kind === 'team' ? 'warning' : 'success'">
-            {{ row.kind === 'team' ? '团队题目' : '个人题目' }}
-          </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="作者" width="120">
@@ -299,7 +284,7 @@ const teams = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
-const query = ref({ keyword: '', kind: '', team_id: '' })
+const query = ref({ keyword: '' })
 
 const dialog = ref(false)
 const editing = ref(null)
@@ -349,9 +334,7 @@ async function load() {
     const data = await listMyProblems({
       page: page.value,
       page_size: pageSize,
-      keyword: query.value.keyword || undefined,
-      kind: query.value.kind || undefined,
-      team_id: query.value.team_id || undefined
+      keyword: query.value.keyword || undefined
     })
     items.value = data.items || []
     total.value = data.total || 0
@@ -448,7 +431,7 @@ async function save() {
         payload.team_id = form.value.team_id
       }
       const data = await createMyProblem(payload)
-      ElMessage.success(`题目已创建，题号 ${data.problem?.display_id || ''}`)
+ElMessage.success(form.value.ownership === 'team' ? '团队题目已创建，请到团队页面查看' : `题目已创建，题号 ${data.problem?.display_id || ''}`)
     }
     dialog.value = false
     load()

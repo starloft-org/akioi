@@ -90,7 +90,7 @@
                   <router-link :to="`/problem-sets/team/${teamId}/${set.id}`">{{ set.title }}</router-link>
                 </div>
                 <div class="muted set-item__desc">{{ set.description || '暂无说明' }}</div>
-                <div class="muted set-item__meta">{{ set.problem_count }} 道题</div>
+<div class="muted set-item__meta">{{ set.problem_count }} 道题 · 作者 {{ set.author_name || team?.name || '' }}</div>
                 <div v-if="set.problem_ids.length" class="set-item__links">
                   <router-link
                     v-for="pid in set.problem_ids"

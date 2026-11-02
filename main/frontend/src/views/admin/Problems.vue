@@ -32,7 +32,6 @@
 
     <el-table ref="tableRef" v-loading="loading" :data="visibleItems" border @selection-change="onSelectionChange">
       <el-table-column type="selection" width="44" :selectable="() => true" />
-      <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="display_id" label="题号" width="100" />
       <el-table-column prop="bank_name" label="题库" width="140" />
       <el-table-column label="归属" width="200">

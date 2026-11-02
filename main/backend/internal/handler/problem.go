@@ -145,6 +145,14 @@ func (h *Handler) GetProblem(c *gin.Context) {
 		return
 	}
 
+	authorID, authorName := p.CreatedBy, h.problemAuthorName(&p)
+	if p.TeamID > 0 {
+		var team model.Team
+		if err := h.DB.Select("id", "name").First(&team, p.TeamID).Error; err == nil {
+			authorID, authorName = team.ID, team.Name
+		}
+	}
+
 	item := problemItem{
 		ID:            p.ID,
 		DisplayID:     p.DisplayID,
@@ -193,8 +201,8 @@ func (h *Handler) GetProblem(c *gin.Context) {
 			"total_score":     totalScore(&p),
 			"created_at":      p.CreatedAt,
 			"compare_mode":    p.CompareMode,
-			"author_id":       p.CreatedBy,
-			"author_name":     h.problemAuthorName(&p),
+			"author_id":       authorID,
+			"author_name":     authorName,
 		},
 		"my_status": item.MyStatus,
 		"languages": model.SupportedLanguages(),

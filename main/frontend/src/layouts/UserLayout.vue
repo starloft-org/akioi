@@ -14,7 +14,7 @@
           <router-link to="/contests" @click="navOpen = false">比赛</router-link>
           <router-link to="/teams" @click="navOpen = false">团队</router-link>
           <router-link v-if="store.user" to="/my/problems" @click="navOpen = false">我的题目</router-link>
-          <router-link v-if="store.user" to="/problem-sets" @click="navOpen = false">题单</router-link>
+          <router-link v-if="store.user" to="/problem-sets" @click="navOpen = false">我的题单</router-link>
           <router-link to="/ranking" @click="navOpen = false">排行榜</router-link>
           <router-link to="/discussions" @click="navOpen = false">讨论</router-link>
           <router-link to="/submissions" @click="navOpen = false">评测记录</router-link>
