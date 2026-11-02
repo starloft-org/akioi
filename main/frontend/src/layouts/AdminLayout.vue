@@ -14,6 +14,7 @@
           <el-menu-item v-if="store.hasPermission('problem_banks')" index="/admin/problem-banks">题库管理</el-menu-item>
           <el-menu-item v-if="store.hasPermission('contests')" index="/admin/contests">比赛管理</el-menu-item>
           <el-menu-item v-if="store.hasPermission('submissions')" index="/admin/submissions">评测记录</el-menu-item>
+          <el-menu-item v-if="store.hasPermission('solutions')" index="/admin/solutions">题解审核</el-menu-item>
           <el-menu-item v-if="store.hasPermission('judges')" index="/admin/judges">测评机管理</el-menu-item>
         </el-menu-item-group>
         <el-menu-item-group title="系统">

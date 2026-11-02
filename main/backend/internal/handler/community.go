@@ -13,16 +13,19 @@ import (
 )
 
 type solutionItem struct {
-	ID        uint      `json:"id"`
-	ProblemID uint      `json:"problem_id"`
-	UserID    uint      `json:"user_id"`
-	Username  string    `json:"username"`
-	Nickname  string    `json:"nickname"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content,omitempty"`
-	CanEdit   bool      `json:"can_edit"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         uint       `json:"id"`
+	ProblemID  uint       `json:"problem_id"`
+	UserID     uint       `json:"user_id"`
+	Username   string     `json:"username"`
+	Nickname   string     `json:"nickname"`
+	Title      string     `json:"title"`
+	Content    string     `json:"content,omitempty"`
+	CanEdit    bool       `json:"can_edit"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	Status     string     `json:"status"`
+	ReviewNote string     `json:"review_note,omitempty"`
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
 }
 
 type discussionItem struct {
@@ -71,7 +74,11 @@ func (h *Handler) ListSolutions(c *gin.Context) {
 		return
 	}
 	page, pageSize, offset := httpx.Pagination(c)
-	query := h.DB.Model(&model.Solution{}).Where("problem_id = ? AND visible = ?", problemID, true)
+	query := h.DB.Model(&model.Solution{}).Where("problem_id = ? AND visible = ? AND status = ?", problemID, true, model.SolutionStatusApproved)
+	// 作者本人还能看到自己待审核、未通过审核的题解
+	if u := httpx.CurrentUser(c); u != nil {
+		query = h.DB.Model(&model.Solution{}).Where("problem_id = ? AND visible = ? AND (status = ? OR user_id = ?)", problemID, true, model.SolutionStatusApproved, u.ID)
+	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		httpx.ServerError(c, "查询题解失败")
@@ -96,6 +103,13 @@ func (h *Handler) GetSolution(c *gin.Context) {
 		return
 	}
 	var p model.Problem
+	if row.Status != model.SolutionStatusApproved {
+		u := httpx.CurrentUser(c)
+		if u == nil || (u.ID != row.UserID && !u.IsAdmin()) {
+			httpx.NotFound(c, "题解不存在")
+			return
+		}
+	}
 	if err := h.DB.First(&p, row.ProblemID).Error; err != nil || !h.problemAccessible(c, &p) {
 		httpx.NotFound(c, "题解不存在")
 		return
@@ -123,12 +137,18 @@ func (h *Handler) CreateSolution(c *gin.Context) {
 		httpx.BadRequest(c, "标题需为 1-128 个字符，内容需为 1-50000 个字符")
 		return
 	}
-	row := model.Solution{ProblemID: problemID, UserID: u.ID, Title: strings.TrimSpace(req.Title), Content: strings.TrimSpace(req.Content), Visible: true}
+	status := model.SolutionStatusPending
+	message := "题解已提交，等待管理员审核"
+	if u.IsAdmin() {
+		status = model.SolutionStatusApproved
+		message = "题解已发布"
+	}
+	row := model.Solution{ProblemID: problemID, UserID: u.ID, Title: strings.TrimSpace(req.Title), Content: strings.TrimSpace(req.Content), Visible: true, Status: status}
 	if err := h.DB.Create(&row).Error; err != nil {
 		httpx.ServerError(c, "发布题解失败")
 		return
 	}
-	httpx.OK(c, gin.H{"id": row.ID})
+	httpx.OK(c, gin.H{"id": row.ID, "status": status, "message": message})
 }
 
 func (h *Handler) UpdateSolution(c *gin.Context) {
@@ -151,7 +171,14 @@ func (h *Handler) UpdateSolution(c *gin.Context) {
 		httpx.BadRequest(c, "标题需为 1-128 个字符，内容需为 1-50000 个字符")
 		return
 	}
-	if err := h.DB.Model(&row).Updates(map[string]any{"title": strings.TrimSpace(req.Title), "content": strings.TrimSpace(req.Content)}).Error; err != nil {
+	updates := map[string]any{"title": strings.TrimSpace(req.Title), "content": strings.TrimSpace(req.Content)}
+	if !u.IsAdmin() {
+		updates["status"] = model.SolutionStatusPending
+		updates["review_note"] = ""
+		updates["reviewed_by"] = 0
+		updates["reviewed_at"] = nil
+	}
+	if err := h.DB.Model(&row).Updates(updates).Error; err != nil {
 		httpx.ServerError(c, "保存题解失败")
 		return
 	}
@@ -409,6 +436,11 @@ func (h *Handler) solutionItems(c *gin.Context, rows []model.Solution, withConte
 		u := users[row.UserID]
 		item := solutionItem{ID: row.ID, ProblemID: row.ProblemID, UserID: row.UserID, Username: u.Username, Nickname: u.Nickname, Title: row.Title, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 		item.CanEdit = current != nil && (current.ID == row.UserID || current.IsAdmin())
+		item.Status = row.Status
+		if current != nil && (current.ID == row.UserID || current.IsAdmin()) {
+			item.ReviewNote = row.ReviewNote
+			item.ReviewedAt = row.ReviewedAt
+		}
 		if withContent {
 			item.Content = row.Content
 		}

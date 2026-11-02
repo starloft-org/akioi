@@ -246,6 +246,11 @@ export const adminBatchRejudge = (data) => request.post('/api/admin/v1/rejudge',
 export const adminListAnnouncements = (params) =>
   request.get('/api/admin/v1/announcements', { params })
 export const adminCreateAnnouncement = (data) => request.post('/api/admin/v1/announcements', data)
+
+export const adminListSolutions = (params) =>
+  request.get('/api/admin/v1/solutions', { params })
+export const adminReviewSolution = (id, data) =>
+  request.post(`/api/admin/v1/solutions/${id}/review`, data)
 export const adminUpdateAnnouncement = (id, data) =>
   request.put(`/api/admin/v1/announcements/${id}`, data)
 export const adminDeleteAnnouncement = (id) =>

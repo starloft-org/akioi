@@ -8,16 +8,27 @@ import (
 
 // Solution 是用户针对题目发布的题解。
 type Solution struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	ProblemID uint           `gorm:"index;not null" json:"problem_id"`
-	UserID    uint           `gorm:"index;not null" json:"user_id"`
-	Title     string         `gorm:"size:128;not null" json:"title"`
-	Content   string         `gorm:"type:mediumtext;not null" json:"content"`
-	Visible   bool           `gorm:"index;not null;default:true" json:"visible"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	ID         uint           `gorm:"primaryKey" json:"id"`
+	ProblemID  uint           `gorm:"index;not null" json:"problem_id"`
+	UserID     uint           `gorm:"index;not null" json:"user_id"`
+	Title      string         `gorm:"size:128;not null" json:"title"`
+	Content    string         `gorm:"type:mediumtext;not null" json:"content"`
+	Visible    bool           `gorm:"index;not null;default:true" json:"visible"`
+	Status     string         `gorm:"size:16;index;not null;default:approved" json:"status"`
+	ReviewNote string         `gorm:"size:255;not null;default:''" json:"review_note"`
+	ReviewedBy uint           `gorm:"not null;default:0" json:"reviewed_by"`
+	ReviewedAt *time.Time     `json:"reviewed_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 }
+
+// 题解的审核状态。新发布的题解默认待审核，管理员通过后才会公开展示。
+const (
+	SolutionStatusPending  = "pending"
+	SolutionStatusApproved = "approved"
+	SolutionStatusRejected = "rejected"
+)
 
 func (Solution) TableName() string { return "solutions" }
 

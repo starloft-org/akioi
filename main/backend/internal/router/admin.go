@@ -57,6 +57,12 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 	// 批量导入的任务进度单独挂一层，避免与 /problems/:id 的通配段冲突
 	admin.GET("/import-tasks/:id", middleware.RequirePermission(model.AdminPermissionProblems), h.AdminProblemImportStatus)
 
+	solutions := admin.Group("/solutions", middleware.RequirePermission(model.AdminPermissionSolutions))
+	{
+		solutions.GET("", h.AdminListSolutions)
+		solutions.POST("/:id/review", h.AdminReviewSolution)
+	}
+
 	banks := admin.Group("/problem-banks", middleware.RequirePermission(model.AdminPermissionProblemBanks))
 	{
 		banks.GET("", h.AdminListProblemBanks)

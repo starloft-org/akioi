@@ -16,6 +16,14 @@
         <el-table-column label="作者" width="180">
           <template #default="{ row }"><router-link :to="`/users/${row.user_id}`">{{ row.nickname || row.username }}</router-link></template>
         </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.status !== 'approved'" size="small" :type="row.status === 'rejected' ? 'danger' : 'warning'">
+              {{ row.status === 'rejected' ? '未通过审核' : '审核中' }}
+            </el-tag>
+            <span v-else class="muted">已发布</span>
+          </template>
+        </el-table-column>
         <el-table-column label="更新时间" width="180">
           <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
         </el-table-column>
@@ -73,6 +81,7 @@ const submit = async () => {
   submitting.value = true
   try {
     const data = await createSolution(problemId.value, form)
+    ElMessage.success(data.message || '题解已提交')
     dialogVisible.value = false
     router.push(`/solutions/${data.id}`)
   } finally {

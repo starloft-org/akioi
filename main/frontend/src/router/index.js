@@ -91,6 +91,12 @@ const routes = [
         component: () => import('@/views/admin/Problems.vue')
       },
       {
+        path: 'solutions',
+        name: 'admin-solutions',
+        meta: { permission: 'solutions' },
+        component: () => import('@/views/admin/Solutions.vue')
+      },
+      {
         path: 'problem-banks',
         name: 'admin-problem-banks',
         meta: { permission: 'problem_banks' },

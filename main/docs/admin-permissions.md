@@ -22,6 +22,7 @@
 | `problem_banks` | 题库管理 | 内容 |
 | `contests` | 比赛管理 | 内容 |
 | `submissions` | 评测记录与重测 | 内容 |
+| `solutions` | 题解审核（通过 / 驳回） | 内容 |
 | `judges` | 测评机管理 | 内容 |
 | `settings` | 系统设置与密钥 | 系统 |
 | `backups` | 数据备份（生成、下载、删除备份） | 系统 |

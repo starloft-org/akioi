@@ -11,6 +11,20 @@
           <el-button type="danger" plain @click="remove">删除</el-button>
         </div>
       </div>
+      <el-alert
+        v-if="solution.status === 'pending'"
+        type="warning"
+        :closable="false"
+        title="审核中：管理员通过后其他用户才能看到这篇题解"
+        style="margin-top: 12px"
+      />
+      <el-alert
+        v-else-if="solution.status === 'rejected'"
+        type="error"
+        :closable="false"
+        :title="`未通过审核${solution.review_note ? '：' + solution.review_note : ''}`"
+        style="margin-top: 12px"
+      />
       <template v-if="editing">
         <el-input v-model="form.title" maxlength="128" />
         <el-input v-model="form.content" type="textarea" :rows="16" maxlength="50000" show-word-limit style="margin-top: 12px" />
@@ -38,7 +52,7 @@ const load = async () => {
 const save = async () => {
   if (!form.title.trim() || !form.content.trim()) return ElMessage.warning('请填写标题和内容')
   saving.value = true
-  try { await updateSolution(solution.value.id, form); ElMessage.success('已保存'); editing.value = false; await load() } finally { saving.value = false }
+  try { await updateSolution(solution.value.id, form); ElMessage.success('已保存，修改后的题解会重新进入审核'); editing.value = false; await load() } finally { saving.value = false }
 }
 const remove = async () => {
   try { await ElMessageBox.confirm('确认删除这篇题解？', '删除确认', { type: 'warning' }); await deleteSolution(solution.value.id); router.replace(`/problems/${solution.value.problem_id}/solutions`) } catch (e) { /* 用户取消或请求失败 */ }

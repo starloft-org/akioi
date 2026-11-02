@@ -12,6 +12,7 @@ const (
 	AdminPermissionSubmissions   = "submissions"
 	AdminPermissionJudges        = "judges"
 	AdminPermissionAnnouncements = "announcements"
+	AdminPermissionSolutions     = "solutions"
 	AdminPermissionSettings      = "settings"
 	AdminPermissionLogs          = "logs"
 	AdminPermissionBackups       = "backups"
@@ -32,6 +33,7 @@ func AdminPermissionOptions() []AdminPermissionOption {
 		{Key: AdminPermissionProblems, Label: "题目管理", Group: "内容"},
 		{Key: AdminPermissionProblemBanks, Label: "题库管理", Group: "内容"},
 		{Key: AdminPermissionContests, Label: "比赛管理", Group: "内容"},
+		{Key: AdminPermissionSolutions, Label: "题解审核", Group: "内容"},
 		{Key: AdminPermissionSubmissions, Label: "评测记录", Group: "内容"},
 		{Key: AdminPermissionJudges, Label: "测评机管理", Group: "内容"},
 		{Key: AdminPermissionSettings, Label: "系统设置", Group: "系统"},
