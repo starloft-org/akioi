@@ -101,6 +101,7 @@
       <p class="muted move-bank__hint">
         已选 {{ selectedIds.length }} 道题目。迁移后题号会按目标题库的规则重新分配，原题号不再保留；
         测试数据、提交记录和比赛引用都不受影响。
+        个人题目迁移到公共题库后会变成公共题目（清空归属、访问权限改为公开）；团队题目不能迁到公共题库。
       </p>
       <el-select v-model="moveBankId" placeholder="选择目标题库" style="width: 100%">
         <el-option
@@ -400,8 +401,11 @@ const submitMoveBank = async () => {
     const data = await adminMoveProblemsBank({ problem_ids: selectedIds.value, bank_id: moveBankId.value })
     const moved = data.moved_count || 0
     const skipped = data.skipped_count || 0
+    const converted = data.converted_count || 0
     ElMessage.success(
-      `已迁移 ${moved} 道题目到「${data.bank_name}」${skipped ? `，${skipped} 道本来就在该题库` : ''}`
+      `已迁移 ${moved} 道题目到「${data.bank_name}」` +
+        (converted ? `，其中 ${converted} 道个人题目转为公共题目` : '') +
+        (skipped ? `，${skipped} 道本来就在该题库` : '')
     )
     moveBankVisible.value = false
     tableRef.value?.clearSelection()

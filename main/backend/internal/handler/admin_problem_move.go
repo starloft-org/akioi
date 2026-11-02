@@ -22,6 +22,7 @@ type moveProblemsBankRequest struct {
 
 // AdminMoveProblemsBank 把选中的题目迁移到目标题库，并在新题库里重新分配题号。
 // 后台自建题库与主库都可以作为目标；团队题库、个人题库只放对应归属的题目，不能选。
+// 个人题目迁到公共题库时会转成公共题目（清空归属、访问权限改回公开）。
 func (h *Handler) AdminMoveProblemsBank(c *gin.Context) {
 	u := httpx.MustUser(c)
 	if u == nil {
@@ -66,23 +67,25 @@ func (h *Handler) AdminMoveProblemsBank(c *gin.Context) {
 		return
 	}
 
-	owners := make([]string, 0)
+	// 团队题目跟着团队走，不能改成公共题目；个人题目迁移过来则顺手转成公共题目
+	teams := make([]string, 0)
 	skipped := 0
 	for i := range problems {
-		if problems[i].Kind() != model.ProblemKindPublic {
-			owners = append(owners, problems[i].DisplayID)
+		if problems[i].Kind() == model.ProblemKindTeam {
+			teams = append(teams, problems[i].DisplayID)
 			continue
 		}
 		if problems[i].BankID == bank.ID {
 			skipped++
 		}
 	}
-	if len(owners) > 0 {
-		httpx.BadRequest(c, fmt.Sprintf("团队题目与个人题目不能迁移到公共题库：%s", strings.Join(owners, "、")))
+	if len(teams) > 0 {
+		httpx.BadRequest(c, fmt.Sprintf("团队题目不能迁移到公共题库，请先在编辑页把归属改成公共：%s", strings.Join(teams, "、")))
 		return
 	}
 
 	moved := make([]gin.H, 0, len(problems))
+	converted := 0
 	err := h.DB.Transaction(func(tx *gorm.DB) error {
 		for i := range problems {
 			p := &problems[i]
@@ -93,14 +96,24 @@ func (h *Handler) AdminMoveProblemsBank(c *gin.Context) {
 			if err != nil {
 				return err
 			}
+			updates := map[string]any{"bank_id": bank.ID, "display_id": displayID}
+			// 个人题目落到公共题库后就变成公共题目：清空归属，访问权限回到公开
+			fromOwner := p.OwnerID
+			if p.IsPersonalProblem() {
+				updates["owner_id"] = uint(0)
+				updates["team_id"] = uint(0)
+				updates["access"] = model.ProblemAccessPublic
+				converted++
+			}
 			if err := tx.Model(&model.Problem{}).Where("id = ?", p.ID).
-				Updates(map[string]any{"bank_id": bank.ID, "display_id": displayID}).Error; err != nil {
+				Updates(updates).Error; err != nil {
 				return err
 			}
 			moved = append(moved, gin.H{
 				"id":             p.ID,
 				"old_display_id": p.DisplayID,
 				"display_id":     displayID,
+				"from_owner_id":  fromOwner,
 			})
 		}
 		return nil
@@ -115,11 +128,12 @@ func (h *Handler) AdminMoveProblemsBank(c *gin.Context) {
 			u.Username, len(moved), bank.Name, bank.ID, c.ClientIP())
 	}
 	httpx.OK(c, gin.H{
-		"bank_id":       bank.ID,
-		"bank_name":     bank.Name,
-		"moved":         moved,
-		"moved_count":   len(moved),
-		"skipped_count": skipped,
+		"bank_id":         bank.ID,
+		"bank_name":       bank.Name,
+		"moved":           moved,
+		"moved_count":     len(moved),
+		"skipped_count":   skipped,
+		"converted_count": converted,
 	})
 }
 
