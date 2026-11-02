@@ -196,6 +196,17 @@ type myProblemRequest struct {
 	TeamID *uint `json:"team_id"`
 	// Access 访问权限：1 公开，2 仅团队成员或本人
 	Access *int `json:"access"`
+	// Visibility 可见性：普通用户不能改，传了隐藏会被拒绝
+	Visibility *int `json:"visibility"`
+}
+
+// rejectUserHidden 普通用户不能把题目设为隐藏：隐藏只允许管理员在后台设置。
+func rejectUserHidden(c *gin.Context, visibility *int) bool {
+	if visibility == nil || *visibility == model.ProblemVisibilityPublic {
+		return false
+	}
+	httpx.BadRequest(c, "只有管理员可以把题目设为隐藏")
+	return true
 }
 
 // CreateMyProblem 创建个人题目或团队题目，题号由所属题库自动分配。
@@ -207,6 +218,9 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 	var req myProblemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+	if rejectUserHidden(c, req.Visibility) {
 		return
 	}
 
@@ -420,6 +434,9 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	}
 	if req.FloatEps != nil {
 		updates["float_eps"] = *req.FloatEps
+	}
+	if rejectUserHidden(c, req.Visibility) {
+		return
 	}
 	if req.Access != nil {
 		if !validProblemAccessFor(p.TeamID, p.OwnerID, *req.Access) {

@@ -81,13 +81,12 @@ func buildImportedProblem(prep *preparedProblem, u *model.User, bank *model.Prob
 	if memoryLimit < 16 || memoryLimit > 2048 {
 		memoryLimit = 256
 	}
-	visibility := pkg.Config.Visibility
-	if visibility != model.ProblemVisibilityHidden {
-		visibility = model.ProblemVisibilityPublic
-	}
-	// 导入时选了「隐藏」则整批都是隐藏题，优先于包内 config.json
-	if owner.Visibility == model.ProblemVisibilityHidden {
-		visibility = model.ProblemVisibilityHidden
+	// 隐藏题只允许管理员创建：普通用户无论包内 config.json 写什么、走哪条导入入口都是一律公开
+	visibility := model.ProblemVisibilityPublic
+	if u.IsAdmin() {
+		if pkg.Config.Visibility == model.ProblemVisibilityHidden || owner.Visibility == model.ProblemVisibilityHidden {
+			visibility = model.ProblemVisibilityHidden
+		}
 	}
 	difficulty := strings.TrimSpace(pkg.Config.Difficulty)
 	points := pkg.Config.Points
