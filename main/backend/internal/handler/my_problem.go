@@ -154,6 +154,11 @@ func (h *Handler) loadManageableProblem(c *gin.Context) (*model.Problem, bool) {
 	if u == nil {
 		return nil, false
 	}
+	// 公共题库里的题目（没有个人/团队归属）只允许管理员在后台修改
+	if !u.IsAdmin() && p.OwnerID == 0 && p.TeamID == 0 {
+		httpx.Forbidden(c, "公共题库的题目只能由管理员在后台修改")
+		return nil, false
+	}
 	if !h.canManageProblem(u, &p) {
 		httpx.Forbidden(c, "仅团队队长或题目创建者可执行该操作")
 		return nil, false

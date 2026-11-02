@@ -57,7 +57,7 @@ func defaultProblemAccess(teamID, ownerID uint) int {
 	return model.ProblemAccessMembers
 }
 
-// canManageProblem 判断用户能否管理该题：个人题仅创建者，团队题仅队长。
+// canManageProblem 判断用户能否管理该题：个人题仅创建者，团队题仅队长，公共题只有管理员。
 func (h *Handler) canManageProblem(u *model.User, p *model.Problem) bool {
 	if u == nil {
 		return false
