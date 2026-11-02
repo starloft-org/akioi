@@ -39,13 +39,13 @@
       />
     </div>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑公告' : '新建公告'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑公告' : '新建公告'" width="920px">
       <el-form :model="form" label-width="70px">
         <el-form-item label="标题">
           <el-input v-model="form.title" placeholder="公告标题" />
         </el-form-item>
         <el-form-item label="内容">
-          <el-input v-model="form.content" type="textarea" :rows="8" />
+          <MarkdownEditor v-model="form.content" :rows="12" placeholder="公告正文，支持 Markdown 与 LaTeX 公式，可直接粘贴或上传图片" />
         </el-form-item>
         <el-form-item label="可见">
           <el-switch v-model="form.visible" />
@@ -69,6 +69,7 @@ import {
   adminUpdateAnnouncement
 } from '@/api'
 import { formatTime } from '@/utils/format'
+import MarkdownEditor from '@/components/MarkdownEditor.vue'
 
 const loading = ref(false)
 const saving = ref(false)

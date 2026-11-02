@@ -162,21 +162,20 @@
       </el-row>
 
       <el-form-item label="题目描述">
-        <el-input
+        <MarkdownEditor
           v-model="form.description"
-          type="textarea"
-          :rows="8"
-          placeholder="支持 Markdown：标题、列表、表格、行内代码、三反引号代码块、图片等"
+          :rows="12"
+          placeholder="支持 Markdown 与 LaTeX：标题、列表、表格、代码块，$...$ 行内公式、$$...$$ 独立公式；图片可上传或直接粘贴"
         />
       </el-form-item>
       <el-form-item label="输入格式">
-        <el-input v-model="form.input_format" type="textarea" :rows="6" />
+        <MarkdownEditor v-model="form.input_format" :rows="5" placeholder="输入格式说明，支持 Markdown 与 LaTeX" />
       </el-form-item>
       <el-form-item label="输出格式">
-        <el-input v-model="form.output_format" type="textarea" :rows="6" />
+        <MarkdownEditor v-model="form.output_format" :rows="5" placeholder="输出格式说明，支持 Markdown 与 LaTeX" />
       </el-form-item>
       <el-form-item label="提示 / 说明">
-        <el-input v-model="form.hint" type="textarea" :rows="6" />
+        <MarkdownEditor v-model="form.hint" :rows="5" placeholder="提示与说明，支持 Markdown 与 LaTeX" />
       </el-form-item>
     </el-form>
 
@@ -221,6 +220,7 @@ import {
   listTeams
 } from '@/api'
 import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
+import MarkdownEditor from '@/components/MarkdownEditor.vue'
 
 const route = useRoute()
 const router = useRouter()

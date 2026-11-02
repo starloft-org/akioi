@@ -125,16 +125,16 @@
           <el-input-number v-model="form.points" :min="0" :max="100000" />
         </el-form-item>
         <el-form-item label="题目描述">
-          <el-input v-model="form.description" type="textarea" :rows="5" />
+          <MarkdownEditor v-model="form.description" :rows="8" placeholder="支持 Markdown 与 LaTeX；图片可上传或直接粘贴" />
         </el-form-item>
         <el-form-item label="输入格式">
-          <el-input v-model="form.input_format" type="textarea" :rows="2" />
+          <MarkdownEditor v-model="form.input_format" :rows="3" placeholder="输入格式说明，支持 Markdown 与 LaTeX" />
         </el-form-item>
         <el-form-item label="输出格式">
-          <el-input v-model="form.output_format" type="textarea" :rows="2" />
+          <MarkdownEditor v-model="form.output_format" :rows="3" placeholder="输出格式说明，支持 Markdown 与 LaTeX" />
         </el-form-item>
         <el-form-item label="提示">
-          <el-input v-model="form.hint" type="textarea" :rows="2" />
+          <MarkdownEditor v-model="form.hint" :rows="3" placeholder="提示与说明，支持 Markdown 与 LaTeX" />
         </el-form-item>
         <el-form-item label="样例">
           <div style="width: 100%">
@@ -279,6 +279,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DifficultyTag from '@/components/DifficultyTag.vue'
+import MarkdownEditor from '@/components/MarkdownEditor.vue'
 import {
   convertMyProblems,
   createMyProblem,

@@ -87,6 +87,16 @@ export const uploadCover = (file) => {
 }
 export const deleteCover = () => request.delete('/api/v1/users/me/cover')
 
+// Markdown 编辑器上传正文图片（题面、公告），返回 { url, size }
+export const uploadImage = (file) => {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post('/api/v1/uploads/images', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000
+  })
+}
+
 // 管理后台
 export const adminGetStats = () => request.get('/api/admin/v1/stats')
 export const adminGetSettings = () => request.get('/api/admin/v1/settings')
