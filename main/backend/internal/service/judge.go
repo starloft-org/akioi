@@ -103,15 +103,14 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 		if cpCount == 0 {
 			return nil, ErrProblemNotVisible
 		}
-		if contest.RegisterRequired {
-			var joined int64
-			if err := s.db.Model(&model.ContestParticipant{}).
-				Where("contest_id = ? AND user_id = ?", contest.ID, in.UserID).Count(&joined).Error; err != nil {
-				return nil, err
-			}
-			if joined == 0 {
-				return nil, ErrNotRegistered
-			}
+		// 比赛一律需要报名：没报名的选手不能提交
+		var joined int64
+		if err := s.db.Model(&model.ContestParticipant{}).
+			Where("contest_id = ? AND user_id = ?", contest.ID, in.UserID).Count(&joined).Error; err != nil {
+			return nil, err
+		}
+		if joined == 0 {
+			return nil, ErrNotRegistered
 		}
 	} else if problem.Visibility != model.ProblemVisibilityPublic || problem.ContestOnly {
 		return nil, ErrProblemNotVisible

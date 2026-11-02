@@ -260,8 +260,8 @@ func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 	if u != nil && u.IsAdmin() {
 		return true
 	}
-	// 已经开始的比赛引用了这道题：参赛者要能打开，不再受隐藏与归属限制
-	if h.problemInRunningContest(p.ID) {
+	// 已经开始的比赛引用了这道题：报名了的参赛者才能打开，不再受隐藏与归属限制
+	if u != nil && h.registeredInRunningContest(p.ID, u.ID) {
 		return true
 	}
 	// 受限题目：团队题目仅所属团队成员可见，个人题目仅创建者本人可见
@@ -279,13 +279,15 @@ func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 	return p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly
 }
 
-// problemInRunningContest 判断题目是否已经被已经开始（且未删除）的比赛引用。
-func (h *Handler) problemInRunningContest(problemID uint) bool {
+// registeredInRunningContest 判断用户是否报名了引用这道题的、已经开始（且未删除）的比赛。
+// 比赛一律需要报名，没报名的用户不能打开比赛题目。
+func (h *Handler) registeredInRunningContest(problemID, userID uint) bool {
 	var count int64
 	h.DB.Table("contest_problems").
 		Joins("JOIN contests ON contests.id = contest_problems.contest_id").
-		Where("contest_problems.problem_id = ? AND contests.start_at <= ? AND contests.deleted_at IS NULL",
-			problemID, time.Now()).
+		Joins("JOIN contest_participants ON contest_participants.contest_id = contests.id").
+		Where("contest_problems.problem_id = ? AND contest_participants.user_id = ? AND contests.start_at <= ? AND contests.deleted_at IS NULL",
+			problemID, userID, time.Now()).
 		Count(&count)
 	return count > 0
 }

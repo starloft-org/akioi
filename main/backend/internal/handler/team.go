@@ -741,12 +741,11 @@ func (h *Handler) ListTeamContests(c *gin.Context) {
 	for i := range contests {
 		ct := &contests[i]
 		items = append(items, gin.H{
-			"id":                ct.ID,
-			"title":             ct.Title,
-			"start_at":          ct.StartAt,
-			"end_at":            ct.EndAt,
-			"status":            ct.Status(now),
-			"register_required": ct.RegisterRequired,
+			"id":       ct.ID,
+			"title":    ct.Title,
+			"start_at": ct.StartAt,
+			"end_at":   ct.EndAt,
+			"status":   ct.Status(now),
 		})
 	}
 	httpx.OK(c, gin.H{"items": items})

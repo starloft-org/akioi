@@ -7,15 +7,14 @@ import (
 )
 
 type Contest struct {
-	ID               uint      `gorm:"primaryKey" json:"id"`
-	Title            string    `gorm:"size:128;not null" json:"title"`
-	Description      string    `gorm:"type:mediumtext" json:"description"`
-	StartAt          time.Time `gorm:"index;not null" json:"start_at"`
-	EndAt            time.Time `gorm:"not null" json:"end_at"`
-	FreezeMinutes    int       `gorm:"not null;default:0" json:"freeze_minutes"`
-	Password         string    `gorm:"size:64" json:"-"`
-	RegisterRequired bool      `gorm:"not null;default:false" json:"register_required"`
-	CreatedBy        uint      `gorm:"index" json:"created_by"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	Title         string    `gorm:"size:128;not null" json:"title"`
+	Description   string    `gorm:"type:mediumtext" json:"description"`
+	StartAt       time.Time `gorm:"index;not null" json:"start_at"`
+	EndAt         time.Time `gorm:"not null" json:"end_at"`
+	FreezeMinutes int       `gorm:"not null;default:0" json:"freeze_minutes"`
+	Password      string    `gorm:"size:64" json:"-"`
+	CreatedBy     uint      `gorm:"index" json:"created_by"`
 	// TeamID 归属团队；0 表示公开比赛，团队比赛仅该团队成员可见。
 	TeamID    uint           `gorm:"index;not null;default:0" json:"team_id"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

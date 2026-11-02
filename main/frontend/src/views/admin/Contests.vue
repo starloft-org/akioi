@@ -34,8 +34,8 @@
       <el-table-column label="需要口令" width="100">
         <template #default="{ row }">{{ row.needs_password ? '是' : '否' }}</template>
       </el-table-column>
-      <el-table-column label="报名限制" width="110">
-        <template #default="{ row }">{{ row.register_required ? '需要报名' : '无需报名' }}</template>
+      <el-table-column label="报名" width="90">
+        <template #default>一律报名</template>
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">

@@ -41,11 +41,6 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="需要报名">
-            <el-switch v-model="form.register_required" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
           <el-form-item label="归属团队">
             <el-select v-model="form.team_id" clearable placeholder="公开比赛（不属于团队）" style="width: 100%">
               <el-option v-for="item in teams" :key="item.id" :label="item.name" :value="item.id" />
@@ -166,7 +161,6 @@ const form = reactive({
   end_at: '',
   freeze_minutes: 0,
   password: '',
-  register_required: false,
   team_id: null
 })
 
@@ -181,7 +175,6 @@ const loadContest = async (id) => {
     form.end_at = toLocalInput(contest.end_at)
     form.freeze_minutes = contest.freeze_minutes ?? 0
     form.password = ''
-    form.register_required = !!contest.register_required
     form.team_id = contest.team_id || null
     selectedProblems.value = (data.problems || []).map((item) => ({
       problem_id: item.problem_id,
@@ -214,7 +207,6 @@ const buildPayload = () => ({
   end_at: form.end_at ? new Date(form.end_at).toISOString() : null,
   freeze_minutes: form.freeze_minutes,
   password: form.password,
-  register_required: form.register_required,
   team_id: form.team_id || 0
 })
 

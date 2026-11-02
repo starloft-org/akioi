@@ -8,7 +8,7 @@
             <el-button size="small" @click="router.push(`/contests/${contest.id}/rank`)">榜单</el-button>
             <el-button size="small" @click="router.push(`/contests/${contest.id}/submissions`)">评测记录</el-button>
             <el-button
-              v-if="contest.register_required && !registered"
+              v-if="!registered && contest.status !== 'ended'"
               type="primary"
               size="small"
               @click="handleRegister"
@@ -41,6 +41,22 @@
 
       <div class="panel">
         <h3 class="panel__title">比赛题目</h3>
+        <el-alert
+          v-if="problemsHidden === 'register'"
+          type="info"
+          :closable="false"
+          show-icon
+          title="报名后才能查看比赛题目"
+          style="margin-bottom: 12px"
+        />
+        <el-alert
+          v-else-if="problemsHidden === 'not_started'"
+          type="info"
+          :closable="false"
+          show-icon
+          title="比赛开始后才能查看题目"
+          style="margin-bottom: 12px"
+        />
         <el-empty v-if="problems.length === 0" description="暂无题目" />
         <el-table v-else :data="problems" size="small">
           <el-table-column label="编号" width="80" prop="label" />
@@ -83,6 +99,7 @@ const router = useRouter()
 
 const contest = ref(null)
 const problems = ref([])
+const problemsHidden = ref('')
 const registered = ref(false)
 const loading = ref(false)
 
@@ -119,6 +136,7 @@ const load = async () => {
     const data = await getContest(route.params.id)
     contest.value = data.contest
     problems.value = data.problems || []
+    problemsHidden.value = data.problems_hidden || ''
     registered.value = !!data.registered
     // 以服务端时间为基准校准倒计时
     const offset = new Date(data.contest.server_time).getTime() - Date.now()

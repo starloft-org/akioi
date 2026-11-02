@@ -20,7 +20,6 @@ type adminContestItem struct {
 	StartAt          time.Time `json:"start_at"`
 	EndAt            time.Time `json:"end_at"`
 	FreezeMinutes    int       `json:"freeze_minutes"`
-	RegisterRequired bool      `json:"register_required"`
 	NeedsPassword    bool      `json:"needs_password"`
 	Status           string    `json:"status"`
 	ProblemCount     int64     `json:"problem_count"`
@@ -93,7 +92,6 @@ func (h *Handler) AdminListContests(c *gin.Context) {
 			StartAt:          c0.StartAt,
 			EndAt:            c0.EndAt,
 			FreezeMinutes:    c0.FreezeMinutes,
-			RegisterRequired: c0.RegisterRequired,
 			NeedsPassword:    c0.Password != "",
 			Status:           c0.Status(now),
 			ProblemCount:     problemCounts[c0.ID],
@@ -129,16 +127,15 @@ func (h *Handler) AdminGetContest(c *gin.Context) {
 	}
 	httpx.OK(c, gin.H{
 		"contest": gin.H{
-			"id":                contest.ID,
-			"title":             contest.Title,
-			"description":       contest.Description,
-			"start_at":          contest.StartAt,
-			"end_at":            contest.EndAt,
-			"freeze_minutes":    contest.FreezeMinutes,
-			"register_required": contest.RegisterRequired,
-			"team_id":           contest.TeamID,
-			"needs_password":    contest.Password != "",
-			"status":            contest.Status(time.Now()),
+			"id":             contest.ID,
+			"title":          contest.Title,
+			"description":    contest.Description,
+			"start_at":       contest.StartAt,
+			"end_at":         contest.EndAt,
+			"freeze_minutes": contest.FreezeMinutes,
+			"team_id":        contest.TeamID,
+			"needs_password": contest.Password != "",
+			"status":         contest.Status(time.Now()),
 		},
 		"problems": entries,
 	})
@@ -177,13 +174,12 @@ func (h *Handler) contestProblemEntries(contestID uint) ([]adminContestProblemEn
 }
 
 type adminContestRequest struct {
-	Title            *string `json:"title"`
-	Description      *string `json:"description"`
-	StartAt          *string `json:"start_at"`
-	EndAt            *string `json:"end_at"`
-	FreezeMinutes    *int    `json:"freeze_minutes"`
-	Password         *string `json:"password"`
-	RegisterRequired *bool   `json:"register_required"`
+	Title         *string `json:"title"`
+	Description   *string `json:"description"`
+	StartAt       *string `json:"start_at"`
+	EndAt         *string `json:"end_at"`
+	FreezeMinutes *int    `json:"freeze_minutes"`
+	Password      *string `json:"password"`
 	// TeamID 归属团队；0 或空表示公开比赛
 	TeamID *uint `json:"team_id"`
 }
@@ -256,9 +252,6 @@ func (h *Handler) AdminCreateContest(c *gin.Context) {
 	}
 	if req.Password != nil {
 		contest.Password = strings.TrimSpace(*req.Password)
-	}
-	if req.RegisterRequired != nil {
-		contest.RegisterRequired = *req.RegisterRequired
 	}
 	if req.TeamID != nil && *req.TeamID > 0 {
 		var teamCount int64
@@ -341,9 +334,6 @@ func (h *Handler) AdminUpdateContest(c *gin.Context) {
 	}
 	if req.Password != nil {
 		updates["password"] = strings.TrimSpace(*req.Password)
-	}
-	if req.RegisterRequired != nil {
-		updates["register_required"] = *req.RegisterRequired
 	}
 	// 归属团队：传 0 表示移出团队，变为公开比赛
 	if req.TeamID != nil {

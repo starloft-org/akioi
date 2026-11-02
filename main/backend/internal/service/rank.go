@@ -68,6 +68,17 @@ func (s *RankService) Compute(contest *model.Contest, now time.Time, revealAll b
 		return nil, frozen, err
 	}
 
+	// 比赛一律需要报名：没报名的提交不进榜单
+	var participants []uint
+	if err := s.db.Model(&model.ContestParticipant{}).
+		Where("contest_id = ?", contest.ID).Pluck("user_id", &participants).Error; err != nil {
+		return nil, frozen, err
+	}
+	joined := make(map[uint]bool, len(participants))
+	for _, id := range participants {
+		joined[id] = true
+	}
+
 	type cell struct {
 		score      int
 		attempts   int
@@ -78,7 +89,7 @@ func (s *RankService) Compute(contest *model.Contest, now time.Time, revealAll b
 	userLast := make(map[uint]int64)
 	for i := range subs {
 		sub := &subs[i]
-		if admins[sub.UserID] {
+		if admins[sub.UserID] || !joined[sub.UserID] {
 			continue
 		}
 		cells, ok := userCells[sub.UserID]

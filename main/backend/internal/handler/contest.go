@@ -20,7 +20,6 @@ type contestItem struct {
 	StartAt          time.Time `json:"start_at"`
 	EndAt            time.Time `json:"end_at"`
 	FreezeMinutes    int       `json:"freeze_minutes"`
-	RegisterRequired bool      `json:"register_required"`
 	NeedsPassword    bool      `json:"needs_password"`
 	Status           string    `json:"status"`
 	ProblemCount     int64     `json:"problem_count"`
@@ -141,8 +140,18 @@ func (h *Handler) GetContest(c *gin.Context) {
 		httpx.ServerError(c, "查询比赛题目失败")
 		return
 	}
+	// 比赛一律需要报名：只有报名了的选手（以及管理员）才能看到题单，且要等比赛开始
+	canViewProblems := isAdmin || (registered && !now.Before(contest.StartAt))
+	problemsHidden := ""
+	if !canViewProblems {
+		if !registered && !isAdmin {
+			problemsHidden = "register"
+		} else {
+			problemsHidden = "not_started"
+		}
+	}
 	entries := make([]problemEntry, 0, len(cps))
-	if len(cps) > 0 {
+	if canViewProblems && len(cps) > 0 {
 		pids := make([]uint, 0, len(cps))
 		for _, cp := range cps {
 			pids = append(pids, cp.ProblemID)
@@ -187,22 +196,22 @@ func (h *Handler) GetContest(c *gin.Context) {
 	status := contest.Status(now)
 	httpx.OK(c, gin.H{
 		"contest": gin.H{
-			"id":                contest.ID,
-			"title":             contest.Title,
-			"description":       contest.Description,
-			"start_at":          contest.StartAt,
-			"end_at":            contest.EndAt,
-			"freeze_minutes":    contest.FreezeMinutes,
-			"freeze_at":         contest.FreezeAt(),
-			"register_required": contest.RegisterRequired,
-			"status":            status,
-			"frozen":            contest.IsFrozen(now),
-			"server_time":       now,
-			"needs_password":    contest.Password != "",
+			"id":             contest.ID,
+			"title":          contest.Title,
+			"description":    contest.Description,
+			"start_at":       contest.StartAt,
+			"end_at":         contest.EndAt,
+			"freeze_minutes": contest.FreezeMinutes,
+			"freeze_at":      contest.FreezeAt(),
+			"status":         status,
+			"frozen":         contest.IsFrozen(now),
+			"server_time":    now,
+			"needs_password": contest.Password != "",
 		},
-		"problems":   entries,
-		"registered": registered,
-		"can_submit": status == model.ContestStatusRunning && (!contest.RegisterRequired || registered) || isAdmin,
+		"problems":        entries,
+		"problems_hidden": problemsHidden,
+		"registered":      registered,
+		"can_submit":      status == model.ContestStatusRunning && registered,
 	})
 }
 
@@ -394,7 +403,6 @@ func (h *Handler) buildContestItem(c *model.Contest, now time.Time, registered b
 		StartAt:          c.StartAt,
 		EndAt:            c.EndAt,
 		FreezeMinutes:    c.FreezeMinutes,
-		RegisterRequired: c.RegisterRequired,
 		NeedsPassword:    c.Password != "",
 		Status:           c.Status(now),
 		ProblemCount:     problemCount,
