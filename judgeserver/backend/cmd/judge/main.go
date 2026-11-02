@@ -137,7 +137,22 @@ func loop(ctx context.Context, cfg *config.Config, db *gorm.DB, q *queue.Queue,
 
 		_ = db.Model(&job).Update("status", "running").Error
 		taskCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.Judge.TaskTimeoutSec)*time.Second)
-		result := engine.Judge(taskCtx, &payload)
+		// 先告诉页面「开始评测」，再逐个测试点上报进度，避免页面长时间停在 Pending
+		sendProgress(ctx, reporter, &model.JudgeProgress{
+			SubmissionID: payload.SubmissionID,
+			JudgeToken:   payload.JudgeToken,
+			Status:       model.StatusJudging,
+			Total:        len(payload.Testcases),
+		})
+		result := engine.Judge(taskCtx, &payload, func(done, total int) {
+			sendProgress(ctx, reporter, &model.JudgeProgress{
+				SubmissionID: payload.SubmissionID,
+				JudgeToken:   payload.JudgeToken,
+				Status:       model.StatusJudging,
+				Done:         done,
+				Total:        total,
+			})
+		})
 		cancel()
 
 		if raw, err := json.Marshal(result); err == nil {
@@ -150,6 +165,15 @@ func loop(ctx context.Context, cfg *config.Config, db *gorm.DB, q *queue.Queue,
 			continue
 		}
 		_ = db.Model(&job).Update("synced", true).Error
+	}
+}
+
+// sendProgress 上报评测进度；失败只记日志，不影响评测本身。
+func sendProgress(ctx context.Context, reporter *report.Reporter, p *model.JudgeProgress) {
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+	defer cancel()
+	if err := reporter.SendProgress(sendCtx, p); err != nil {
+		logger.Businessf("上报评测进度失败 submission=%d: %v", p.SubmissionID, err)
 	}
 }
 

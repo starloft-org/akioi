@@ -396,3 +396,17 @@ func (s *JudgeService) CheckNodes(ctx context.Context) []NodeHealth {
 	}
 	return out
 }
+
+// JudgeProgressPayload 是评测节点上报的进度，status 一般是 Judging。
+type JudgeProgressPayload struct {
+	SubmissionID uint   `json:"submission_id"`
+	JudgeToken   string `json:"judge_token"`
+	Status       string `json:"status"`
+	Done         int    `json:"done"`
+	Total        int    `json:"total"`
+}
+
+// JudgeProgressKey 是某个提交的评测进度在 Redis 里的键。
+func JudgeProgressKey(submissionID uint) string {
+	return fmt.Sprintf("judge:progress:%d", submissionID)
+}

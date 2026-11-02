@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -126,6 +127,58 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 	}
 	if sub.JudgeMessage != "" {
 		data["judge_message"] = sub.JudgeMessage
+	}
+	httpx.OK(c, data)
+}
+
+// GetSubmissionStatus 是评测页轮询用的轻量接口：只返回状态、分数、耗时和进度，
+// 不带源码与测试点明细，轮询频率可以放得更高。
+func (h *Handler) GetSubmissionStatus(c *gin.Context) {
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	id, ok := httpx.PathID(c, "id")
+	if !ok {
+		return
+	}
+	var sub model.Submission
+	if err := h.DB.Select("id", "user_id", "contest_id", "status", "score", "time_ms",
+		"memory_kb", "judged_at", "created_at").First(&sub, id).Error; err != nil {
+		httpx.NotFound(c, "提交不存在")
+		return
+	}
+	// 比赛结束前，别人的提交只对管理员可见
+	if sub.ContestID > 0 && !u.IsAdmin() && sub.UserID != u.ID && !h.contestRevealed(sub.ContestID) {
+		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
+		return
+	}
+
+	data := gin.H{
+		"id":         sub.ID,
+		"status":     sub.Status,
+		"score":      sub.Score,
+		"time_ms":    sub.TimeMS,
+		"memory_kb":  sub.MemoryKB,
+		"judged_at":  sub.JudgedAt,
+		"created_at": sub.CreatedAt,
+	}
+	if raw, err := h.RDB.Get(c.Request.Context(), service.JudgeProgressKey(sub.ID)).Result(); err == nil && raw != "" {
+		var progress struct {
+			Done      int   `json:"done"`
+			Total     int   `json:"total"`
+			UpdatedAt int64 `json:"updated_at"`
+		}
+		if json.Unmarshal([]byte(raw), &progress) == nil {
+			data["progress"] = progress
+		}
+	}
+	if sub.Status == model.StatusPending {
+		// 同一个评测节点按提交顺序取任务，id 更小的 Pending 数量大致等于前面排队的人数
+		var ahead int64
+		_ = h.DB.Model(&model.Submission{}).
+			Where("status = ? AND id < ?", model.StatusPending, sub.ID).Count(&ahead).Error
+		data["pending_ahead"] = ahead
 	}
 	httpx.OK(c, data)
 }

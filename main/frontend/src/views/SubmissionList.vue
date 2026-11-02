@@ -104,7 +104,7 @@ const hasJudging = computed(() =>
   items.value.some((item) => item.status === 'Pending' || item.status === 'Judging')
 )
 
-const LIST_POLL_INTERVAL_MS = 5000
+const LIST_POLL_INTERVAL_MS = 1500
 let pollTimer = null
 
 const stopPolling = () => {

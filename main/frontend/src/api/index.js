@@ -52,6 +52,7 @@ export const deleteComment = (id) => request.delete(`/api/v1/comments/${id}`)
 export const createSubmission = (data) => request.post('/api/v1/submissions', data)
 export const listSubmissions = (params) => request.get('/api/v1/submissions', { params })
 export const getSubmission = (id) => request.get(`/api/v1/submissions/${id}`)
+export const getSubmissionStatus = (id) => request.get(`/api/v1/submissions/${id}/status`)
 
 // 比赛
 export const listContests = (params) => request.get('/api/v1/contests', { params })

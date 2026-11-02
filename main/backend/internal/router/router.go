@@ -51,6 +51,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 		api.GET("/languages", h.ListLanguages)
 		// 评测节点回传结果，使用同步密钥鉴权，不挂用户鉴权中间件
 		api.POST("/internal/judgements", h.InternalJudgement)
+		api.POST("/internal/judge-progress", h.InternalJudgeProgress)
 		api.GET("/announcements", h.ListAnnouncements)
 		api.GET("/rankings", h.GlobalRanking)
 
@@ -106,6 +107,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 			submissions.POST("", h.CreateSubmission)
 			submissions.GET("", h.ListSubmissions)
 			submissions.GET("/:id", h.GetSubmission)
+			submissions.GET("/:id/status", h.GetSubmissionStatus)
 		}
 
 		teams := api.Group("/teams")

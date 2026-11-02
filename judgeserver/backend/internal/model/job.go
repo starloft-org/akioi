@@ -60,3 +60,12 @@ type JudgeResult struct {
 	JudgeMessage string           `json:"judge_message"`
 	Results      []TestcaseResult `json:"testcase_results"`
 }
+
+// JudgeProgress 是评测节点上报的进度：当前提交已经测完多少个测试点。
+type JudgeProgress struct {
+	SubmissionID uint   `json:"submission_id"`
+	JudgeToken   string `json:"judge_token"`
+	Status       string `json:"status"`
+	Done         int    `json:"done"`
+	Total        int    `json:"total"`
+}

@@ -74,6 +74,62 @@ func (h *Handler) InternalJudgement(c *gin.Context) {
 		}
 	}
 
+	// 结果已经落库，进度键没有用了，顺手清掉，避免页面读到过期进度
+	_ = h.RDB.Del(c.Request.Context(), service.JudgeProgressKey(req.SubmissionID)).Err()
 	logger.Businessf("收到评测结果 submission=%d status=%s score=%d", req.SubmissionID, req.Status, req.Score)
+	httpx.OK(c, gin.H{"accepted": true})
+}
+
+// InternalJudgeProgress 接收评测节点上报的进度：把提交标记为评测中，
+// 并把「已测 x / 共 n 个测试点」写进 Redis，供页面轮询显示。
+func (h *Handler) InternalJudgeProgress(c *gin.Context) {
+	given := c.GetHeader("X-Sync-Secret")
+	expected := h.Settings.Secrets().JudgeSyncSecret
+	if expected == "" ||
+		subtle.ConstantTimeCompare([]byte(expected), []byte(given)) != 1 {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "同步密钥不正确"})
+		return
+	}
+
+	var req service.JudgeProgressPayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.BadRequest(c, "评测进度格式错误")
+		return
+	}
+	if req.SubmissionID == 0 || req.JudgeToken == "" {
+		httpx.BadRequest(c, "评测进度缺少必要字段")
+		return
+	}
+
+	var sub model.Submission
+	if err := h.DB.Select("id", "status", "judge_token").First(&sub, req.SubmissionID).Error; err != nil {
+		httpx.OK(c, gin.H{"accepted": false})
+		return
+	}
+	// 令牌对不上说明这条提交已经被重测覆盖，这份进度来自旧任务，直接丢弃
+	if sub.JudgeToken != req.JudgeToken {
+		httpx.OK(c, gin.H{"accepted": false})
+		return
+	}
+	// Pending 是排队中，节点开始评测后转成 Judging
+	if sub.Status == model.StatusPending {
+		res := h.DB.Model(&model.Submission{}).
+			Where("id = ? AND status = ?", req.SubmissionID, model.StatusPending).
+			Update("status", model.StatusJudging)
+		if res.Error != nil {
+			logger.Errorf("更新评测状态失败 submission=%d: %v", req.SubmissionID, res.Error)
+			httpx.ServerError(c, "保存评测进度失败")
+			return
+		}
+	}
+
+	payload, err := json.Marshal(gin.H{
+		"done":       req.Done,
+		"total":      req.Total,
+		"updated_at": time.Now().Unix(),
+	})
+	if err == nil {
+		_ = h.RDB.Set(c.Request.Context(), service.JudgeProgressKey(req.SubmissionID), payload, 30*time.Minute).Err()
+	}
 	httpx.OK(c, gin.H{"accepted": true})
 }

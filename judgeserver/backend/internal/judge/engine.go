@@ -32,7 +32,7 @@ func New(cfg *config.Config) *Engine {
 }
 
 // Judge 执行一次评测，返回回传给主站的结果。
-func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeResult {
+func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask, onCase func(done, total int)) *model.JudgeResult {
 	res := &model.JudgeResult{
 		SubmissionID: task.SubmissionID,
 		JudgeToken:   task.JudgeToken,
@@ -116,6 +116,9 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask) *model.JudgeR
 			}
 		} else {
 			totalScore += item.Score
+		}
+		if onCase != nil {
+			onCase(len(res.Results), len(task.Testcases))
 		}
 		if item.TimeMS > maxTimeMS {
 			maxTimeMS = item.TimeMS

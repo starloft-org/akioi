@@ -36,6 +36,7 @@ func TestSetupRegistersRoutes(t *testing.T) {
 		"GET /api/v1/problems/:id",
 		"POST /api/v1/submissions",
 		"GET /api/v1/submissions/:id",
+		"GET /api/v1/submissions/:id/status",
 		"GET /api/v1/contests/:id/rank",
 		"GET /api/v1/contests/:id/rank.csv",
 		"POST /api/v1/contests/:id/register",

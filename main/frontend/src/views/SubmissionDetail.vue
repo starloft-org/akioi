@@ -9,7 +9,7 @@
       <div v-loading="loading" class="panel">
         <h3 class="panel__title">
           评测详情
-          <span v-if="isJudging" class="polling-hint">评测中，结果自动刷新</span>
+          <span v-if="isJudging" class="polling-hint">{{ judgeHint }}</span>
         </h3>
         <template v-if="submission">
           <el-descriptions :column="3" border>
@@ -29,6 +29,15 @@
             <el-descriptions-item label="提交时间">{{ formatTime(submission.created_at) }}</el-descriptions-item>
             <el-descriptions-item label="评测时间">{{ formatTime(submission.judged_at) }}</el-descriptions-item>
           </el-descriptions>
+
+          <div v-if="isJudging" class="judge-progress">
+            <el-progress
+              :percentage="progressPercent"
+              :stroke-width="10"
+              :text-inside="true"
+              :status="progressTotal > 0 ? undefined : 'warning'"
+            />
+          </div>
 
           <template v-if="judgeMessage">
             <h4 class="section-title">评测信息</h4>
@@ -108,7 +117,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getSubmission } from '@/api'
+import { getSubmission, getSubmissionStatus } from '@/api'
 import CodeEditor from '@/components/CodeEditor.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useUserStore } from '@/store/user'
@@ -128,11 +137,20 @@ const judgeMessage = ref('')
 const detailVisible = ref(false)
 const detailRow = ref(null)
 
+// 评测进度：已测测试点、是否在排队、已等待秒数
+const progressDone = ref(0)
+const progressTotal = ref(0)
+const pendingAhead = ref(0)
+const waitingSeconds = ref(0)
+
 const submissionId = computed(() => route.params.id)
 
-// 评测未结束时的轮询间隔
-const POLL_INTERVAL_MS = 2000
+// 刚提交时轮询得勤一些，超过 30 秒后退到低频，避免长时间占着请求
+const POLL_FAST_MS = 700
+const POLL_SLOW_MS = 1500
+const POLL_FAST_WINDOW_MS = 30000
 let pollTimer = null
+let pollStartedAt = 0
 
 // 提交处于等待评测或评测中时，页面自动轮询结果，无需手动刷新
 const isJudging = computed(() => {
@@ -140,21 +158,71 @@ const isJudging = computed(() => {
   return status === 'Pending' || status === 'Judging'
 })
 
+const progressPercent = computed(() => {
+  if (!isJudging.value) {
+    return 100
+  }
+  if (progressTotal.value > 0) {
+    return Math.min(99, Math.round((progressDone.value / progressTotal.value) * 100))
+  }
+  return 5
+})
+
+const judgeHint = computed(() => {
+  if (!isJudging.value) {
+    return ''
+  }
+  const seconds = waitingSeconds.value
+  const judging = submission.value?.status === 'Judging' || progressTotal.value > 0
+  if (judging) {
+    return progressTotal.value > 0
+      ? `评测中：已测 ${progressDone.value} / ${progressTotal.value} 个测试点，已等待 ${seconds} 秒`
+      : `评测中，已等待 ${seconds} 秒`
+  }
+  return pendingAhead.value > 0
+    ? `排队中：前面还有 ${pendingAhead.value} 份提交，已等待 ${seconds} 秒`
+    : `等待评测，已等待 ${seconds} 秒`
+})
+
 const stopPolling = () => {
   if (pollTimer) {
-    clearInterval(pollTimer)
+    clearTimeout(pollTimer)
     pollTimer = null
   }
 }
 
+// 轮询轻量状态接口，状态变化后再拉一次详情，避免每次都拿源码和大段测试点信息
+const poll = async () => {
+  pollTimer = null
+  try {
+    const status = await getSubmissionStatus(submissionId.value)
+    if (submission.value && status) {
+      submission.value.status = status.status
+      submission.value.score = status.score
+      submission.value.time_ms = status.time_ms
+      submission.value.memory_kb = status.memory_kb
+      submission.value.judged_at = status.judged_at
+    }
+    progressDone.value = status?.progress?.done ?? 0
+    progressTotal.value = status?.progress?.total ?? 0
+    pendingAhead.value = status?.pending_ahead ?? 0
+    waitingSeconds.value = Math.max(0, Math.round((Date.now() - pollStartedAt) / 1000))
+    if (status.status !== 'Pending' && status.status !== 'Judging') {
+      await load(true)
+      return
+    }
+  } catch (e) {
+    // 轮询失败（断网、后端重启）不打断页面，下一轮继续
+  }
+  const elapsed = Date.now() - pollStartedAt
+  pollTimer = setTimeout(poll, elapsed < POLL_FAST_WINDOW_MS ? POLL_FAST_MS : POLL_SLOW_MS)
+}
+
 const startPolling = () => {
   stopPolling()
-  pollTimer = setInterval(async () => {
-    await load(true)
-    if (!isJudging.value) {
-      stopPolling()
-    }
-  }, POLL_INTERVAL_MS)
+  pollStartedAt = Date.now()
+  waitingSeconds.value = 0
+  poll()
 }
 
 const goLogin = () => {
@@ -273,5 +341,16 @@ onUnmounted(stopPolling)
 .stderr-block {
   max-height: 320px;
   overflow: auto;
+}
+
+/* 评测中的进度条与说明文字 */
+.judge-progress {
+  margin-top: 12px;
+}
+
+.judge-progress__text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--akioi-primary);
 }
 </style>
