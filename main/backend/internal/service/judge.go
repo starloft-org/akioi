@@ -112,7 +112,7 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 		if joined == 0 {
 			return nil, ErrNotRegistered
 		}
-	} else if problem.Visibility != model.ProblemVisibilityPublic || problem.ContestOnly {
+	} else if problem.Visibility != model.ProblemVisibilityPublic {
 		return nil, ErrProblemNotVisible
 	}
 

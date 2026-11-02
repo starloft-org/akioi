@@ -30,7 +30,6 @@ type adminProblemItem struct {
 	Source        string    `json:"source"`
 	Points        int       `json:"points"`
 	Visibility    int       `json:"visibility"`
-	ContestOnly   bool      `json:"contest_only"`
 	TeamID        uint      `json:"team_id"`
 	TeamName      string    `json:"team_name"`
 	OwnerID       uint      `json:"owner_id"`
@@ -121,7 +120,6 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 			Source:        p.Source,
 			Points:        p.Points,
 			Visibility:    p.Visibility,
-			ContestOnly:   p.ContestOnly,
 			TeamID:        p.TeamID,
 			TeamName:      teamNames[p.TeamID],
 			OwnerID:       p.OwnerID,
@@ -188,7 +186,6 @@ func adminProblemDetail(p *model.Problem) gin.H {
 		"source":          p.Source,
 		"points":          p.Points,
 		"visibility":      p.Visibility,
-		"contest_only":    p.ContestOnly,
 		"compare_mode":    p.CompareMode,
 		"float_eps":       p.FloatEps,
 		"testcase_count":  p.TestcaseCount,
@@ -220,7 +217,6 @@ type adminProblemRequest struct {
 	Source        *string         `json:"source"`
 	Points        *int            `json:"points"`
 	Visibility    *int            `json:"visibility"`
-	ContestOnly   *bool           `json:"contest_only"`
 	CompareMode   *string         `json:"compare_mode"`
 	FloatEps      *float64        `json:"float_eps"`
 	// TeamID 归属团队；0 或空表示公共题目
@@ -392,9 +388,6 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	p.Difficulty = difficulty
 	if req.Source != nil {
 		p.Source = strings.TrimSpace(*req.Source)
-	}
-	if req.ContestOnly != nil {
-		p.ContestOnly = *req.ContestOnly
 	}
 	if req.Samples != nil {
 		p.SetSamples(*req.Samples)
@@ -595,9 +588,6 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 			return
 		}
 		updates["visibility"] = *req.Visibility
-	}
-	if req.ContestOnly != nil {
-		updates["contest_only"] = *req.ContestOnly
 	}
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)

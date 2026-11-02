@@ -12,7 +12,6 @@
             <span>内存限制 {{ problem.memory_limit_mb }} MB</span>
             <span>积分 {{ problem.points }}</span>
             <DifficultyTag v-if="problem.difficulty" :difficulty="problem.difficulty" />
-            <el-tag v-if="problem.contest_only" type="warning" size="small">比赛专用</el-tag>
             <span>通过率 {{ rateText(problem.acceptance_rate) }}</span>
             <span>提交 {{ problem.submit_count }} · 通过 {{ problem.accepted_count }}</span>
             <span v-if="problem.author_name">作者 {{ problem.author_name }}</span>

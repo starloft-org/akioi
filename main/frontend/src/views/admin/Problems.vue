@@ -73,9 +73,6 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="比赛专用" width="100">
-        <template #default="{ row }">{{ row.contest_only ? '是' : '否' }}</template>
-      </el-table-column>
       <el-table-column prop="testcase_count" label="测试点" width="90" />
       <el-table-column prop="total_score" label="总分" width="80" />
       <el-table-column label="提交 / 通过" width="120">

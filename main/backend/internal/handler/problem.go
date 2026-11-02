@@ -134,7 +134,7 @@ func (h *Handler) ListProblems(c *gin.Context) {
 	httpx.OK(c, httpx.List(total, page, pageSize, items))
 }
 
-// GetProblem 返回题目详情；比赛专用题在比赛开始后同样可访问。
+// GetProblem 返回题目详情；比赛开始后，比赛中的题目同样可访问。
 func (h *Handler) GetProblem(c *gin.Context) {
 	id, ok := httpx.PathID(c, "id")
 	if !ok {
@@ -201,7 +201,6 @@ func (h *Handler) GetProblem(c *gin.Context) {
 			"submit_count":    p.SubmitCount,
 			"accepted_count":  p.AcceptedCount,
 			"acceptance_rate": item.AcceptanceRate,
-			"contest_only":    p.ContestOnly,
 			"testcase_count":  p.TestcaseCount,
 			"total_score":     totalScore(&p),
 			"created_at":      p.CreatedAt,
@@ -276,7 +275,7 @@ func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 			return p.OwnerID == u.ID
 		}
 	}
-	return p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly
+	return p.Visibility == model.ProblemVisibilityPublic
 }
 
 // registeredInRunningContest 判断用户是否报名了引用这道题的、已经开始（且未删除）的比赛。

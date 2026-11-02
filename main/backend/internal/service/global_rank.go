@@ -23,7 +23,7 @@ type bestScoreRow struct {
 	BestScore int
 }
 
-// ComputeGlobal 计算公开、非比赛专用题目的全站积分榜。
+// ComputeGlobal 计算公开题目的全站积分榜。
 func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 	var users []model.User
 	if err := s.db.Where("status = ?", model.UserStatusActive).
@@ -32,7 +32,7 @@ func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 		return nil, err
 	}
 	var problems []model.Problem
-	if err := s.db.Where("visibility = ? AND contest_only = ?", model.ProblemVisibilityPublic, false).Find(&problems).Error; err != nil {
+	if err := s.db.Where("visibility = ?", model.ProblemVisibilityPublic).Find(&problems).Error; err != nil {
 		return nil, err
 	}
 

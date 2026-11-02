@@ -145,11 +145,6 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="比赛专用">
-            <el-switch v-model="form.contest_only" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="12">
           <el-form-item label="比对模式">
             <el-select v-model="form.compare_mode" style="width: 100%">
               <el-option v-for="item in COMPARE_MODES" :key="item.value" :label="item.label" :value="item.value" />
@@ -248,7 +243,6 @@ const form = reactive({
   source: '',
   points: 50,
   visibility: 1,
-  contest_only: false,
   compare_mode: 'default',
   float_eps: 0.000001,
   team_id: null,
@@ -334,7 +328,6 @@ const loadProblem = async () => {
     form.source = p.source || ''
     form.points = p.points ?? 100
     form.visibility = p.visibility ?? 1
-    form.contest_only = !!p.contest_only
     form.compare_mode = p.compare_mode || 'default'
     form.float_eps = p.float_eps ?? 0.000001
     form.team_id = p.team_id || null
@@ -384,7 +377,6 @@ const buildPayload = () => ({
   source: form.source,
   points: form.points,
   visibility: form.visibility,
-  contest_only: form.contest_only,
   compare_mode: form.compare_mode,
   float_eps: form.float_eps,
   team_id: form.ownership === 'team' ? form.team_id || 0 : 0,
