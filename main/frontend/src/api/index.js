@@ -3,6 +3,9 @@ import request from './request'
 // 站点公开信息
 export const getSiteInfo = () => request.get('/api/v1/site')
 export const getAnnouncements = () => request.get('/api/v1/announcements')
+// listTags 返回所有已经在用的题目标签，新建 / 编辑题目时用作候选项
+export const listTags = () => request.get('/api/v1/tags')
+
 export const getLanguages = () => request.get('/api/v1/languages')
 
 // 鉴权

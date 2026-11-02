@@ -111,8 +111,9 @@
         </el-form-item>
         <el-form-item label="标签">
           <el-select v-model="form.tags" multiple filterable allow-create default-first-option style="width: 100%">
-            <el-option v-for="item in TAGS" :key="item" :label="item" :value="item" />
+            <el-option v-for="item in tagChoices" :key="item" :label="item" :value="item" />
           </el-select>
+          <p class="form-hint">输入后按 Enter 创建标签；已有标签直接复用，不会重复创建。</p>
         </el-form-item>
         <el-form-item label="时空限制">
           <el-input-number v-model="form.time_limit_ms" :min="100" :max="30000" :step="100" />
@@ -286,6 +287,7 @@ import {
   listMyProblemTestdata,
   listMyProblems,
   listMyTeams,
+  listTags,
   listTeams,
   myGetImportTask,
   myImportProblemsOne,
@@ -329,6 +331,22 @@ const emptyForm = () => ({
   hint: '',
   samples: []
 })
+const tagOptions = ref([])
+const tagChoices = computed(() => {
+  const names = new Set([...TAGS, ...tagOptions.value])
+  ;(form.value.tags || []).forEach((tag) => names.add(tag))
+  return [...names]
+})
+
+async function loadTagOptions() {
+  try {
+    const data = await listTags()
+    tagOptions.value = (data.items || []).map((tag) => tag.name)
+  } catch {
+    tagOptions.value = []
+  }
+}
+
 const form = ref(emptyForm())
 
 const testdataDialog = ref(false)
@@ -1031,6 +1049,7 @@ const handleImport = async () => {
   }
 }
 onMounted(() => {
+  loadTagOptions()
   load()
   loadTeams()
 })

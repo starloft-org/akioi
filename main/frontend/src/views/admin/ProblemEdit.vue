@@ -73,7 +73,10 @@
               default-first-option
               placeholder="输入后回车添加"
               style="width: 100%"
-            />
+            >
+              <el-option v-for="tag in tagChoices" :key="tag" :label="tag" :value="tag" />
+            </el-select>
+            <span class="form-hint">输入后按 Enter 创建标签；已有标签直接复用，不会重复创建。</span>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -214,6 +217,7 @@ import {
   adminListProblemBanks,
   adminListUsers,
   adminUpdateProblem,
+  listTags,
   listTeams
 } from '@/api'
 import { COMPARE_MODES, DIFFICULTIES, defaultPointsOf } from '@/utils/format'
@@ -226,6 +230,22 @@ const isEdit = computed(() => !!problemId.value)
 
 const loading = ref(false)
 const submitting = ref(false)
+
+const tagOptions = ref([])
+const tagChoices = computed(() => {
+  const names = new Set(tagOptions.value)
+  ;(form.tags || []).forEach((tag) => names.add(tag))
+  return [...names]
+})
+
+async function loadTagOptions() {
+  try {
+    const data = await listTags()
+    tagOptions.value = (data.items || []).map((tag) => tag.name)
+  } catch {
+    tagOptions.value = []
+  }
+}
 
 const form = reactive({
   display_id: '',
@@ -426,6 +446,7 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
+  loadTagOptions()
   loadTeams()
   loadBanks()
   if (isEdit.value) {

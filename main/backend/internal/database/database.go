@@ -71,12 +71,18 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.TeamApplication{},
 		&model.TeamProblemSet{},
 		&model.UserProblemSet{},
+		&model.Tag{},
+		&model.ProblemTag{},
 	); err != nil {
 		return err
 	}
 
 	// 历史版本中的出题人角色已取消，降级为普通用户以避免意外提权。
 	if err := db.Model(&model.User{}).Where("role = ?", "setter").Update("role", model.RoleUser).Error; err != nil {
+		return err
+	}
+
+	if err := backfillProblemTags(db); err != nil {
 		return err
 	}
 

@@ -361,6 +361,11 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"problem": gin.H{"id": p.ID, "display_id": p.DisplayID, "kind": p.Kind()}})
+
+	if err := h.syncProblemTags(h.DB, p.ID, tagNamesOf(&p)); err != nil {
+		httpx.ServerError(c, "保存标签失败")
+		return
+	}
 }
 
 // UpdateMyProblem 由创建者或队长修改题目内容与访问权限，题号与归属不可改。
@@ -461,6 +466,12 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	if err := h.DB.First(&fresh, p.ID).Error; err != nil {
 		httpx.ServerError(c, "更新题目失败")
 		return
+	}
+	if req.Tags != nil {
+		if err := h.syncProblemTags(h.DB, fresh.ID, tagNamesOf(&fresh)); err != nil {
+			httpx.ServerError(c, "保存标签失败")
+			return
+		}
 	}
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID, "kind": fresh.Kind()}})
 }

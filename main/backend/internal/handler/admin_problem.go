@@ -405,6 +405,11 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"problem": gin.H{"id": p.ID, "display_id": p.DisplayID}})
+
+	if err := h.syncProblemTags(h.DB, p.ID, tagNamesOf(&p)); err != nil {
+		httpx.ServerError(c, "保存标签失败")
+		return
+	}
 }
 
 // AdminUpdateProblem 更新题目，仅更新请求中出现的字段。
@@ -621,6 +626,12 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	if err := h.DB.First(&fresh, p.ID).Error; err != nil {
 		httpx.ServerError(c, "更新题目失败")
 		return
+	}
+	if req.Tags != nil {
+		if err := h.syncProblemTags(h.DB, fresh.ID, tagNamesOf(&fresh)); err != nil {
+			httpx.ServerError(c, "保存标签失败")
+			return
+		}
 	}
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID}})
 }

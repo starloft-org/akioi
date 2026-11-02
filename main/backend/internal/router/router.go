@@ -49,6 +49,7 @@ func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Clien
 		api.GET("/site", h.SiteInfo)
 		api.GET("/site/captcha", h.SiteCaptchaConfig)
 		api.GET("/languages", h.ListLanguages)
+		api.GET("/tags", h.ListTags)
 		// 评测节点回传结果，使用同步密钥鉴权，不挂用户鉴权中间件
 		api.POST("/internal/judgements", h.InternalJudgement)
 		api.POST("/internal/judge-progress", h.InternalJudgeProgress)

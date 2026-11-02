@@ -162,6 +162,9 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 			if err := tx.Create(&p).Error; err != nil {
 				return fmt.Errorf("%s：写入题目失败", prep.filename)
 			}
+			if err := h.syncProblemTags(tx, p.ID, tagNamesOf(&p)); err != nil {
+				return fmt.Errorf("%s：保存标签失败：%w", prep.filename, err)
+			}
 			// 先登记目录，后面任何一步失败都要清理掉已写出的测试数据文件
 			dirs = append(dirs, h.Testdata.Dir(p.ID))
 			if prep.hasTestdata {
