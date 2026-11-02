@@ -112,6 +112,24 @@
           />
         </el-select>
       </div>
+      <div class="import-dir">
+        <el-button size="small" :disabled="importing" @click="pickDirectory">选择题目包目录</el-button>
+        <span class="muted">
+          {{
+            importDirName
+              ? `已选目录：${importDirName}（${importDirFiles.length} 个包）`
+              : '一次选中整个目录，导入失败后能记住目录，重新选一次就接着导'
+          }}
+        </span>
+        <input
+          ref="dirInputRef"
+          type="file"
+          webkitdirectory
+          multiple
+          class="import-dir__input"
+          @change="onDirectoryChange"
+        />
+      </div>
       <el-alert
         v-if="importHasRemaining && !importing"
         type="warning"
@@ -124,12 +142,16 @@
           {{ importRemaining.length }} 个未导入。
         </p>
         <p class="import-resume__names">剩余：{{ remainingPreview }}</p>
-        <p>重新选择这些 zip 后点「开始导入」，已成功的包会被跳过，失败过的包会重试；也可以直接点「重试」从上次停下的包继续。</p>
+        <p v-if="importState?.dir" class="import-resume__names">上次的目录：{{ importState.dir }}</p>
+        <p>
+          重新选择上次的目录（或剩余的 zip）后点「继续导入」，已成功的包会自动跳过；也可以直接点「重试」从上次停下的包继续。
+        </p>
         <el-button size="small" @click="discardImportRecord">丢弃记录</el-button>
       </el-alert>
 
       <el-upload
         v-model:file-list="importFiles"
+        @change="onUploadChange"
         drag
         multiple
         :auto-upload="false"
@@ -186,13 +208,13 @@ config.json       可选：title / difficulty / time_limit_ms / memory_limit_mb
 
       <template #footer>
         <el-button :disabled="importing" @click="closeImportDialog">关闭</el-button>
-        <el-button v-if="importPhase === 'failed'" :disabled="importing" @click="retryImport">
-          重试
+        <el-button v-if="!importing && (importPhase === 'failed' || importHasRemaining)" @click="retryImport">
+          {{ importPhase === 'failed' ? '重试失败的包' : `继续导入剩余 ${importRemaining.length} 个` }}
         </el-button>
         <el-button
           type="primary"
           :loading="importing"
-          :disabled="!importFiles.length || importing"
+          :disabled="importing || (!importTargets.length && !importHasRemaining)"
           @click="handleImport"
         >
           开始导入
@@ -229,6 +251,11 @@ const banks = ref([])
 const importVisible = ref(false)
 const importing = ref(false)
 const importFiles = ref([])
+const importDirFiles = ref([])
+const importDirName = ref('')
+const dirInputRef = ref(null)
+// 点了「重试/继续导入」但文件已不在内存（刷新过页面）时，重新选完目录就自动接着导入
+const pendingRetry = ref(false)
 const importBankId = ref('')
 const importResults = ref([])
 // 持久化的批次记录：{ bankId, total, files: [{ name, status, display_id, title, error }] }
@@ -411,11 +438,16 @@ const clearImportState = () => {
 }
 
 // 从批次记录恢复弹窗里的结果列表与进度
+// 批次记录里的唯一键：目录导入用相对路径，普通上传用文件名
+const entryKey = (entry) => entry.relPath || entry.name
+
+// 从批次记录恢复弹窗里的结果列表与进度
 const restoreImportState = (saved) => {
   importState.value = saved
+  importDirName.value = saved.dir || ''
   const processed = saved.files.filter((item) => item.status !== 'pending')
   importResults.value = processed.map((item) => ({
-    filename: item.name,
+    filename: entryKey(item),
     ok: item.status === 'ok',
     display_id: item.display_id,
     title: item.title,
@@ -435,19 +467,25 @@ const openImport = () => {
     }
   } else {
     importState.value = null
+    importDirName.value = ''
   }
   importVisible.value = true
 }
 
-const recordImportResult = (fileName, item) => {
+const findStateEntry = (key) =>
+  stateFiles.value.find((entry) => entry.status !== 'ok' && entryKey(entry) === key) ||
+  stateFiles.value.find((entry) => entryKey(entry) === key)
+
+const recordImportResult = (key, item) => {
   // 重试同一个包时替换掉上一条失败记录，避免结果里出现重复条目
-  const previous = importResults.value.findIndex((entry) => entry.filename === fileName && !entry.ok)
+  const entry = { ...item, filename: key }
+  const previous = importResults.value.findIndex((old) => old.filename === key && !old.ok)
   if (previous >= 0) {
-    importResults.value.splice(previous, 1, item)
+    importResults.value.splice(previous, 1, entry)
   } else {
-    importResults.value.push(item)
+    importResults.value.push(entry)
   }
-  const target = stateFiles.value.find((entry) => entry.name === fileName && entry.status !== 'ok')
+  const target = findStateEntry(key)
   if (target) {
     target.status = item.ok ? 'ok' : 'failed'
     target.display_id = item.display_id
@@ -458,8 +496,8 @@ const recordImportResult = (fileName, item) => {
 }
 
 // 打包上传结束后，把外层 zip 在续传记录里的状态置为完成
-const markOuterFile = (fileName, ok) => {
-  const target = stateFiles.value.find((entry) => entry.name === fileName)
+const markOuterFile = (key, ok) => {
+  const target = findStateEntry(key)
   if (!target) {
     return
   }
@@ -561,59 +599,141 @@ const importOne = async (file, onProgress) => {
   }
 }
 
+// 目录导入时优先用目录里选到的 zip，否则用 el-upload 里拖进来/选中的包
+const importTargets = computed(() => {
+  if (importDirFiles.value.length) {
+    return importDirFiles.value
+  }
+  return importFiles.value
+    .filter((item) => item.raw)
+    .map((item) => ({
+      name: item.name,
+      // 目录选择时浏览器会带上相对路径，用它区分不同目录里的同名包
+      relPath: item.webkitRelativePath || item.name,
+      raw: item.raw
+    }))
+})
+
+const topDirName = (entries) => {
+  const first = entries[0]?.relPath || ''
+  const index = first.indexOf('/')
+  return index > 0 ? first.slice(0, index) : ''
+}
+
+const pickDirectory = () => {
+  dirInputRef.value?.click()
+}
+
+// 选完目录就记住目录名，记录里也会存每个包的相对路径，失败后能按原位置继续
+const onDirectoryChange = (event) => {
+  const picked = Array.from(event.target.files || [])
+  // 允许再次选择同一个目录：先清空，否则浏览器不会再触发 change
+  event.target.value = ''
+  if (!picked.length) {
+    return
+  }
+  const zips = picked.filter((file) => /\.zip$/i.test(file.name))
+  if (!zips.length) {
+    ElMessage.warning('选中的目录里没有 .zip 题目包')
+    return
+  }
+  importDirFiles.value = zips.map((file) => ({
+    name: file.name,
+    relPath: file.webkitRelativePath || file.name,
+    raw: file
+  }))
+  importDirName.value = topDirName(importDirFiles.value)
+  importFiles.value = []
+  ElMessage.success(`已选择目录「${importDirName.value || '所选目录'}」，共 ${zips.length} 个题目包`)
+  resumeAfterPick()
+}
+
+const onUploadChange = (file, fileList) => {
+  if (fileList?.length) {
+    importDirFiles.value = []
+    importDirName.value = ''
+  }
+  resumeAfterPick()
+}
+
+// 记着目录但文件已经不在内存里（刷新过页面）时，重新选一次就自动从断点继续
+const resumeAfterPick = () => {
+  if (pendingRetry.value && importTargets.value.length) {
+    pendingRetry.value = false
+    handleImport()
+  }
+}
+
 const handleImport = async () => {
-  const raws = importFiles.value.map((item) => item.raw).filter(Boolean)
-  if (!raws.length) {
-    ElMessage.warning('请先选择要导入的题目包')
+  if (importing.value) {
     return
   }
 
-  let targets = raws
+  let targets = importTargets.value
+  if (!targets.length) {
+    if (importHasRemaining.value) {
+      ElMessage.info('请重新选择上次的题目包目录（或剩余的 zip）后继续导入')
+    } else {
+      ElMessage.warning('请先选择要导入的题目包')
+    }
+    return
+  }
+
   if (importHasRemaining.value) {
-    // 续传：只导入上次记录里还没成功的包，按文件名逐个匹配
+    // 续传：只导入上次记录里还没成功的包，按相对路径/文件名匹配，已成功的自动跳过
     const pending = new Map()
     importRemaining.value.forEach((entry) => {
-      pending.set(entry.name, (pending.get(entry.name) || 0) + 1)
+      const key = entryKey(entry)
+      pending.set(key, (pending.get(key) || 0) + 1)
     })
     const ignored = []
-    targets = []
-    raws.forEach((file) => {
-      const left = pending.get(file.name) || 0
+    const picked = []
+    targets.forEach((file) => {
+      const key = file.relPath || file.name
+      const left = pending.get(key) || 0
       if (left > 0) {
-        targets.push(file)
-        pending.set(file.name, left - 1)
+        picked.push(file)
+        pending.set(key, left - 1)
       } else {
-        ignored.push(file.name)
+        ignored.push(key)
       }
     })
-    if (!targets.length) {
-      ElMessage.warning('选中的包与记录的剩余文件不一致，请重新选择剩余的 zip')
+    if (!picked.length) {
+      ElMessage.warning('选中的包与记录里剩余的不一致，请重新选择上次的目录或剩余的 zip')
       return
     }
     if (ignored.length) {
-      ElMessage.info(`已跳过 ${ignored.length} 个不在待导入列表中的包`)
+      ElMessage.info(`已跳过 ${ignored.length} 个已导入或不在待导入列表中的包`)
     }
+    targets = picked
   } else {
     importState.value = {
       bankId: importBankId.value || null,
-      total: raws.length,
+      dir: importDirName.value || '',
+      total: targets.length,
       createdAt: new Date().toISOString(),
-      files: raws.map((file) => ({ name: file.name, status: 'pending' }))
+      files: targets.map((file) => ({
+        name: file.name,
+        relPath: file.relPath || '',
+        status: 'pending'
+      }))
     }
     importResults.value = []
     importDone.value = 0
-    importTotal.value = raws.length
+    importTotal.value = targets.length
     persistImportState()
   }
 
   importing.value = true
   importPhase.value = 'importing'
   importStopReason.value = ''
+  importMessage.value = ''
   try {
     for (const file of targets) {
+      const key = file.relPath || file.name
       const base = importDone.value
       let expanded = false
-      const res = await importOne(file, (task) => {
+      const res = await importOne(file.raw || file, (task) => {
         // 外层 zip 展开后题目包数量变多，进度按展开后的总数推进
         if (!expanded && task?.total) {
           importTotal.value += Math.max(0, task.total - 1)
@@ -627,12 +747,12 @@ const handleImport = async () => {
         }
       })
       const failures = res.items.filter((item) => !item.ok)
-      res.items.forEach((item) => recordImportResult(item.filename || file.name, item))
+      res.items.forEach((item) => recordImportResult(item.filename || key, item))
       if (res.container) {
         importDone.value = base + (res.total || res.items.length)
         importTotal.value = Math.max(importTotal.value, importDone.value)
         // 打包上传无法按内层包续传，整包记为已处理，失败的内层包由用户单独重新上传
-        markOuterFile(file.name, failures.length === 0)
+        markOuterFile(key, failures.length === 0)
       } else {
         importDone.value = base + 1
         importPackageDone.value = 0
@@ -665,9 +785,20 @@ const handleImport = async () => {
   }
 }
 
-// 出错停下后从失败的包继续，已成功的包会被跳过
+// 失败后重试：只要记录里的包还在内存里，就从失败的那个包直接继续；
+// 文件已经不在（刷新过页面）时，引导用户重新选一次上次的目录，选完自动接着导
 const retryImport = () => {
   if (importing.value) {
+    return
+  }
+  if (!importTargets.value.length) {
+    if (importRemaining.value.some((entry) => entry.relPath)) {
+      ElMessage.info('请选择上次的目录（选好后会自动从失败的包继续）')
+      pendingRetry.value = true
+      pickDirectory()
+      return
+    }
+    ElMessage.info('请重新选择剩余的题目包后点「开始导入」')
     return
   }
   handleImport()
@@ -675,11 +806,13 @@ const retryImport = () => {
 
 const closeImportDialog = () => {
   importVisible.value = false
-  importFiles.value = []
   if (importHasRemaining.value) {
-    // 还差包没导，保留记录，下次打开继续
+    // 还差包没导：保留记录和已选的包，下次打开或点「继续导入」能直接接着来
     return
   }
+  importFiles.value = []
+  importDirFiles.value = []
+  importDirName.value = ''
   clearImportState()
   importResults.value = []
   importPhase.value = 'idle'
@@ -699,6 +832,18 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.import-dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.import-dir__input {
+  display: none;
 }
 
 .import-hint {
