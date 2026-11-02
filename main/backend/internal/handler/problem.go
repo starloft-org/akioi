@@ -29,11 +29,14 @@ type problemItem struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
-// ListProblems 返回公开题目列表，登录用户附带自己的通过状态。
+// ListProblems 返回公共题目列表，登录用户附带自己的通过状态。
+// 个人题目和团队题目不进入这个列表：它们只在「我的题目」和团队主页里展示。
 func (h *Handler) ListProblems(c *gin.Context) {
 	page, pageSize, offset := httpx.Pagination(c)
 
-	query := h.DB.Model(&model.Problem{}).Where("visibility = ?", model.ProblemVisibilityPublic)
+	query := h.DB.Model(&model.Problem{}).
+		Where("visibility = ?", model.ProblemVisibilityPublic).
+		Where("owner_id = 0 AND team_id = 0")
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
 		query = query.Where("display_id = ? OR title LIKE ?", kw, like)
@@ -49,17 +52,8 @@ func (h *Handler) ListProblems(c *gin.Context) {
 	}
 
 	user := httpx.CurrentUser(c)
-	// 访问权限：公开题目所有人可见；受限题目仅所属团队成员或创建者本人可见，管理员可见全部
-	switch {
-	case user != nil && user.IsAdmin():
-	case user != nil:
-		if ids := h.myTeamIDs(user.ID); len(ids) > 0 {
-			query = query.Where("(access = ? OR owner_id = ? OR team_id IN ?)",
-				model.ProblemAccessPublic, user.ID, ids)
-		} else {
-			query = query.Where("(access = ? OR owner_id = ?)", model.ProblemAccessPublic, user.ID)
-		}
-	default:
+	// 公共列表里只剩公共题目，受限题目（access=2）只对管理员可见
+	if user == nil || !user.IsAdmin() {
 		query = query.Where("access = ?", model.ProblemAccessPublic)
 	}
 	statusFilter := strings.TrimSpace(c.Query("status"))
