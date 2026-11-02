@@ -117,8 +117,8 @@
         <span class="muted">
           {{
             importDirName
-              ? `已选目录：${importDirName}（${importDirFiles.length} 个包）`
-              : '一次选中整个目录，导入失败后能记住目录，重新选一次就接着导'
+              ? `已选目录：${importDirName}（${pendingEntries.length} 个包待导入）`
+              : '一次选中整个目录，导完的包会消失，没导完的包会留着，重新选目录就能接着导'
           }}
         </span>
         <input
@@ -135,22 +135,23 @@
         type="warning"
         :closable="false"
         class="import-resume"
-        title="上次导入还没有完成"
+        title="还有包没有导入完成"
       >
         <p>
-          共 {{ importTotal || stateFiles.length }} 个包，已完成 {{ stateOkCount }} 个，还剩
-          {{ importRemaining.length }} 个未导入。
+          共 {{ importTotal || stateImported.length + stateFiles.length }} 个包，已完成
+          {{ stateOkCount }} 个，还剩 {{ importRemaining.length }} 个没有导完。
         </p>
         <p class="import-resume__names">剩余：{{ remainingPreview }}</p>
         <p v-if="importState?.dir" class="import-resume__names">上次的目录：{{ importState.dir }}</p>
         <p>
-          重新选择上次的目录（或剩余的 zip）后点「继续导入」，已成功的包会自动跳过；也可以直接点「重试」从上次停下的包继续。
+          重新选择上次的目录（或剩余的 zip）后点「继续导入」，已完成的包会自动跳过；也可以直接点「重试」从上次停下的包继续。
         </p>
         <el-button size="small" @click="discardImportRecord">丢弃记录</el-button>
       </el-alert>
 
       <el-upload
         v-model:file-list="importFiles"
+        :show-file-list="false"
         @change="onUploadChange"
         drag
         multiple
@@ -160,12 +161,27 @@
         <div class="el-upload__text">把题目包 zip 拖到这里（支持多选），或<em>点击选择</em></div>
       </el-upload>
 
+      <div v-if="pendingEntries.length" class="import-queue">
+        <p class="import-queue__title">待导入：{{ pendingEntries.length }} 个包</p>
+        <div v-for="entry in pendingEntries" :key="entry.key" class="import-queue__item">
+          <span class="import-queue__no">{{ entry.index }}.</span>
+          <span class="import-queue__name" :title="entry.relPath || entry.name">
+            {{ entry.relPath || entry.name }}
+          </span>
+          <el-tag v-if="entry.status === 'failed'" size="small" type="danger">上次失败</el-tag>
+          <el-tag v-else-if="entry.status === 'running'" size="small" type="warning">上传中</el-tag>
+          <el-tag v-else size="small" type="info">待上传</el-tag>
+          <span v-if="entry.error" class="import-result__error">{{ entry.error }}</span>
+        </div>
+      </div>
+
       <div v-if="importPhase !== 'idle'" class="import-progress">
-        <el-progress :percentage="importPercent" :status="progressStatus" />
+        <el-progress :percentage="importCurrentPercent" :status="progressStatus" />
         <p class="muted">
           <template v-if="importPhase === 'importing'">
-            {{ importMessage || `正在导入第 ${Math.min(importDone + 1, importTotal)} 个 / 共 ${importTotal} 个包` }}，成功
-            {{ resultsSummary.success }} 个
+            {{ importMessage || `正在上传 ${importCurrentName}` }}（第
+            {{ Math.min(importDone + 1, importTotal) }} / {{ importTotal }} 个包，已成功
+            {{ resultsSummary.success }} 个）
           </template>
           <template v-else-if="importPhase === 'failed'">
             已停止：{{ importStopReason }}
@@ -193,7 +209,7 @@
 
       <div class="import-hint">
         <p class="muted">
-          一次只上传一个包：服务端整包校验通过才入库，包内任一题目有问题则该包整体不导入；出错会停下来，可点「重试」从失败的包继续。
+          一次只上传一个包：进度条显示的是当前这个包的上传/入库进度；服务端整包校验通过才入库，包内任一题目有问题则该包整体不导入。
         </p>
         <p class="muted">
           每个 zip 一个题目；也可以把很多题目 zip 打成一个外层 zip 一次上传，服务端会自动展开。
@@ -258,13 +274,16 @@ const dirInputRef = ref(null)
 const pendingRetry = ref(false)
 const importBankId = ref('')
 const importResults = ref([])
-// 持久化的批次记录：{ bankId, total, files: [{ name, status, display_id, title, error }] }
+// 持久化的批次记录：{ bankId, dir, total, done, files: [还没导完的包], imported: [已完成的包] }
 const importState = ref(null)
 // idle：未开始；importing：正在逐个导入；done：全部完成；failed：出错停下，可重试
 // 一次只发一个包：上一个包整包校验通过并入库后才发下一个
 const importPhase = ref('idle')
 const importDone = ref(0)
 const importTotal = ref(0)
+// 进度条只反映「当前这个包」：上传占 0-30%，服务端解析/入库/推测试数据占 30-100%
+const importCurrentPercent = ref(0)
+const importCurrentName = ref('')
 const resultsSummary = computed(() => {
   const success = importResults.value.filter((item) => item.ok).length
   return { success, failed: importResults.value.length - success }
@@ -283,17 +302,6 @@ const progressStatus = computed(() => {
     return 'exception'
   }
   return ''
-})
-const importPercent = computed(() => {
-  if (!importTotal.value) {
-    return 0
-  }
-  // 一个包里可能有很多题：按包内进度折算，导入单个大包时进度条也会动
-  let done = importDone.value
-  if (importPackageTotal.value > 0) {
-    done += Math.min(1, importPackageDone.value / importPackageTotal.value)
-  }
-  return Math.min(100, Math.round((done / importTotal.value) * 100))
 })
 
 const visibleItems = computed(() => {
@@ -386,18 +394,16 @@ const removeProblem = async (row) => {
 // 出错时记录停在哪一个包，供界面提示与重试
 const importStopReason = ref('')
 const importMessage = ref('')
-const importPackageDone = ref(0)
-const importPackageTotal = ref(0)
-
-// 导入批次记录保存在 localStorage，刷新或断网后能看出哪些包还没导入
 const IMPORT_STATE_KEY = 'akioi:admin-import-state'
 
 const stateFiles = computed(() => importState.value?.files || [])
-const stateOkCount = computed(() => stateFiles.value.filter((item) => item.status === 'ok').length)
-const importRemaining = computed(() => stateFiles.value.filter((item) => item.status !== 'ok'))
+const stateImported = computed(() => importState.value?.imported || [])
+// 记录里只保留没导完的包，已完成的数量单独累计
+const stateOkCount = computed(() => stateImported.value.length)
+const importRemaining = computed(() => stateFiles.value)
 const importHasRemaining = computed(() => importRemaining.value.length > 0)
 const remainingPreview = computed(() => {
-  const names = importRemaining.value.map((item) => item.name)
+  const names = importRemaining.value.map((item) => entryKey(item))
   const head = names.slice(0, 5).join('、')
   return names.length > 5 ? `${head} 等 ${names.length} 个` : head
 })
@@ -437,25 +443,30 @@ const clearImportState = () => {
   importState.value = null
 }
 
+
 // 从批次记录恢复弹窗里的结果列表与进度
 // 批次记录里的唯一键：目录导入用相对路径，普通上传用文件名
 const entryKey = (entry) => entry.relPath || entry.name
 
-// 从批次记录恢复弹窗里的结果列表与进度
+// 从批次记录恢复弹窗：已完成的包进结果列表，没完成的包进待导入列表
 const restoreImportState = (saved) => {
   importState.value = saved
   importDirName.value = saved.dir || ''
-  const processed = saved.files.filter((item) => item.status !== 'pending')
-  importResults.value = processed.map((item) => ({
+  const imported = (saved.imported || []).map((item) => ({
     filename: entryKey(item),
-    ok: item.status === 'ok',
+    ok: true,
     display_id: item.display_id,
-    title: item.title,
+    title: item.title
+  }))
+  const failed = (saved.files || []).map((item) => ({
+    filename: entryKey(item),
+    ok: false,
     error: item.error
   }))
-  importDone.value = processed.length
-  importTotal.value = saved.total || saved.files.length
-  importPhase.value = importRemaining.value.length ? 'idle' : 'done'
+  importResults.value = [...failed, ...imported]
+  importDone.value = saved.done || imported.length
+  importTotal.value = saved.total || imported.length + (saved.files || []).length
+  importPhase.value = importHasRemaining.value ? 'idle' : 'done'
 }
 
 const openImport = () => {
@@ -476,16 +487,16 @@ const findStateEntry = (key) =>
   stateFiles.value.find((entry) => entry.status !== 'ok' && entryKey(entry) === key) ||
   stateFiles.value.find((entry) => entryKey(entry) === key)
 
-const recordImportResult = (key, item) => {
+const recordImportResult = (stateKey, item) => {
   // 重试同一个包时替换掉上一条失败记录，避免结果里出现重复条目
-  const entry = { ...item, filename: key }
-  const previous = importResults.value.findIndex((old) => old.filename === key && !old.ok)
+  const entry = { ...item, filename: item.filename || stateKey }
+  const previous = importResults.value.findIndex((old) => old.filename === entry.filename && !old.ok)
   if (previous >= 0) {
     importResults.value.splice(previous, 1, entry)
   } else {
     importResults.value.push(entry)
   }
-  const target = findStateEntry(key)
+  const target = stateKey ? findStateEntry(stateKey) : null
   if (target) {
     target.status = item.ok ? 'ok' : 'failed'
     target.display_id = item.display_id
@@ -493,6 +504,27 @@ const recordImportResult = (key, item) => {
     target.error = item.error
     persistImportState()
   }
+}
+
+// 已经导完的包从待导入列表和记录里都去掉，只留下需要重新上传的包
+const removeImportedFile = (key) => {
+  importDirFiles.value = importDirFiles.value.filter((entry) => (entry.relPath || entry.name) !== key)
+  importFiles.value = importFiles.value.filter((entry) => (entry.webkitRelativePath || entry.name) !== key)
+  const saved = importState.value
+  if (!saved) {
+    return
+  }
+  const done = saved.files.find((entry) => entryKey(entry) === key)
+  if (!done) {
+    return
+  }
+  saved.files = saved.files.filter((entry) => entryKey(entry) !== key)
+  saved.imported = [
+    ...(saved.imported || []),
+    { name: done.name, relPath: done.relPath || '', display_id: done.display_id, title: done.title }
+  ]
+  saved.done = (saved.done || 0) + 1
+  persistImportState()
 }
 
 // 打包上传结束后，把外层 zip 在续传记录里的状态置为完成
@@ -576,22 +608,32 @@ const pollImportTask = (taskId, onProgress) =>
 
 // 上传后服务端立刻返回任务号，解析/入库/推送测试数据都在后台进行，
 // 这里轮询任务直到结束（大包不会再有请求超时的问题）。
+// 上传后服务端立刻返回任务号，解析/入库/推送测试数据都在后台进行，
+// 这里轮询任务直到结束（大包不会再有请求超时的问题）。
 const importOne = async (file, onProgress) => {
   try {
+    importCurrentName.value = file.name
+    importCurrentPercent.value = 0
     importMessage.value = `正在上传 ${file.name}`
     const data = await adminImportProblemOne(file, importBankId.value || undefined, (percent) => {
+      // 上传只占这个包进度的前 30%，剩下的看服务端解析入库
+      importCurrentPercent.value = Math.min(30, Math.round(percent * 0.3))
       importMessage.value = `正在上传 ${file.name} ${percent}%`
     })
     if (Array.isArray(data?.items)) {
+      importCurrentPercent.value = 100
       return { items: data.items, container: false }
     }
     if (data?.task_id) {
+      importCurrentPercent.value = Math.max(importCurrentPercent.value, 30)
       importMessage.value = '上传完成，正在校验并导入…'
       const task = await pollImportTask(data.task_id, onProgress)
+      importCurrentPercent.value = 100
       return { items: task.items || [], container: true, total: task.total || 0 }
     }
     return { items: [{ filename: file.name, ok: false, error: '导入没有返回结果' }], container: false }
   } catch (e) {
+    importCurrentPercent.value = 100
     return {
       items: [{ filename: file.name, ok: false, error: e?.response?.data?.message || e?.message || '导入失败' }],
       container: false
@@ -612,6 +654,25 @@ const importTargets = computed(() => {
       relPath: item.webkitRelativePath || item.name,
       raw: item.raw
     }))
+})
+
+// 待导入列表：只显示还没导成功的包，成功的会自动从这里消失
+const pendingEntries = computed(() => {
+  const failed = new Map()
+  stateFiles.value.forEach((entry) => failed.set(entryKey(entry), entry))
+  return importTargets.value.map((file, index) => {
+    const key = file.relPath || file.name
+    const entry = failed.get(key)
+    const running = importing.value && importCurrentName.value === file.name && !entry
+    return {
+      key,
+      index: index + 1,
+      name: file.name,
+      relPath: file.relPath && file.relPath !== file.name ? file.relPath : '',
+      status: entry?.status === 'failed' ? 'failed' : running ? 'running' : 'waiting',
+      error: entry?.error || ''
+    }
+  })
 })
 
 const topDirName = (entries) => {
@@ -680,7 +741,7 @@ const handleImport = async () => {
   }
 
   if (importHasRemaining.value) {
-    // 续传：只导入上次记录里还没成功的包，按相对路径/文件名匹配，已成功的自动跳过
+    // 续传：只导入上次没导完的包，按相对路径/文件名匹配，已完成的自动跳过
     const pending = new Map()
     importRemaining.value.forEach((entry) => {
       const key = entryKey(entry)
@@ -711,12 +772,14 @@ const handleImport = async () => {
       bankId: importBankId.value || null,
       dir: importDirName.value || '',
       total: targets.length,
+      done: 0,
       createdAt: new Date().toISOString(),
       files: targets.map((file) => ({
         name: file.name,
         relPath: file.relPath || '',
         status: 'pending'
-      }))
+      })),
+      imported: []
     }
     importResults.value = []
     importDone.value = 0
@@ -734,20 +797,25 @@ const handleImport = async () => {
       const base = importDone.value
       let expanded = false
       const res = await importOne(file.raw || file, (task) => {
-        // 外层 zip 展开后题目包数量变多，进度按展开后的总数推进
+        // 外层 zip 展开后题目包数量变多，总包数按展开后的数量算
         if (!expanded && task?.total) {
           importTotal.value += Math.max(0, task.total - 1)
           expanded = true
         }
-        importDone.value = base + (task?.done || 0)
-        importPackageDone.value = task?.package_done || 0
-        importPackageTotal.value = task?.package_total || 0
+        // 进度条只跟当前这个包：解析/写入/推测试数据阶段按包内题目数推进
+        const packageTotal = task?.package_total || 0
+        if (packageTotal > 0) {
+          const ratio = Math.min(1, (task?.package_done || 0) / packageTotal)
+          importCurrentPercent.value = Math.max(importCurrentPercent.value, 30 + Math.round(ratio * 70))
+        } else if (task?.message) {
+          importCurrentPercent.value = Math.max(importCurrentPercent.value, 35)
+        }
         if (task?.message) {
           importMessage.value = task.message
         }
       })
       const failures = res.items.filter((item) => !item.ok)
-      res.items.forEach((item) => recordImportResult(item.filename || key, item))
+      res.items.forEach((item) => recordImportResult(key, item))
       if (res.container) {
         importDone.value = base + (res.total || res.items.length)
         importTotal.value = Math.max(importTotal.value, importDone.value)
@@ -755,15 +823,16 @@ const handleImport = async () => {
         markOuterFile(key, failures.length === 0)
       } else {
         importDone.value = base + 1
-        importPackageDone.value = 0
-        importPackageTotal.value = 0
       }
       if (failures.length) {
         // 整包要么全入库、要么全不入库，失败时停下来等用户处理
         importStopReason.value = `${file.name}：${failures[0].error || '包内题目未通过校验'}`
         break
       }
+      // 导完的包从待导入列表里去掉，剩下的就是需要重新上传的
+      removeImportedFile(key)
     }
+    importCurrentName.value = ''
     if (importStopReason.value) {
       importPhase.value = 'failed'
       importMessage.value = ''
@@ -771,11 +840,13 @@ const handleImport = async () => {
     } else {
       const success = importResults.value.filter((item) => item.ok).length
       importPhase.value = 'done'
+      importMessage.value = ''
       ElMessage.success(`导入完成：成功 ${success} 个`)
     }
     load()
   } catch (e) {
     // 轮询发现任务丢失（后端重启/过期）或接口异常时，明确停下来并提示重新上传
+    importCurrentName.value = ''
     importStopReason.value = e?.message || '导入失败，请重试'
     importPhase.value = 'failed'
     importMessage.value = ''
@@ -813,6 +884,8 @@ const closeImportDialog = () => {
   importFiles.value = []
   importDirFiles.value = []
   importDirName.value = ''
+  importCurrentName.value = ''
+  importCurrentPercent.value = 0
   clearImportState()
   importResults.value = []
   importPhase.value = 'idle'
@@ -844,6 +917,42 @@ onMounted(() => {
 
 .import-dir__input {
   display: none;
+}
+
+.import-queue {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--akioi-border);
+  border-radius: 6px;
+  background: #fafbfc;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.import-queue__title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.import-queue__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.import-queue__no {
+  color: var(--akioi-text-weak);
+  min-width: 26px;
+}
+
+.import-queue__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .import-hint {
