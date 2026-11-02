@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"akioi/internal/config"
 	"akioi/internal/database"
 	"akioi/internal/handler"
@@ -55,6 +57,20 @@ func main() {
 		gin.SetMode(gin.DebugMode)
 	}
 	r := router.Setup(handler.New(db, cfg, rdb, settings), cfg, db, rdb)
+
+	// 比赛到点后把题目里的隐藏题放开：每 30 秒检查一次，失败只记日志
+	go func() {
+		if err := service.PublishContestProblems(db); err != nil {
+			logger.Errorf("比赛题目公开检查失败: %v", err)
+		}
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := service.PublishContestProblems(db); err != nil {
+				logger.Errorf("比赛题目公开检查失败: %v", err)
+			}
+		}
+	}()
 
 	logger.Businessf("HTTP 服务监听 %s", cfg.ServerAddr)
 	if err := r.Run(cfg.ServerAddr); err != nil {

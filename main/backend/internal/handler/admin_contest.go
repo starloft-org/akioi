@@ -8,6 +8,7 @@ import (
 	"akioi/internal/logger"
 	"akioi/internal/model"
 
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -415,6 +416,39 @@ func (h *Handler) AdminSetContestProblems(c *gin.Context) {
 		return
 	}
 
+	// 比赛只能选自己上传的题目，或公开题目（含个人题库、团队题库里的公开题）
+	u := httpx.MustUser(c)
+	if u == nil {
+		return
+	}
+	var picked []uint
+	for _, item := range req.Problems {
+		if item.ProblemID != 0 {
+			picked = append(picked, item.ProblemID)
+		}
+	}
+	var candidates []model.Problem
+	if len(picked) > 0 {
+		if err := h.DB.Unscoped().Where("id IN ?", picked).Find(&candidates).Error; err != nil {
+			httpx.ServerError(c, "查询题目失败")
+			return
+		}
+	}
+	byID := make(map[uint]model.Problem, len(candidates))
+	for i := range candidates {
+		byID[candidates[i].ID] = candidates[i]
+	}
+	for _, item := range req.Problems {
+		p, ok := byID[item.ProblemID]
+		if !ok {
+			httpx.BadRequest(c, fmt.Sprintf("题目 %d 不存在", item.ProblemID))
+			return
+		}
+		if p.CreatedBy != u.ID && (p.Visibility != model.ProblemVisibilityPublic || p.Access != model.ProblemAccessPublic) {
+			httpx.BadRequest(c, fmt.Sprintf("题目 %s 不是自己上传的，也不是公开题目，不能加入比赛", p.DisplayID))
+			return
+		}
+	}
 	rows := make([]model.ContestProblem, 0, len(req.Problems))
 	for i, item := range req.Problems {
 		if item.ProblemID == 0 {

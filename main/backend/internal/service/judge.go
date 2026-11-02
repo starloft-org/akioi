@@ -68,7 +68,7 @@ func (s *JudgeService) Submit(ctx context.Context, in SubmitInput) (*model.Submi
 	}
 	// 受限题目：团队题目仅所属团队成员可提交，个人题目仅创建者可提交；
 	// 公开的团队题目与个人题目所有人均可提交。
-	if problem.Access != model.ProblemAccessPublic {
+	if problem.Access != model.ProblemAccessPublic && in.ContestID == 0 {
 		switch {
 		case problem.TeamID > 0:
 			var teamCount int64

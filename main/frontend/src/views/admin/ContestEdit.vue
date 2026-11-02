@@ -88,6 +88,9 @@
         <el-button :disabled="!pickedProblemId" @click="addProblem">添加</el-button>
         <el-button type="primary" :loading="savingProblems" @click="saveProblems">保存编排</el-button>
       </div>
+      <p class="muted">
+        只能选择自己上传的题目，或所有公开题目（含个人题库、团队题库里的公开题）；隐藏题在比赛开始后会自动转为公开。
+      </p>
 
       <el-table :data="selectedProblems" border>
         <el-table-column label="编号" width="110">
@@ -254,7 +257,12 @@ const handleSave = async () => {
 const searchProblems = async (keyword) => {
   searching.value = true
   try {
-    const data = await adminListProblems({ keyword: keyword || undefined, page: 1, page_size: 20 })
+    const data = await adminListProblems({
+      keyword: keyword || undefined,
+      page: 1,
+      page_size: 20,
+      contest_selectable: 1
+    })
     problemOptions.value = data.items || []
   } catch (e) {
     problemOptions.value = []

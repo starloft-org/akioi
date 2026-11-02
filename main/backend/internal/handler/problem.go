@@ -253,9 +253,15 @@ func (h *Handler) SiteInfo(c *gin.Context) {
 	})
 }
 
+// problemAccessible 判断当前请求者能否查看题目：管理员、已开始比赛里的题目、
+// 公开题、以及团队题/个人题的归属成员都可以看。
 func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 	u := httpx.CurrentUser(c)
 	if u != nil && u.IsAdmin() {
+		return true
+	}
+	// 已经开始的比赛引用了这道题：参赛者要能打开，不再受隐藏与归属限制
+	if h.problemInRunningContest(p.ID) {
 		return true
 	}
 	// 受限题目：团队题目仅所属团队成员可见，个人题目仅创建者本人可见
@@ -270,13 +276,16 @@ func (h *Handler) problemAccessible(c *gin.Context, p *model.Problem) bool {
 			return p.OwnerID == u.ID
 		}
 	}
-	if p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly {
-		return true
-	}
+	return p.Visibility == model.ProblemVisibilityPublic && !p.ContestOnly
+}
+
+// problemInRunningContest 判断题目是否已经被已经开始（且未删除）的比赛引用。
+func (h *Handler) problemInRunningContest(problemID uint) bool {
 	var count int64
 	h.DB.Table("contest_problems").
 		Joins("JOIN contests ON contests.id = contest_problems.contest_id").
-		Where("contest_problems.problem_id = ? AND contests.start_at <= ?", p.ID, time.Now()).
+		Where("contest_problems.problem_id = ? AND contests.start_at <= ? AND contests.deleted_at IS NULL",
+			problemID, time.Now()).
 		Count(&count)
 	return count > 0
 }

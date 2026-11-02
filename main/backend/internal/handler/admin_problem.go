@@ -52,6 +52,13 @@ func (h *Handler) AdminListProblems(c *gin.Context) {
 	page, pageSize, offset := httpx.Pagination(c)
 
 	query := h.DB.Model(&model.Problem{})
+	// 比赛选题：只能选自己上传的题目，或公开题目（含个人题库、团队题库里的公开题）
+	if v := strings.ToLower(strings.TrimSpace(c.Query("contest_selectable"))); v == "1" || v == "true" {
+		if u := httpx.CurrentUser(c); u != nil {
+			query = query.Where("(created_by = ? OR (visibility = ? AND access = ?))",
+				u.ID, model.ProblemVisibilityPublic, model.ProblemAccessPublic)
+		}
+	}
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
 		query = query.Where("display_id = ? OR title LIKE ?", kw, like)
