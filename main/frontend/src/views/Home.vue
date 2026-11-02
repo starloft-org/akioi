@@ -84,6 +84,11 @@
                 <span v-else class="muted">—</span>
               </template>
             </el-table-column>
+            <el-table-column label="上传" width="104">
+              <template #default="{ row }">
+                <span class="muted">{{ fromNow(row.created_at) }}</span>
+              </template>
+            </el-table-column>
             <el-table-column label="通过率" width="90" align="right">
               <template #default="{ row }">
                 <span class="muted">{{ acRate(row) }}</span>
@@ -284,7 +289,7 @@ const statusWeight = (status) => ({ running: 0, pending: 1, ended: 2 }[status] ?
 
 const loadProblems = async () => {
   try {
-    const data = await listProblems({ page: 1, page_size: 8 })
+    const data = await listProblems({ page: 1, page_size: 8, sort: 'latest' })
     problems.value = data.items || []
     stats.problems = data.total || problems.value.length
   } catch (e) {

@@ -80,7 +80,12 @@ func (h *Handler) ListProblems(c *gin.Context) {
 		return
 	}
 	var problems []model.Problem
-	if err := query.Order("bank_id asc, display_id asc").Offset(offset).Limit(pageSize).Find(&problems).Error; err != nil {
+	order := "bank_id asc, display_id asc"
+	if strings.EqualFold(strings.TrimSpace(c.Query("sort")), "latest") {
+		// 首页「最新题目」按上传时间倒序，同一时间按 id 倒序保证稳定
+		order = "created_at desc, id desc"
+	}
+	if err := query.Order(order).Offset(offset).Limit(pageSize).Find(&problems).Error; err != nil {
 		httpx.ServerError(c, "查询题目失败")
 		return
 	}
