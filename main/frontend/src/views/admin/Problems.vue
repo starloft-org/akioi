@@ -81,7 +81,6 @@
       <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="router.push(`/admin/problems/${row.id}/edit`)">编辑</el-button>
-          <el-button size="small" @click="router.push(`/admin/problems/${row.id}/testdata`)">测试数据</el-button>
           <el-button size="small" @click="removeProblem(row)">删除</el-button>
         </template>
       </el-table-column>
