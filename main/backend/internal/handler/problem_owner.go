@@ -134,10 +134,10 @@ func (h *Handler) uploadProblemTestdata(c *gin.Context, p *model.Problem) {
 		httpx.ServerError(c, "查询测试数据失败")
 		return
 	}
+	h.scheduleProblemSync(p.ID)
 	httpx.OK(c, gin.H{
 		"items":       items,
 		"total_score": p.FullScore(),
-		"sync_failed": h.Testdata.SyncToNodes(syncContext(c), p.ID),
 	})
 }
 

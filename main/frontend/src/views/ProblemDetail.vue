@@ -10,7 +10,7 @@
           <div class="problem-meta muted">
             <span>时间限制 {{ problem.time_limit_ms }} ms</span>
             <span>内存限制 {{ problem.memory_limit_mb }} MB</span>
-            <span>积分 {{ problem.points }}</span>
+            <span v-if="problem.points > 0">积分 {{ problem.points }}</span>
             <DifficultyTag v-if="problem.difficulty" :difficulty="problem.difficulty" />
             <span>通过率 {{ rateText(problem.acceptance_rate) }}</span>
             <span>提交 {{ problem.submit_count }} · 通过 {{ problem.accepted_count }}</span>

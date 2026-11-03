@@ -121,9 +121,6 @@
           <el-input-number v-model="form.memory_limit_mb" :min="16" :max="2048" :step="16" />
           <span class="muted" style="margin-left: 8px">MB</span>
         </el-form-item>
-        <el-form-item label="分值">
-          <el-input-number v-model="form.points" :min="0" :max="100000" />
-        </el-form-item>
         <el-form-item label="题目描述">
           <MarkdownEditor v-model="form.description" :rows="8" placeholder="支持 Markdown 与 LaTeX；图片可上传或直接粘贴" />
         </el-form-item>
@@ -547,7 +544,6 @@ async function save() {
     tags: form.value.tags,
     time_limit_ms: form.value.time_limit_ms,
     memory_limit_mb: form.value.memory_limit_mb,
-    points: form.value.points,
     description: form.value.description,
     input_format: form.value.input_format,
     output_format: form.value.output_format,

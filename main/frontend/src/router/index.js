@@ -115,6 +115,11 @@ const routes = [
         component: () => import('@/views/admin/ProblemEdit.vue')
       },
       {
+        // 旧的独立「测试数据」页面已并入编辑页，这里保留地址做跳转，避免旧链接落到 404。
+        path: 'problems/:id/testdata',
+        redirect: (to) => `/admin/problems/${to.params.id}/edit`
+      },
+      {
         path: 'contests',
         name: 'admin-contests',
         meta: { permission: 'contests' },

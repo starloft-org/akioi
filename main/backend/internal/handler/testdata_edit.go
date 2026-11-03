@@ -90,7 +90,9 @@ func (h *Handler) updateProblemTestdataScores(c *gin.Context, p *model.Problem) 
 		httpx.ServerError(c, "题目不存在")
 		return
 	}
-	h.respondProblemTestdataWithSync(c, &fresh, nil)
+	// 分值变化后由后端进程在后台重新推送，前端不展示推送过程。
+	h.scheduleProblemSync(fresh.ID)
+	h.respondProblemTestdata(c, &fresh)
 }
 
 func (h *Handler) reorderProblemTestdata(c *gin.Context, p *model.Problem) {
@@ -106,30 +108,12 @@ func (h *Handler) reorderProblemTestdata(c *gin.Context, p *model.Problem) {
 		return
 	}
 	logger.Businessf("题目 %s 的测试点顺序已调整", p.DisplayID)
-	failed := h.Testdata.SyncToNodes(syncContext(c), p.ID)
 	fresh := *p
 	if err := h.DB.First(&fresh, p.ID).Error; err != nil {
 		httpx.ServerError(c, "题目不存在")
 		return
 	}
-	h.respondProblemTestdataWithSync(c, &fresh, failed)
+	h.scheduleProblemSync(fresh.ID)
+	h.respondProblemTestdata(c, &fresh)
 }
 
-// respondProblemTestdataWithSync 返回测试点清单并附带测试数据同步失败的节点。
-func (h *Handler) respondProblemTestdataWithSync(c *gin.Context, p *model.Problem, syncFailed []string) {
-	items, err := h.testcaseItems(p.ID)
-	if err != nil {
-		httpx.ServerError(c, "查询测试数据失败")
-		return
-	}
-	total := 0
-	for _, item := range items {
-		total += item.Score
-	}
-	httpx.OK(c, gin.H{
-		"items":       items,
-		"total_score": total,
-		"subtasks":    p.Subtasks(),
-		"sync_failed": syncFailed,
-	})
-}

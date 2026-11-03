@@ -348,6 +348,10 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		}
 		access = *req.Access
 	}
+	// 个人/团队题目不支持积分，只有公共题目的积分参与排行榜。
+	if teamID > 0 || ownerID > 0 {
+		points = 0
+	}
 
 	// 题号由所属题库按「前缀 + 定长序号」自动分配，不接受手工指定；
 	// 团队题目用团队库、个人题目用个人库，公共题目用请求指定或主库。
@@ -416,6 +420,8 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		httpx.ServerError(c, "创建题目失败")
 		return
 	}
+	// 题目保存后由后端进程在后台推送测试数据，前端不参与。
+	h.scheduleProblemSync(p.ID)
 	httpx.OK(c, gin.H{"problem": gin.H{"id": p.ID, "display_id": p.DisplayID}})
 
 	if err := h.syncProblemTags(h.DB, p.ID, tagNamesOf(&p)); err != nil {
@@ -509,6 +515,10 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 		updates["team_id"] = teamID
 		updates["owner_id"] = ownerID
 		updates["bank_id"] = bank.ID
+		// 个人/团队题目不支持积分，转过去时一并清零。
+		if teamID > 0 || ownerID > 0 {
+			updates["points"] = 0
+		}
 		renumber = true
 	} else if req.BankID != nil && *req.BankID != 0 && *req.BankID != p.BankID {
 		bank, err = h.resolveProblemBank(req.BankID)
@@ -592,7 +602,7 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	if req.Source != nil {
 		updates["source"] = strings.TrimSpace(*req.Source)
 	}
-	if req.Points != nil {
+	if req.Points != nil && teamID == 0 && ownerID == 0 {
 		if *req.Points < 0 || *req.Points > 100000 {
 			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
 			return
@@ -658,6 +668,8 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 			return
 		}
 	}
+	// 编辑题目同样在后台推送一次测试数据，保证评测节点上的数据与题目一致。
+	h.scheduleProblemSync(fresh.ID)
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID}})
 }
 

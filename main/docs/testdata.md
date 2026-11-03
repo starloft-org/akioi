@@ -92,3 +92,9 @@ sample.out
 - 改分：`PUT /api/admin/v1/problems/:id/testdata/scores`（body `{"scores":[{"index":1,"score":20}]}`），用户端同路径为 `PUT /api/v1/my/problems/:id/testdata/scores`
 - 重排：`POST /api/admin/v1/problems/:id/testdata/reorder`（body `{"order":[3,1,2]}`，`order` 是原测试点序号的新顺序），服务端会按新顺序重写磁盘上的 `1.in/1.out…` 并同步子任务引用；用户端为 `POST /api/v1/my/problems/:id/testdata/reorder`
 - 测试数据只保存在主站：导入题目时不再逐题推送到评测节点，后台每 2 分钟把「测试数据有更新还没同步」的题目同步一次（`testdata_synced_at` 记录上次成功同步时间）；上传/改分后仍会立即尝试同步一次，失败的节点会记在题目的同步状态里
+
+## 满分与积分
+
+- 所有题目的判题满分固定为 100：上传或导入测试数据时，没有单独指定分值的测试点平分 100 分（除不尽的余数从后面的测试点开始往前补）。
+- 公共题目才有「排行榜积分」：默认随难度给值、可在后台手动调整，全站排行榜按 `积分 × 该题最高得分 / 满分` 折算。
+- 个人题目与团队题目不参与排行榜，也不设积分，只统计测评得分。

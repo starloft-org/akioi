@@ -282,14 +282,8 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 	if req.Difficulty != nil {
 		difficulty = strings.TrimSpace(*req.Difficulty)
 	}
-	points := model.DefaultPoints(difficulty)
-	if req.Points != nil {
-		if *req.Points < 0 || *req.Points > 100000 {
-			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
-			return
-		}
-		points = *req.Points
-	}
+	// 个人/团队题目不支持积分：判题满分固定 100，积分不参与排行榜，这里固定记 0。
+	points := 0
 
 	// 归属：团队题目要求操作者是队长，未归属团队的题目归为个人题目
 	teamID := uint(0)
@@ -369,6 +363,8 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 		httpx.ServerError(c, "创建题目失败")
 		return
 	}
+	// 题目保存后由后端进程在后台推送测试数据，前端不参与。
+	h.scheduleProblemSync(p.ID)
 	httpx.OK(c, gin.H{"problem": gin.H{"id": p.ID, "display_id": p.DisplayID, "kind": p.Kind()}})
 
 	if err := h.syncProblemTags(h.DB, p.ID, tagNamesOf(&p)); err != nil {
@@ -436,13 +432,7 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	if req.Source != nil {
 		updates["source"] = strings.TrimSpace(*req.Source)
 	}
-	if req.Points != nil {
-		if *req.Points < 0 || *req.Points > 100000 {
-			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
-			return
-		}
-		updates["points"] = *req.Points
-	}
+	// 个人/团队题目不支持积分，忽略请求里携带的分值。
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)
 		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat && cm != model.CompareModeSPJ {
@@ -495,6 +485,7 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 			return
 		}
 	}
+	h.scheduleProblemSync(fresh.ID)
 	httpx.OK(c, gin.H{"problem": gin.H{"id": fresh.ID, "display_id": fresh.DisplayID, "kind": fresh.Kind()}})
 }
 

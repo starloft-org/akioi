@@ -125,9 +125,12 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="排行榜积分">
+          <el-form-item v-if="form.ownership === 'public'" label="排行榜积分">
             <el-input-number v-model="form.points" :min="0" :max="100000" />
             <span class="form-hint">随难度自动设置，可手动调整</span>
+          </el-form-item>
+          <el-form-item v-else label="排行榜积分">
+            <span class="form-hint">个人/团队题目不参与排行榜，没有积分，只统计测评得分</span>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -225,7 +228,6 @@
         <el-button type="primary" :loading="testdataUploading" :disabled="!testdataFiles.length" @click="uploadTestdata">
           上传测试数据（{{ testdataFiles.length }}）
         </el-button>
-        <el-button :loading="testdataSyncing" :disabled="!testcases.length" @click="syncTestdata">同步到评测节点</el-button>
         <el-button :disabled="!testcases.length" @click="downloadTestdata">下载数据包</el-button>
         <el-button type="danger" plain :disabled="!testcases.length" @click="clearTestdata">清空测试数据</el-button>
       </div>
@@ -273,7 +275,6 @@ import {
   adminGetProblem,
   adminListTestdata,
   adminUploadTestdata,
-  adminSyncTestdata,
   adminDownloadTestdata,
   adminDeleteTestdata,
   adminUpdateTestdataScores,
@@ -465,7 +466,7 @@ const buildPayload = () => ({
   difficulty: form.difficulty,
   tags: form.tags,
   source: form.source,
-  points: form.points,
+  points: form.ownership === 'public' ? form.points : 0,
   visibility: form.visibility,
   compare_mode: form.compare_mode,
   float_eps: form.float_eps,
@@ -523,7 +524,6 @@ const testdataFiles = ref([])
 const subtasksText = ref('')
 const testdataTotalScore = ref(0)
 const testdataUploading = ref(false)
-const testdataSyncing = ref(false)
 const testdataSaving = ref(false)
 
 const loadTestdata = async () => {
@@ -570,7 +570,7 @@ const uploadTestdata = async () => {
     testcases.value = data.items || []
     testdataTotalScore.value = data.total_score || 0
     testdataFiles.value = []
-    ElMessage.success(data.sync_failed?.length ? '测试数据已保存，部分评测节点同步失败' : '测试数据已更新')
+    ElMessage.success('测试数据已保存，后端会自动推送到评测节点')
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '上传测试数据失败')
   } finally {
@@ -613,18 +613,7 @@ const moveTestcase = async (index, delta) => {
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '调整顺序失败')
   }
-}
 
-const syncTestdata = async () => {
-  testdataSyncing.value = true
-  try {
-    await adminSyncTestdata(problemId.value)
-    ElMessage.success('已推送到评测节点')
-  } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '推送失败')
-  } finally {
-    testdataSyncing.value = false
-  }
 }
 
 const downloadTestdata = async () => {
