@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/smtp"
 	"regexp"
 	"strings"
@@ -176,7 +177,11 @@ type loginAuth struct {
 	password string
 }
 
-func (a loginAuth) Start(*smtp.ServerInfo) (string, []byte, error) {
+func (a loginAuth) Start(info *smtp.ServerInfo) (string, []byte, error) {
+	// 认证凭据只能在加密连接上发送；明文连接直接拒绝，不做降级。
+	if !info.TLS {
+		return "", nil, fmt.Errorf("拒绝在未加密的 SMTP 连接上发送认证凭据")
+	}
 	return "LOGIN", []byte(a.username), nil
 }
 
@@ -213,7 +218,8 @@ func sendMail(cfg config.SMTPConfig, to, subject, htmlBody string) error {
 	}
 
 	if cfg.Port == 465 {
-		conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: cfg.Host})
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr,
+			&tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12})
 		if err != nil {
 			return fmt.Errorf("连接 SMTP 服务器失败: %w", err)
 		}
@@ -232,17 +238,32 @@ func deliverOverTLS(conn *tls.Conn, host string, auth smtp.Auth, from, to, messa
 }
 
 func deliverWithSTARTTLS(addr, host string, auth smtp.Auth, from, to, message string) error {
-	client, err := smtp.Dial(addr)
+	client, err := dialSMTP(addr, host)
 	if err != nil {
-		return fmt.Errorf("连接 SMTP 服务器失败: %w", err)
+		return err
 	}
 	defer func() { _ = client.Close() }()
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		if err := client.StartTLS(&tls.Config{ServerName: host}); err != nil {
-			return fmt.Errorf("STARTTLS 升级失败: %w", err)
-		}
+	if ok, _ := client.Extension("STARTTLS"); !ok {
+		return fmt.Errorf("SMTP 服务器不支持 STARTTLS，已拒绝在不加密的连接上发送邮件")
+	}
+	if err := client.StartTLS(&tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}); err != nil {
+		return fmt.Errorf("STARTTLS 升级失败: %w", err)
 	}
 	return deliver(client, auth, from, to, message)
+}
+
+// dialSMTP 带超时连接 SMTP 服务器，避免网络异常时长期占用协程。
+func dialSMTP(addr, host string) (*smtp.Client, error) {
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("连接 SMTP 服务器失败: %w", err)
+	}
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("建立 SMTP 会话失败: %w", err)
+	}
+	return client, nil
 }
 
 func deliver(client *smtp.Client, auth smtp.Auth, from, to, message string) error {

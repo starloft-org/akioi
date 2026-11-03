@@ -26,6 +26,7 @@ type JudgeConfig struct {
 	CompileTimeoutSec int
 	CompileMemoryMB   int
 	OutputLimitMB     int
+	WorkQuotaMB       int
 	TmpfsMB           int
 	CppCompiler       string
 	CppStd            string
@@ -96,6 +97,7 @@ func Load() (*Config, error) {
 			CompileTimeoutSec: getEnvInt("COMPILE_TIMEOUT_SEC", 20),
 			CompileMemoryMB:   getEnvInt("COMPILE_MEMORY_MB", 1024),
 			OutputLimitMB:     getEnvInt("OUTPUT_LIMIT_MB", 64),
+			WorkQuotaMB:       getEnvInt("WORK_QUOTA_MB", 512),
 			TmpfsMB:           getEnvInt("TMPFS_MB", 64),
 			CppCompiler:       getEnv("CPP_COMPILER", "g++"),
 			CppStd:            getEnv("CPP_STD", "c++14"),

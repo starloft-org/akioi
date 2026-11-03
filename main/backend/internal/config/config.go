@@ -50,6 +50,10 @@ type Config struct {
 	Env        string
 	ServerAddr string
 
+	// TrustedProxies 只信任这些代理传来的转发头；直连请求忽略 X-Forwarded-For，
+	// 避免客户端伪造来源 IP 绕过按 IP 的限流与访问日志。
+	TrustedProxies []string
+
 	DBHost        string
 	DBPort        int
 	DBUser        string
@@ -86,6 +90,8 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Env:        getEnv("APP_ENV", "production"),
 		ServerAddr: getEnv("SERVER_ADDR", ":8080"),
+		// 默认只信任本机与容器/内网地址：反向代理在同网段时才能透传真实 IP。
+		TrustedProxies: splitList(getEnv("TRUSTED_PROXIES", "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")),
 
 		DBHost:        getEnv("DB_HOST", "mysql"),
 		DBPort:        getEnvInt("DB_PORT", 3306),
@@ -173,4 +179,15 @@ func getEnvInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// splitList 把逗号分隔的配置值拆成去空的列表。
+func splitList(raw string) []string {
+	out := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

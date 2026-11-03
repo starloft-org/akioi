@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 
 	"akioi/internal/httpx"
@@ -143,19 +144,34 @@ func Recover() gin.HandlerFunc {
 	}
 }
 
-// RealIP 优先取反向代理透传的真实 IP，供访问日志与限流使用。
+// RealIP 已停用：真实 IP 由 gin 的 ClientIP 依据 SetTrustedProxies 计算，
+// 直接改写 RemoteAddr 会让客户端用伪造的 X-Forwarded-For 绕过按 IP 的限流。
 func RealIP() gin.HandlerFunc {
+	return func(c *gin.Context) { c.Next() }
+}
+
+const (
+	// defaultBodyLimit 是普通 JSON 接口的请求体上限。
+	defaultBodyLimit = 2 << 20
+	// testdataBodyLimit 是测试数据上传的请求体上限。
+	testdataBodyLimit = 512 << 20
+	// importBodyLimit 是题目导入（可能包含外层 zip）的请求体上限。
+	importBodyLimit = 1024 << 20
+)
+
+// BodyLimit 在解析请求体之前套上 MaxBytesReader，超限请求在读取阶段即被拒绝，
+// 不再先把整个请求体读入内存或临时文件。
+func BodyLimit() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		limit := int64(defaultBodyLimit)
 		switch {
-		case c.GetHeader("X-Real-IP") != "":
-			c.Request.RemoteAddr = strings.TrimSpace(c.GetHeader("X-Real-IP"))
-		case c.GetHeader("X-Forwarded-For") != "":
-			fwd := c.GetHeader("X-Forwarded-For")
-			if idx := strings.Index(fwd, ","); idx > 0 {
-				c.Request.RemoteAddr = strings.TrimSpace(fwd[:idx])
-			} else {
-				c.Request.RemoteAddr = strings.TrimSpace(fwd)
-			}
+		case strings.Contains(c.Request.URL.Path, "/testdata"):
+			limit = testdataBodyLimit
+		case strings.HasSuffix(c.Request.URL.Path, "/import"):
+			limit = importBodyLimit
+		}
+		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 		}
 		c.Next()
 	}

@@ -42,7 +42,9 @@ func (h *Handler) GetUserProfile(c *gin.Context) {
 		Distinct("problem_id").Count(&solved)
 
 	var recent []model.Submission
-	h.DB.Where("user_id = ?", u.ID).Order("id desc").Limit(10).Find(&recent)
+	// 最近提交只展示查看者有权看到的题目，避免主页泄露私有题与隐藏题。
+	h.DB.Where("user_id = ?", u.ID).Where("problem_id IN (?)", h.visibleProblemIDs(httpx.CurrentUser(c))).
+		Order("id desc").Limit(10).Find(&recent)
 
 	httpx.OK(c, userProfile{
 		User:              model.NewPublicUser(&u),

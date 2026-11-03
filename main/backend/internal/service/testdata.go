@@ -464,12 +464,24 @@ func writeZip(w io.Writer, dir string) error {
 }
 
 // ExtractZip 展开上传的 zip 数据包，返回文件名到内容的映射。
+// 解压上限：单个数据包最多 2 万个文件、单文件 256MB、总解压 2GB，
+// 防止压缩炸弹在解压时耗尽磁盘与内存。
+const (
+	maxTestdataZipEntries = 20000
+	maxTestdataZipFile    = 256 << 20
+	maxTestdataZipTotal   = 2 << 30
+)
+
 func ExtractZip(content []byte) (map[string][]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
 	if err != nil {
 		return nil, fmt.Errorf("数据包不是合法的 zip 文件: %w", err)
 	}
+	if len(zr.File) > maxTestdataZipEntries {
+		return nil, fmt.Errorf("数据包文件数超过上限 %d", maxTestdataZipEntries)
+	}
 	out := make(map[string][]byte)
+	var total int64
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -478,13 +490,19 @@ func ExtractZip(content []byte) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		buf := new(bytes.Buffer)
-		if _, err := buf.ReadFrom(rc); err != nil {
-			_ = rc.Close()
+		buf, err := io.ReadAll(io.LimitReader(rc, maxTestdataZipFile+1))
+		_ = rc.Close()
+		if err != nil {
 			return nil, err
 		}
-		_ = rc.Close()
-		out[f.Name] = buf.Bytes()
+		if int64(len(buf)) > maxTestdataZipFile {
+			return nil, fmt.Errorf("压缩包内文件 %s 超过大小上限", f.Name)
+		}
+		total += int64(len(buf))
+		if total > maxTestdataZipTotal {
+			return nil, fmt.Errorf("数据包解压后超过大小上限")
+		}
+		out[f.Name] = buf
 	}
 	return out, nil
 }

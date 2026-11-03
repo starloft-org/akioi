@@ -103,6 +103,8 @@ export const adminGetSettings = () => request.get('/api/admin/v1/settings')
 export const adminUpdateSettings = (data) => request.put('/api/admin/v1/settings', data)
 
 export const adminListUsers = (params) => request.get('/api/admin/v1/users', { params })
+// 精简用户选择器：只返回 id/用户名/昵称，供题目、题单归属等场景使用
+export const adminUserSelector = (params) => request.get('/api/admin/v1/users/selector', { params })
 export const adminUpdateUser = (id, data) => request.put(`/api/admin/v1/users/${id}`, data)
 export const adminImportUsers = (file) => {
   const form = new FormData()

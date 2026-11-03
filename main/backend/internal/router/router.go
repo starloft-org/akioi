@@ -2,6 +2,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
 	"akioi/internal/config"
@@ -16,7 +17,11 @@ import (
 // Setup 装配全部路由并返回 gin 引擎。
 func Setup(h *handler.Handler, cfg *config.Config, db *gorm.DB, rdb *redis.Client) *gin.Engine {
 	r := gin.New()
-	r.Use(middleware.RealIP())
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		panic(fmt.Sprintf("受信任代理配置非法: %v", err))
+	}
+	// 请求体上限在解析之前生效，上传类接口按路径放宽。
+	r.Use(middleware.BodyLimit())
 	r.Use(middleware.Recover())
 	r.Use(middleware.AccessLog())
 	r.Use(middleware.CORS(func() []string { return h.Settings.Current().CORSAllowOrigins }))

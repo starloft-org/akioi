@@ -2,8 +2,6 @@ package judge
 
 import (
 	"fmt"
-	"io"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -148,24 +146,15 @@ func mergeStderr(errPath, sandboxStderr string) string {
 	return truncateRunes(strings.Join(parts, "\n"), stderrLimit)
 }
 
-// readHead 只读取文件开头的一段，避免被超大输出拖垮评测进程。
+// readHead 只读取文件开头的一段，避免被超大输出拖垮评测进程；
+// 拒绝符号链接与特殊文件，防止选手借工作目录读取沙箱外内容。
 func readHead(path string, max int64) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	b, err := io.ReadAll(io.LimitReader(f, max))
-	if err != nil {
-		return ""
-	}
-	return string(b)
+	return readHeadSafe(path, max)
 }
 
 // fileExists 判断文件是否已写入内容；/usr/bin/time 的报告为空说明它没有真正运行选手程序。
 func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Size() > 0
+	return isRegularFile(path)
 }
 
 // truncateRunes 按字符截断，避免中文被截成半个字。

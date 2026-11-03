@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"time"
@@ -60,6 +62,25 @@ func RateLimit(rdb *goredis.Client, currentLimit func() int) gin.HandlerFunc {
 			httpx.TooMany(c, httpx.CodeTooManyRequest, "请求过于频繁，请稍后重试")
 			c.Abort()
 			return
+		}
+		// 除按来源 IP 限流外，再按会话令牌限流：伪造多个来源 IP 也无法放大单账号的请求量。
+		if token := bearerToken(c); token != "" {
+			sum := sha256.Sum256([]byte(token))
+			tokenKey := redis.KeyRateLimitPrefix + "token:" + hex.EncodeToString(sum[:8])
+			tokenMember := fmt.Sprintf("%d-%s-token", time.Now().UnixNano(), c.Request.URL.Path)
+			tokenCount, err := slidingWindowScript.Run(ctx, rdb, []string{tokenKey},
+				time.Now().UnixMilli(), window, tokenMember).Int()
+			if err != nil {
+				logger.Errorf("限流检查失败，按拒绝处理: %v", err)
+				httpx.TooMany(c, httpx.CodeTooManyRequest, "服务繁忙，请稍后重试")
+				c.Abort()
+				return
+			}
+			if tokenCount >= limit {
+				httpx.TooMany(c, httpx.CodeTooManyRequest, "请求过于频繁，请稍后重试")
+				c.Abort()
+				return
+			}
 		}
 		c.Next()
 	}

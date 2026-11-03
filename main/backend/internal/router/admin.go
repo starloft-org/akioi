@@ -22,7 +22,11 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 	admin.PUT("/settings", middleware.RequirePermission(model.AdminPermissionSettings), h.AdminUpdateSettings)
 
 	// 用户列表对全部管理员开放，供题目归属等选择器使用；修改与导入需要用户管理权限。
-	admin.GET("/users", h.AdminListUsers)
+	// 用户管理列表包含手机号等敏感字段，只对拥有「用户管理」权限的管理员开放；
+	// 其他管理员在选题归属等场景改走 /users/selector 精简接口。
+	admin.GET("/users", middleware.RequirePermission(model.AdminPermissionUsers), h.AdminListUsers)
+	admin.GET("/users/selector", middleware.RequireAnyPermission(
+		model.AdminPermissionProblems, model.AdminPermissionContests, model.AdminPermissionUsers), h.AdminUserSelector)
 	users := admin.Group("/users", middleware.RequirePermission(model.AdminPermissionUsers))
 	{
 		users.PUT("/:id", h.AdminUpdateUser)

@@ -111,6 +111,11 @@ func (h *Handler) GetSubmission(c *gin.Context) {
 		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
 		return
 	}
+	// 个人题、团队题与隐藏题只对相关用户可见，避免通过别人的提交读到题目内容与评测细节。
+	if !h.submissionVisibleTo(u, &sub) {
+		httpx.Forbidden(c, "无权查看该提交")
+		return
+	}
 
 	items := h.decorateSubmissions([]model.Submission{sub})
 	canSeeCode := isSelf || isAdmin
@@ -151,6 +156,10 @@ func (h *Handler) GetSubmissionStatus(c *gin.Context) {
 	// 比赛结束前，别人的提交只对管理员可见
 	if sub.ContestID > 0 && !u.IsAdmin() && sub.UserID != u.ID && !h.contestRevealed(sub.ContestID) {
 		httpx.Forbidden(c, "比赛进行中，暂不能查看提交详情")
+		return
+	}
+	if !h.submissionVisibleTo(u, &sub) {
+		httpx.Forbidden(c, "无权查看该提交")
 		return
 	}
 
@@ -221,6 +230,8 @@ func (h *Handler) querySubmissions(c *gin.Context, u *model.User, contestID uint
 		// 比赛结束前的提交不公开，避免泄露比赛成绩
 		query = query.Where("contest_id = 0 OR contest_id IN (?)",
 			h.DB.Model(&model.Contest{}).Select("id").Where("end_at < ?", time.Now()))
+		// 个人题、团队题与隐藏题的提交只对相关用户可见，避免通过提交列表泄露题目内容。
+		query = query.Where("problem_id IN (?)", h.visibleProblemIDs(u))
 	}
 
 	var total int64

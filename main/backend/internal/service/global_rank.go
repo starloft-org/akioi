@@ -3,6 +3,7 @@ package service
 import (
 	"math"
 	"sort"
+	"time"
 
 	"akioi/internal/model"
 )
@@ -31,8 +32,12 @@ func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 		Order("id asc").Find(&users).Error; err != nil {
 		return nil, err
 	}
+	// 只有公共题库里的公共题计入全站积分：用户自建题目与团队/个人题目不计分，
+	// 避免用户给自己出的题设高分刷榜。
 	var problems []model.Problem
-	if err := s.db.Where("visibility = ?", model.ProblemVisibilityPublic).Find(&problems).Error; err != nil {
+	if err := s.db.Where("visibility = ?", model.ProblemVisibilityPublic).
+		Where("owner_id = 0 AND team_id = 0 AND access = ?", model.ProblemAccessPublic).
+		Find(&problems).Error; err != nil {
 		return nil, err
 	}
 
@@ -48,6 +53,9 @@ func (s *RankService) ComputeGlobal() ([]GlobalRankItem, error) {
 		if err := s.db.Model(&model.Submission{}).
 			Select("user_id, problem_id, MAX(score) AS best_score").
 			Where("problem_id IN ?", problemIDs).
+			// 进行中的比赛提交不进入全站积分，比赛结束后才计入。
+			Where("contest_id = 0 OR contest_id IN (?)",
+				s.db.Model(&model.Contest{}).Select("id").Where("end_at < ?", time.Now())).
 			Group("user_id, problem_id").Scan(&rows).Error; err != nil {
 			return nil, err
 		}

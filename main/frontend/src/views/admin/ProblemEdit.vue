@@ -279,7 +279,7 @@ import {
   adminUpdateTestdataScores,
   adminReorderTestdata,
   adminListProblemBanks,
-  adminListUsers,
+  adminUserSelector,
   adminUpdateProblem,
   listTags,
   listTeams
@@ -373,7 +373,7 @@ const searchUsers = async (keyword) => {
     users.value = []
     return
   }
-  const data = await adminListUsers({ keyword, page: 1, page_size: 20 }).catch(() => ({ items: [] }))
+  const data = await adminUserSelector({ keyword }).catch(() => ({ items: [] }))
   users.value = data.items || []
 }
 

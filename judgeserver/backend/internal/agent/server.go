@@ -230,10 +230,14 @@ func pathProblemID(w http.ResponseWriter, r *http.Request) (uint, bool) {
 }
 
 // extractZip 展开数据包；只接受纯文件名，解压总量不得超过上限。
+// extractZip 展开数据包；只接受纯文件名，解压总量与文件数都在读取过程中受限。
 func extractZip(content []byte, maxBytes int64) (map[string][]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
 	if err != nil {
 		return nil, errors.New("数据包不是合法的 zip 文件")
+	}
+	if len(zr.File) > maxZipEntries {
+		return nil, errors.New("数据包内文件数超过上限")
 	}
 	out := make(map[string][]byte, len(zr.File))
 	var total int64
@@ -249,20 +253,26 @@ func extractZip(content []byte, maxBytes int64) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		buf := new(bytes.Buffer)
-		if _, err := buf.ReadFrom(rc); err != nil {
+		remaining := maxBytes - total
+		if remaining < 0 {
 			_ = rc.Close()
-			return nil, err
-		}
-		_ = rc.Close()
-		total += int64(buf.Len())
-		if total > maxBytes {
 			return nil, errors.New("数据包解压后超过大小上限")
 		}
-		out[name] = buf.Bytes()
+		buf, err := io.ReadAll(io.LimitReader(rc, remaining+1))
+		_ = rc.Close()
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(buf)) > remaining {
+			return nil, errors.New("数据包解压后超过大小上限")
+		}
+		total += int64(len(buf))
+		out[name] = buf
 	}
 	return out, nil
 }
+
+const maxZipEntries = 20000
 
 // replaceDir 用新文件整体替换目录；先写临时目录再改名，失败不会留下半个数据包。
 func replaceDir(dir string, files map[string][]byte) error {

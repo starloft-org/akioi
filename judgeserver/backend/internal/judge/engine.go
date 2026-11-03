@@ -3,6 +3,7 @@ package judge
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -68,12 +69,13 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask, onCase func(d
 	compileCtx, cancelCompile := context.WithTimeout(ctx, time.Duration(e.cfg.Judge.CompileTimeoutSec)*time.Second)
 	defer cancelCompile()
 	compileRes, err := e.sb.Run(compileCtx, RunSpec{
-		Name:         e.containerName(task.SubmissionID, "compile"),
-		ShellCommand: strings.Join(lang.CompileArgs, " "),
-		MemoryMB:     e.cfg.Judge.CompileMemoryMB,
-		CPUs:         "1",
-		Timeout:      time.Duration(e.cfg.Judge.CompileTimeoutSec) * time.Second,
-		WorkHostDir:  hostWorkDir,
+		Name:             e.containerName(task.SubmissionID, "compile"),
+		ShellCommand:     strings.Join(lang.CompileArgs, " "),
+		MemoryMB:         e.cfg.Judge.CompileMemoryMB,
+		CPUs:             "1",
+		Timeout:          time.Duration(e.cfg.Judge.CompileTimeoutSec) * time.Second,
+		WorkHostDir:      hostWorkDir,
+		OutputLimitBytes: int64(e.cfg.Judge.WorkQuotaMB) * 1024 * 1024,
 	})
 	if err != nil {
 		res.JudgeMessage = "编译沙箱启动失败: " + err.Error()
@@ -197,6 +199,14 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 	timePath := filepath.Join(paths.localWork, timeName)
 	errPath := filepath.Join(paths.localWork, errName)
 
+	// 沙箱只挂载当前测试点的输入文件：标准答案留在评测进程侧，选手程序看不到。
+	caseInputDir, cleanupInput, inputErr := e.stageCaseInput(task.SubmissionID, tc.Index, paths.localTestdata, task.CompareMode == model.CompareModeSPJ)
+	if inputErr != nil {
+		item.Message = "无法准备测试数据：" + inputErr.Error()
+		return item, true
+	}
+	defer cleanupInput()
+
 	runCtx, cancel := context.WithTimeout(ctx, caseTimeout)
 	defer cancel()
 	res, err := e.sb.Run(runCtx, RunSpec{
@@ -206,10 +216,14 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 		CPUs:             "1",
 		Timeout:          caseTimeout,
 		WorkHostDir:      paths.hostWork,
-		TestdataHostDir:  paths.hostTestdata,
+		TestdataHostDir:  caseInputDir,
 		OutputLimitBytes: paths.outputLimit * 2,
 	})
 	if err != nil {
+		if quotaErr := checkWorkQuota(paths.localWork, int64(e.cfg.Judge.WorkQuotaMB)*1024*1024); quotaErr != nil {
+			item.Message = quotaErr.Error()
+			return item, true
+		}
 		item.Message = "沙箱执行失败: " + err.Error()
 		return item, false
 	}
@@ -268,7 +282,7 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 	}
 
 	if task.CompareMode == model.CompareModeSPJ {
-		return e.runSPJ(ctx, task, tc, paths)
+		return e.runSPJ(ctx, task, tc, paths, caseInputDir)
 	}
 
 	cmp := Compare(task.CompareMode, task.FloatEps, expected, actual)
@@ -302,7 +316,7 @@ func (e *Engine) containerName(submissionID uint, phase string) string {
 }
 
 func parseTimeReport(path string) (int, int) {
-	b, err := os.ReadFile(path)
+	b, err := readFileSafe(path, maxTimeReportBytes)
 	if err != nil {
 		return 0, 0
 	}
@@ -381,7 +395,7 @@ func (e *Engine) prepareSPJ(ctx context.Context, task *model.JudgeTask, localWor
 
 // runSPJ 用题目自带的 SPJ 程序判定单个测试点：退出码 0 通过，非 0 判错，stderr 作为提示。
 func (e *Engine) runSPJ(ctx context.Context, task *model.JudgeTask, tc model.TaskTestcase,
-	paths casePaths) (model.TestcaseResult, bool) {
+	paths casePaths, inputDir string) (model.TestcaseResult, bool) {
 
 	item := model.TestcaseResult{Index: tc.Index, Group: tc.Group, Status: model.StatusSystemError}
 	if paths.spjPath == "" {
@@ -400,7 +414,7 @@ func (e *Engine) runSPJ(ctx context.Context, task *model.JudgeTask, tc model.Tas
 		CPUs:             "1",
 		Timeout:          timeout,
 		WorkHostDir:      paths.hostWork,
-		TestdataHostDir:  paths.hostTestdata,
+		TestdataHostDir:  inputDir,
 		OutputLimitBytes: 1 << 20,
 	})
 	if err != nil {
@@ -423,4 +437,67 @@ func (e *Engine) runSPJ(ctx context.Context, task *model.JudgeTask, tc model.Tas
 	item.Status = model.StatusWrongAnswer
 	item.Message = truncate(message, 200)
 	return item, false
+}
+
+// stageCaseInput 把当前测试点的输入（SPJ 时连同标准答案）复制到独立目录，
+// 只把这个目录以只读方式挂进沙箱；普通选手程序看不到标准答案。
+func (e *Engine) stageCaseInput(submissionID uint, index int, localTestdata string, withAnswer bool) (string, func(), error) {
+	sub := strconv.FormatUint(uint64(submissionID), 10)
+	name := strconv.Itoa(index)
+	rel := filepath.Join("sandbox_inputs", sub, name)
+	localDir := filepath.Join(e.cfg.Judge.WorkDir, rel)
+	hostDir := filepath.Join(e.hostWorkDir(), rel)
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { _ = os.RemoveAll(localDir) }
+	in, err := os.ReadFile(filepath.Join(localTestdata, name+".in"))
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if err := os.WriteFile(filepath.Join(localDir, name+".in"), in, 0o644); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if withAnswer {
+		out, err := os.ReadFile(filepath.Join(localTestdata, name+".out"))
+		if err != nil {
+			cleanup()
+			return "", func() {}, err
+		}
+		if err := os.WriteFile(filepath.Join(localDir, name+".out"), out, 0o644); err != nil {
+			cleanup()
+			return "", func() {}, err
+		}
+	}
+	return hostDir, cleanup, nil
+}
+
+// checkWorkQuota 限制单个评测任务的可写目录总量，避免一次提交把节点磁盘写满。
+func checkWorkQuota(dir string, limit int64) error {
+	if limit <= 0 {
+		return nil
+	}
+	var total int64
+	exceeded := false
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		total += info.Size()
+		if total > limit {
+			exceeded = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if exceeded {
+		return fmt.Errorf("评测工作目录超过 %dMB 配额，评测已终止", limit/(1024*1024))
+	}
+	return nil
 }

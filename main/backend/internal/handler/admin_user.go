@@ -40,6 +40,10 @@ func permissionsOf(u *model.User) []string {
 func (h *Handler) AdminListUsers(c *gin.Context) {
 	page, pageSize, offset := httpx.Pagination(c)
 
+	operator := httpx.CurrentUser(c)
+	// 手机号属于敏感信息，只有拥有「用户管理」权限的管理员才能看到完整号码。
+	showPhone := operator != nil && operator.HasAdminPermission(model.AdminPermissionUsers)
+
 	query := h.DB.Model(&model.User{})
 	if kw := strings.TrimSpace(c.Query("keyword")); kw != "" {
 		like := "%" + kw + "%"
@@ -88,7 +92,7 @@ func (h *Handler) AdminListUsers(c *gin.Context) {
 			ID:              u.ID,
 			Username:        u.Username,
 			Nickname:        u.Nickname,
-			Phone:           model.PhoneString(u.Phone),
+			Phone:           maskedPhone(u, showPhone),
 			Role:            u.Role,
 			Status:          u.Status,
 			School:          u.School,
@@ -123,6 +127,21 @@ func (h *Handler) AdminUpdateUser(c *gin.Context) {
 	var req adminUpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.BadRequest(c, "请求参数格式错误")
+		return
+	}
+
+	operator := httpx.CurrentUser(c)
+	if operator == nil {
+		return
+	}
+	// 超级管理员账号只能由本人操作：避免拥有「用户管理」权限的管理员重置超管密码或封禁超管。
+	if u.IsSuperAdmin() && operator.ID != u.ID {
+		httpx.Forbidden(c, "不能修改超级管理员账号")
+		return
+	}
+	// 非超级管理员不能改动其他管理员的状态、密码与昵称。
+	if u.IsAdmin() && !operator.IsSuperAdmin() && operator.ID != u.ID {
+		httpx.Forbidden(c, "只有超级管理员可以修改其他管理员账号")
 		return
 	}
 
@@ -297,4 +316,40 @@ func (h *Handler) AdminImportUsers(c *gin.Context) {
 		imported++
 	}
 	httpx.OK(c, gin.H{"imported": imported, "skipped": skipped})
+}
+
+// maskedPhone 对没有「用户管理」权限的管理员隐藏手机号中间四位。
+func maskedPhone(u *model.User, show bool) string {
+	phone := model.PhoneString(u.Phone)
+	if show || phone == "" {
+		return phone
+	}
+	if len(phone) < 7 {
+		return "***"
+	}
+	return phone[:3] + "****" + phone[len(phone)-4:]
+}
+
+// AdminUserSelector 返回题目/题单归属选择器需要的精简用户列表：
+// 只包含 id、用户名与昵称，不含手机号等敏感字段。
+func (h *Handler) AdminUserSelector(c *gin.Context) {
+	query := h.DB.Model(&model.User{}).Select("id", "username", "nickname").Order("id asc")
+	if keyword := strings.TrimSpace(c.Query("keyword")); keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("username LIKE ? OR nickname LIKE ?", like, like)
+	}
+	var users []model.User
+	if err := query.Limit(50).Find(&users).Error; err != nil {
+		httpx.ServerError(c, "查询用户失败")
+		return
+	}
+	items := make([]gin.H, 0, len(users))
+	for i := range users {
+		items = append(items, gin.H{
+			"id":       users[i].ID,
+			"username": users[i].Username,
+			"nickname": users[i].Nickname,
+		})
+	}
+	httpx.OK(c, gin.H{"items": items, "total": len(items)})
 }

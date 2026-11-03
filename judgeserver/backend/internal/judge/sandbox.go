@@ -51,6 +51,7 @@ func (s *Sandbox) Run(ctx context.Context, spec RunSpec) (RunResult, error) {
 		"--network", "none",
 		"--read-only",
 		"--cap-drop", "ALL",
+		"--security-opt", "no-new-privileges",
 		"--pids-limit", "64",
 		"--memory", strconv.Itoa(spec.MemoryMB) + "m",
 		"--memory-swap", strconv.Itoa(spec.MemoryMB) + "m",
@@ -69,8 +70,8 @@ func (s *Sandbox) Run(ctx context.Context, spec RunSpec) (RunResult, error) {
 	args = append(args, s.cfg.SandboxImage, "sh", "-c", spec.ShellCommand)
 
 	cmd := exec.CommandContext(ctx, s.cfg.DockerBin, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := &cappedBuffer{max: 64 << 10}
+	cmd.Stderr = stderr
 
 	start := time.Now()
 	err := cmd.Run()
@@ -123,3 +124,24 @@ func truncate(s string, max int) string {
 	}
 	return s[:max] + "\n...(已截断)"
 }
+
+// cappedBuffer 只保留开头的固定字节数，超出部分继续消费但直接丢弃，
+// 避免 docker 子进程的输出把评测服务内存撑大或阻塞管道。
+type cappedBuffer struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (c *cappedBuffer) Write(p []byte) (int, error) {
+	if c.max > 0 && c.buf.Len() < c.max {
+		room := c.max - c.buf.Len()
+		if len(p) <= room {
+			_, _ = c.buf.Write(p)
+		} else {
+			_, _ = c.buf.Write(p[:room])
+		}
+	}
+	return len(p), nil
+}
+
+func (c *cappedBuffer) String() string { return c.buf.String() }

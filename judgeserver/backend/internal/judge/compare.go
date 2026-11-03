@@ -3,6 +3,7 @@ package judge
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -21,6 +22,9 @@ func Compare(mode string, eps float64, expected, actual []byte) CompareResult {
 	case model.CompareModeExact:
 		return compareExact(expected, actual)
 	case model.CompareModeFloat:
+		if math.IsNaN(eps) || math.IsInf(eps, 0) || eps < 0 {
+			eps = 0
+		}
 		return compareFloat(expected, actual, eps)
 	default:
 		return compareDefault(expected, actual)
@@ -73,6 +77,9 @@ func compareFloat(expected, actual []byte, eps float64) CompareResult {
 		}
 		ef, errE := strconv.ParseFloat(e[i], 64)
 		af, errA := strconv.ParseFloat(a[i], 64)
+		if math.IsNaN(ef) || math.IsInf(ef, 0) || math.IsNaN(af) || math.IsInf(af, 0) {
+			return CompareResult{Message: fmt.Sprintf("第 %d 个数字不是有限数值", i+1)}
+		}
 		if errE != nil || errA != nil {
 			return CompareResult{Message: fmt.Sprintf("第 %d 个 token 不一致", i+1)}
 		}
