@@ -87,7 +87,11 @@ func AutoMigrate(db *gorm.DB) error {
 	}
 
 	// 历史题目可能没有作者信息：按约定 A0001–A0009 归用户 3，其余归用户 1。
-	return backfillProblemAuthors(db)
+	if err := backfillProblemAuthors(db); err != nil {
+		return err
+	}
+	// 个人/团队题目不支持积分，历史数据里残留的分值一并清零。
+	return normalizeNonPublicProblemPoints(db)
 }
 
 // Seed 幂等写入初始数据：确保存在超级管理员，并为存量管理员补齐默认权限。
@@ -165,6 +169,18 @@ func getEnvDefault(key, def string) string {
 		return def
 	}
 	return v
+}
+
+// normalizeNonPublicProblemPoints 把个人/团队题目的积分清零：这些题目不参与排行榜，也没有积分。
+func normalizeNonPublicProblemPoints(db *gorm.DB) error {
+	res := db.Exec("UPDATE problems SET points = 0 WHERE (owner_id > 0 OR team_id > 0) AND points <> 0")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		logger.Businessf("已清零 %d 道个人/团队题目的积分", res.RowsAffected)
+	}
+	return nil
 }
 
 // backfillProblemAuthors 为缺少作者的存量题目补上作者。

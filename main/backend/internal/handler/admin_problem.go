@@ -602,6 +602,10 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	if req.Source != nil {
 		updates["source"] = strings.TrimSpace(*req.Source)
 	}
+	// 个人/团队题目不支持积分，只有公共题目的积分参与排行榜。
+	if teamID > 0 || ownerID > 0 {
+		updates["points"] = 0
+	}
 	if req.Points != nil && teamID == 0 && ownerID == 0 {
 		if *req.Points < 0 || *req.Points > 100000 {
 			httpx.BadRequest(c, "题目积分需在 0 到 100000 之间")
