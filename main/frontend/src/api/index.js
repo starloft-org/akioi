@@ -223,6 +223,13 @@ export const adminUploadTestdata = (id, files, scores, subtasks) => {
     timeout: 600000
   })
 }
+// 批量修改测试点分值（按测试点序号）
+export const adminUpdateTestdataScores = (id, scores) =>
+  request.put(`/api/admin/v1/problems/${id}/testdata/scores`, { scores })
+// 按新的顺序重排测试点（order 是原序号组成的数组）
+export const adminReorderTestdata = (id, order) =>
+  request.post(`/api/admin/v1/problems/${id}/testdata/reorder`, { order })
+
 export const adminDeleteTestdata = (id) => request.delete(`/api/admin/v1/problems/${id}/testdata`)
 export const adminDownloadTestdata = (id) =>
   request.get(`/api/admin/v1/problems/${id}/testdata/download`, { responseType: 'blob' })
@@ -319,6 +326,11 @@ export const uploadMyProblemTestdata = (id, files, scores, subtasks) => {
     timeout: 600000
   })
 }
+export const updateMyProblemTestdataScores = (id, scores) =>
+  request.put(`/api/v1/my/problems/${id}/testdata/scores`, { scores })
+export const reorderMyProblemTestdata = (id, order) =>
+  request.post(`/api/v1/my/problems/${id}/testdata/reorder`, { order })
+
 export const deleteMyProblemTestdata = (id) => request.delete(`/api/v1/my/problems/${id}/testdata`)
 export const listMyProblemSets = () => request.get('/api/v1/my/problem-sets')
 export const createMyProblemSet = (data) => request.post('/api/v1/my/problem-sets', data)

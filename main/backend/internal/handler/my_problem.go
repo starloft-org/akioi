@@ -197,6 +197,8 @@ type myProblemRequest struct {
 	Points        *int            `json:"points"`
 	CompareMode   *string         `json:"compare_mode"`
 	FloatEps      *float64        `json:"float_eps"`
+	SPJLanguage   *string         `json:"spj_language"`
+	SPJCode       *string         `json:"spj_code"`
 	// TeamID 归属团队；0 或空表示个人题目
 	TeamID *uint `json:"team_id"`
 	// Access 访问权限：1 公开，2 仅团队成员或本人
@@ -261,11 +263,16 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 	compareMode := model.CompareModeDefault
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)
-		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat {
+		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat && cm != model.CompareModeSPJ {
 			httpx.BadRequest(c, "比对模式取值非法")
 			return
 		}
 		compareMode = cm
+	}
+	spjLanguage, spjCode, spjErr := resolveSPJ(compareMode, req.SPJLanguage, req.SPJCode)
+	if spjErr != nil {
+		httpx.BadRequest(c, spjErr.Error())
+		return
 	}
 	floatEps := 1e-6
 	if req.FloatEps != nil {
@@ -325,6 +332,8 @@ func (h *Handler) CreateMyProblem(c *gin.Context) {
 		Points:        points,
 		Visibility:    model.ProblemVisibilityPublic,
 		CompareMode:   compareMode,
+		SPJLanguage:   spjLanguage,
+		SPJCode:       spjCode,
 		FloatEps:      floatEps,
 		TeamID:        teamID,
 		OwnerID:       ownerID,
@@ -436,7 +445,7 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	}
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)
-		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat {
+		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat && cm != model.CompareModeSPJ {
 			httpx.BadRequest(c, "比对模式取值非法")
 			return
 		}
@@ -444,6 +453,19 @@ func (h *Handler) UpdateMyProblem(c *gin.Context) {
 	}
 	if req.FloatEps != nil {
 		updates["float_eps"] = *req.FloatEps
+	}
+	if req.SPJCode != nil || req.SPJLanguage != nil || updates["compare_mode"] == model.CompareModeSPJ {
+		mode := p.CompareMode
+		if req.CompareMode != nil {
+			mode = strings.TrimSpace(*req.CompareMode)
+		}
+		language, code, err := resolveSPJ(mode, req.SPJLanguage, req.SPJCode)
+		if err != nil {
+			httpx.BadRequest(c, err.Error())
+			return
+		}
+		updates["spj_language"] = language
+		updates["spj_code"] = code
 	}
 	if rejectUserHidden(c, req.Visibility) {
 		return

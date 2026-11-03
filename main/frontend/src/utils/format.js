@@ -64,7 +64,8 @@ export const defaultPointsOf = (difficulty) => DIFFICULTY_POINTS[difficulty] ?? 
 export const COMPARE_MODES = [
   { value: 'default', label: '忽略行尾空格与末尾空行' },
   { value: 'exact', label: '严格比对' },
-  { value: 'float', label: '浮点数误差比对' }
+  { value: 'float', label: '浮点数误差比对' },
+  { value: 'spj', label: 'Special Judge 程序判定' }
 ]
 
 export const contestStatusText = (status) =>

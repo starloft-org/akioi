@@ -90,8 +90,18 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask, onCase func(d
 		return res
 	}
 
+	spjPath := ""
+	if task.CompareMode == model.CompareModeSPJ {
+		spjPath, err = e.prepareSPJ(ctx, task, localWorkDir, hostWorkDir)
+		if err != nil {
+			res.JudgeMessage = err.Error()
+			return res
+		}
+	}
+
 	problemDir := strconv.FormatUint(uint64(task.ProblemID), 10)
 	paths := casePaths{
+		spjPath:       spjPath,
 		localWork:     localWorkDir,
 		hostWork:      hostWorkDir,
 		localTestdata: filepath.Join(e.cfg.Judge.TestdataDir, problemDir),
@@ -163,6 +173,7 @@ func (e *Engine) Judge(ctx context.Context, task *model.JudgeTask, onCase func(d
 
 // casePaths 汇总单个测试点评测需要用到的目录与限制。
 type casePaths struct {
+	spjPath       string
 	localWork     string
 	hostWork      string
 	localTestdata string
@@ -256,6 +267,10 @@ func (e *Engine) runCase(ctx context.Context, task *model.JudgeTask, lang Langua
 		return item, true
 	}
 
+	if task.CompareMode == model.CompareModeSPJ {
+		return e.runSPJ(ctx, task, tc, paths)
+	}
+
 	cmp := Compare(task.CompareMode, task.FloatEps, expected, actual)
 	if !cmp.Accepted {
 		item.Status = model.StatusWrongAnswer
@@ -305,4 +320,107 @@ func parseTimeReport(path string) (int, int) {
 		}
 	}
 	return userMS, memKB
+}
+
+// prepareSPJ 把主站下发的 Special Judge 源码写进工作目录并编译成 /work/spj。
+func (e *Engine) prepareSPJ(ctx context.Context, task *model.JudgeTask, localWorkDir, hostWorkDir string) (string, error) {
+	if strings.TrimSpace(task.SPJCode) == "" {
+		return "", fmt.Errorf("题目开启了 SPJ，但没有下发 SPJ 程序")
+	}
+	lang := task.SPJLanguage
+	if lang == "" {
+		lang = model.LangCpp
+	}
+	compiler := e.cfg.Judge.CppCompiler
+	std := e.cfg.Judge.CppStd
+	flags := e.cfg.Judge.CppFlags
+	ext := "cpp"
+	switch lang {
+	case model.LangCpp:
+	case model.LangC:
+		compiler = e.cfg.Judge.CCompiler
+		std = e.cfg.Judge.CStd
+		flags = e.cfg.Judge.CFlags
+		ext = "c"
+	default:
+		return "", fmt.Errorf("SPJ 语言不支持: %s", lang)
+	}
+	source := filepath.Join(localWorkDir, "spj."+ext)
+	if err := os.WriteFile(source, []byte(task.SPJCode), 0o666); err != nil {
+		return "", fmt.Errorf("无法写入 SPJ 源文件")
+	}
+	parts := []string{compiler}
+	if std != "" {
+		parts = append(parts, "-std="+std)
+	}
+	parts = append(parts, splitFlags(flags)...)
+	parts = append(parts, "-o", "/work/spj", "/work/spj."+ext)
+	timeout := time.Duration(e.cfg.Judge.CompileTimeoutSec) * time.Second
+	compileCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	res, err := e.sb.Run(compileCtx, RunSpec{
+		Name:         e.containerName(task.SubmissionID, "spj"),
+		ShellCommand: strings.Join(parts, " "),
+		MemoryMB:     e.cfg.Judge.CompileMemoryMB,
+		CPUs:         "1",
+		Timeout:      timeout,
+		WorkHostDir:  hostWorkDir,
+	})
+	if err != nil {
+		return "", fmt.Errorf("SPJ 编译沙箱启动失败: %v", err)
+	}
+	if res.ExitCode != 0 {
+		msg := strings.TrimSpace(res.Stderr)
+		if msg == "" {
+			msg = "编译失败，无编译器输出"
+		}
+		return "", fmt.Errorf("SPJ 编译失败: %s", truncate(msg, 2000))
+	}
+	return "/work/spj", nil
+}
+
+// runSPJ 用题目自带的 SPJ 程序判定单个测试点：退出码 0 通过，非 0 判错，stderr 作为提示。
+func (e *Engine) runSPJ(ctx context.Context, task *model.JudgeTask, tc model.TaskTestcase,
+	paths casePaths) (model.TestcaseResult, bool) {
+
+	item := model.TestcaseResult{Index: tc.Index, Group: tc.Group, Status: model.StatusSystemError}
+	if paths.spjPath == "" {
+		item.Message = "题目没有可用的 SPJ 程序"
+		return item, true
+	}
+	command := fmt.Sprintf("%s /box/%d.in /box/%d.out /work/case%d.out",
+		paths.spjPath, tc.Index, tc.Index, tc.Index)
+	timeout := 15 * time.Second
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	res, err := e.sb.Run(runCtx, RunSpec{
+		Name:             e.containerName(task.SubmissionID, "spj"+strconv.Itoa(tc.Index)),
+		ShellCommand:     command,
+		MemoryMB:         256,
+		CPUs:             "1",
+		Timeout:          timeout,
+		WorkHostDir:      paths.hostWork,
+		TestdataHostDir:  paths.hostTestdata,
+		OutputLimitBytes: 1 << 20,
+	})
+	if err != nil {
+		item.Message = "SPJ 执行失败: " + err.Error()
+		return item, false
+	}
+	if res.TimedOut {
+		item.Message = "SPJ 运行超时"
+		return item, true
+	}
+	if res.ExitCode == 0 {
+		item.Status = model.StatusAccepted
+		item.Score = tc.Score
+		return item, false
+	}
+	message := strings.TrimSpace(res.Stderr)
+	if message == "" {
+		message = "SPJ 判定为不通过"
+	}
+	item.Status = model.StatusWrongAnswer
+	item.Message = truncate(message, 200)
+	return item, false
 }

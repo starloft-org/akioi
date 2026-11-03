@@ -11,12 +11,15 @@ import (
 	"time"
 
 	"akioi/internal/logger"
+	"akioi/internal/model"
 )
 
 // SyncToNodes 依次把某题的测试数据推送到各评测节点，返回推送失败的节点。
 func (s *TestdataService) SyncToNodes(ctx context.Context, problemID uint) []string {
 	nodes := s.settings.Current().JudgeNodeEndpoints
 	if len(nodes) == 0 {
+		// 没有配置评测节点时视为已同步，避免定时任务反复打包同题目。
+		s.markSynced(problemID)
 		return nil
 	}
 	zipPath, err := s.packageFile(problemID)
@@ -26,9 +29,13 @@ func (s *TestdataService) SyncToNodes(ctx context.Context, problemID uint) []str
 	}
 	defer func() { _ = os.Remove(zipPath) }()
 
-	return s.eachNode(ctx, problemID, func(ctx context.Context, endpoint string) error {
+	failed := s.eachNode(ctx, problemID, func(ctx context.Context, endpoint string) error {
 		return s.pushPackage(ctx, endpoint, problemID, zipPath)
 	})
+	if len(failed) == 0 {
+		s.markSynced(problemID)
+	}
+	return failed
 }
 
 // ClearOnNodes 依次通知各评测节点删除某题的测试数据，返回通知失败的节点。
@@ -119,4 +126,35 @@ func (s *TestdataService) packageFile(problemID uint) (string, error) {
 		return "", err
 	}
 	return name, nil
+}
+
+// markSynced 记录测试数据最近一次完整同步到全部评测节点的时间。
+func (s *TestdataService) markSynced(problemID uint) {
+	if s.db == nil {
+		return
+	}
+	if err := s.db.Model(&model.Problem{}).Where("id = ?", problemID).
+		Update("testdata_synced_at", time.Now()).Error; err != nil {
+		logger.Errorf("记录题目 %d 测试数据同步时间失败: %v", problemID, err)
+	}
+}
+
+// SyncPending 找出测试数据有改动但还没同步成功的题目，逐题补推送。
+func (s *TestdataService) SyncPending(ctx context.Context) {
+	var problems []model.Problem
+	err := s.db.Select("id").
+		Where("testcase_count > 0").
+		Where("testdata_synced_at IS NULL OR testdata_synced_at < updated_at").
+		Order("id asc").
+		Limit(50).
+		Find(&problems).Error
+	if err != nil {
+		logger.Errorf("查询待同步测试数据失败: %v", err)
+		return
+	}
+	for i := range problems {
+		if failed := s.SyncToNodes(ctx, problems[i].ID); len(failed) > 0 {
+			logger.Errorf("题目 %d 测试数据补同步失败: %v", problems[i].ID, failed)
+		}
+	}
 }

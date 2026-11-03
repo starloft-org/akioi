@@ -52,6 +52,8 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		problems.POST("/:id/testdata/sync", h.AdminSyncTestdata)
 		problems.DELETE("/:id/testdata", h.AdminDeleteTestdata)
 		problems.GET("/:id/testdata/download", h.AdminDownloadTestdata)
+		problems.PUT("/:id/testdata/scores", h.AdminUpdateTestdataScores)
+		problems.POST("/:id/testdata/reorder", h.AdminReorderTestdata)
 	}
 
 	// 批量导入的任务进度单独挂一层，避免与 /problems/:id 的通配段冲突
@@ -63,12 +65,13 @@ func registerAdmin(r *gin.Engine, h *handler.Handler, _ *redis.Client, _ *config
 		solutions.POST("/:id/review", h.AdminReviewSolution)
 	}
 
-	banks := admin.Group("/problem-banks", middleware.RequirePermission(model.AdminPermissionProblemBanks))
+	// 题库列表同时供题目编辑页选题库使用，只有题目管理权限的管理员也要能读取。
+	banks := admin.Group("/problem-banks")
 	{
-		banks.GET("", h.AdminListProblemBanks)
-		banks.POST("", h.AdminCreateProblemBank)
-		banks.PUT("/:id", h.AdminUpdateProblemBank)
-		banks.DELETE("/:id", h.AdminDeleteProblemBank)
+		banks.GET("", middleware.RequireAnyPermission(model.AdminPermissionProblems, model.AdminPermissionProblemBanks), h.AdminListProblemBanks)
+		banks.POST("", middleware.RequirePermission(model.AdminPermissionProblemBanks), h.AdminCreateProblemBank)
+		banks.PUT("/:id", middleware.RequirePermission(model.AdminPermissionProblemBanks), h.AdminUpdateProblemBank)
+		banks.DELETE("/:id", middleware.RequirePermission(model.AdminPermissionProblemBanks), h.AdminDeleteProblemBank)
 	}
 
 	backups := admin.Group("/backups", middleware.RequirePermission(model.AdminPermissionBackups))

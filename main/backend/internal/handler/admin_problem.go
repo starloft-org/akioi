@@ -187,6 +187,8 @@ func adminProblemDetail(p *model.Problem) gin.H {
 		"points":          p.Points,
 		"visibility":      p.Visibility,
 		"compare_mode":    p.CompareMode,
+		"spj_language":    p.SPJLanguage,
+		"spj_code":        p.SPJCode,
 		"float_eps":       p.FloatEps,
 		"testcase_count":  p.TestcaseCount,
 		"total_score":     totalScore(p),
@@ -218,7 +220,10 @@ type adminProblemRequest struct {
 	Points        *int            `json:"points"`
 	Visibility    *int            `json:"visibility"`
 	CompareMode   *string         `json:"compare_mode"`
-	FloatEps      *float64        `json:"float_eps"`
+	// SPJCode / SPJLanguage 仅在比对模式为 spj 时需要。
+	SPJCode     *string  `json:"spj_code"`
+	SPJLanguage *string  `json:"spj_language"`
+	FloatEps    *float64 `json:"float_eps"`
 	// TeamID 归属团队；0 或空表示公共题目
 	TeamID *uint `json:"team_id"`
 	// OwnerID 归属个人；0 或空表示非个人题目，与 TeamID 互斥
@@ -275,11 +280,16 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 	compareMode := model.CompareModeDefault
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)
-		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat {
+		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat && cm != model.CompareModeSPJ {
 			httpx.BadRequest(c, "比对模式取值非法")
 			return
 		}
 		compareMode = cm
+	}
+	spjLanguage, spjCode, spjErr := resolveSPJ(compareMode, req.SPJLanguage, req.SPJCode)
+	if spjErr != nil {
+		httpx.BadRequest(c, spjErr.Error())
+		return
 	}
 	floatEps := 1e-6
 	if req.FloatEps != nil {
@@ -367,6 +377,8 @@ func (h *Handler) AdminCreateProblem(c *gin.Context) {
 		Points:        points,
 		Visibility:    visibility,
 		CompareMode:   compareMode,
+		SPJLanguage:   spjLanguage,
+		SPJCode:       spjCode,
 		FloatEps:      floatEps,
 		TeamID:        teamID,
 		OwnerID:       ownerID,
@@ -596,11 +608,24 @@ func (h *Handler) AdminUpdateProblem(c *gin.Context) {
 	}
 	if req.CompareMode != nil {
 		cm := strings.TrimSpace(*req.CompareMode)
-		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat {
+		if cm != model.CompareModeDefault && cm != model.CompareModeExact && cm != model.CompareModeFloat && cm != model.CompareModeSPJ {
 			httpx.BadRequest(c, "比对模式取值非法")
 			return
 		}
 		updates["compare_mode"] = cm
+	}
+	if req.SPJCode != nil || req.SPJLanguage != nil {
+		mode := p.CompareMode
+		if req.CompareMode != nil {
+			mode = strings.TrimSpace(*req.CompareMode)
+		}
+		spjLanguage, spjCode, err := resolveSPJ(mode, req.SPJLanguage, req.SPJCode)
+		if err != nil {
+			httpx.BadRequest(c, err.Error())
+			return
+		}
+		updates["spj_language"] = spjLanguage
+		updates["spj_code"] = spjCode
 	}
 	if req.FloatEps != nil {
 		updates["float_eps"] = *req.FloatEps
@@ -910,8 +935,12 @@ func (h *Handler) testcaseItems(problemID uint) ([]testcaseItem, error) {
 	}
 	items := make([]testcaseItem, 0, len(cases))
 	for _, tc := range cases {
+		name := tc.Name
+		if name == "" {
+			name = strconv.Itoa(tc.Index)
+		}
 		items = append(items, testcaseItem{
-			Name:       tc.Name,
+			Name:       name,
 			GroupID:    tc.GroupID,
 			Index:      tc.Index,
 			Score:      tc.Score,

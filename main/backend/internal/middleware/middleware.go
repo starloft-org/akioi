@@ -80,6 +80,30 @@ func RequirePermission(permission string) gin.HandlerFunc {
 	}
 }
 
+// RequireAnyPermission 要求管理员拥有给定权限项中的任意一个，超级管理员始终通过。
+func RequireAnyPermission(permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		u := httpx.CurrentUser(c)
+		if u == nil || !u.IsAdmin() {
+			httpx.Forbidden(c, "需要管理员权限")
+			c.Abort()
+			return
+		}
+		if u.IsSuperAdmin() {
+			c.Next()
+			return
+		}
+		for _, permission := range permissions {
+			if u.HasAdminPermission(permission) {
+				c.Next()
+				return
+			}
+		}
+		httpx.Forbidden(c, "当前管理员未被分配该模块的权限")
+		c.Abort()
+	}
+}
+
 func bearerToken(c *gin.Context) string {
 	h := c.GetHeader("Authorization")
 	if h == "" {

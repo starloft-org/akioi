@@ -31,6 +31,9 @@ type JudgeTask struct {
 	FloatEps      float64        `json:"float_eps"`
 	Testcases     []TaskTestcase `json:"testcases"`
 	Subtasks      []TaskSubtask  `json:"subtasks,omitempty"`
+	// SPJCode 与 SPJLanguage 只在 compare_mode 为 spj 时下发。
+	SPJCode     string `json:"spj_code,omitempty"`
+	SPJLanguage string `json:"spj_language,omitempty"`
 }
 
 // TaskTestcase 描述一个测试点在本地数据目录中的序号与分值。

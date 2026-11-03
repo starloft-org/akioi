@@ -21,7 +21,7 @@ sample.out
 
 ## 二、分值
 
-默认把 100 分平均分给所有**独立测试点**（不参与子任务的测试点），余数分给排在前面测试点。
+默认把 100 分平均分给所有**独立测试点**（不参与子任务的测试点），除不尽的余数从**最后一个**测试点往前补。
 
 要精确控制分值和分组，就在测试数据目录里放一个可选的 `subtasks.json`：
 
@@ -47,7 +47,7 @@ sample.out
 - 引用了不存在的测试点会报错
 - 子任务分 + 独立测试点默认分不能超过 100：超出时独立测试点的默认分按 0 处理（不会出现总分超过 100）
 
-后台「测试数据」页也可以直接粘贴同一份 JSON（不需要重新上传数据文件），两者内容一致时以页面上提交的为准。
+编辑页下方的「测试数据」面板可以直接粘贴同一份 JSON（不需要重新上传数据文件），两者内容一致时以页面上提交的为准。
 
 ## 三、计分规则
 
@@ -58,6 +58,8 @@ sample.out
 | 子任务 | `score` | 组内全部测试点都通过才得该子任务的分，任一失败或缺失则 0 分 |
 
 总分 = 所有独立测试点得分 + 所有通过的子任务得分。例如 `subtasks.json` 里「小数据」30 分包含 `case2`、`case3`，只有这两个都 AC 才拿到 30 分；只过 `case2` 得 0 分。
+
+也可以在编辑页的测试数据面板里逐个测试点填分数：改完点「保存分值」即可，不需要重新上传文件；分数怎么改都不会超过 100 分（子任务分先扣）。
 
 评测结果里每个测试点都会带上它所属的子任务编号（`group`），子任务本身不单独出现在结果列表中，分数在最终得分里体现。
 
@@ -86,3 +88,7 @@ sample.out
 - 后台上传：`POST /api/admin/v1/problems/:id/testdata`，表单字段 `files`（多个）、`scores`（JSON 数组，可选）、`subtasks`（`subtasks.json` 的内容字符串，可选）
 - 用户上传个人题测试数据：`POST /api/v1/my/problems/:id/testdata`，字段相同
 - 读取：`GET /api/admin/v1/problems/:id/testdata`、`GET /api/v1/my/problems/:id/testdata` 返回 `{ total_score, subtasks, items }`，`items` 每项含 `index`、`name`、`group_id`、`score`、`input_size`、`output_size`、`input_hash`、`output_hash`
+
+- 改分：`PUT /api/admin/v1/problems/:id/testdata/scores`（body `{"scores":[{"index":1,"score":20}]}`），用户端同路径为 `PUT /api/v1/my/problems/:id/testdata/scores`
+- 重排：`POST /api/admin/v1/problems/:id/testdata/reorder`（body `{"order":[3,1,2]}`，`order` 是原测试点序号的新顺序），服务端会按新顺序重写磁盘上的 `1.in/1.out…` 并同步子任务引用；用户端为 `POST /api/v1/my/problems/:id/testdata/reorder`
+- 测试数据只保存在主站：导入题目时不再逐题推送到评测节点，后台每 2 分钟把「测试数据有更新还没同步」的题目同步一次（`testdata_synced_at` 记录上次成功同步时间）；上传/改分后仍会立即尝试同步一次，失败的节点会记在题目的同步状态里

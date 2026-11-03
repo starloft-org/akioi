@@ -73,6 +73,12 @@ const (
 	CompareModeDefault = "default"
 	CompareModeExact   = "exact"
 	CompareModeFloat   = "float"
+	// CompareModeSPJ 表示用题目自带的 Special Judge 程序判定每个测试点。
+	CompareModeSPJ = "spj"
+
+	// SPJLanguageCpp / SPJLanguageC 是 Special Judge 程序可用的语言。
+	SPJLanguageCpp = "cpp"
+	SPJLanguageC   = "c"
 )
 
 // 提交语言

@@ -14,25 +14,29 @@ type Sample struct {
 }
 
 type Problem struct {
-	ID            uint    `gorm:"primaryKey" json:"id"`
-	DisplayID     string  `gorm:"size:16;uniqueIndex;not null" json:"display_id"`
-	Title         string  `gorm:"size:128;not null" json:"title"`
-	Description   string  `gorm:"type:mediumtext" json:"description"`
-	InputFormat   string  `gorm:"type:mediumtext" json:"input_format"`
-	OutputFormat  string  `gorm:"type:mediumtext" json:"output_format"`
-	Hint          string  `gorm:"type:mediumtext" json:"hint"`
-	SamplesJSON   string  `gorm:"column:samples;type:text" json:"-"`
-	TimeLimitMS   int     `gorm:"not null;default:1000" json:"time_limit_ms"`
-	MemoryLimitMB int     `gorm:"not null;default:256" json:"memory_limit_mb"`
-	Difficulty    string  `gorm:"size:16;index" json:"difficulty"`
-	TagsJSON      string  `gorm:"column:tags;size:255" json:"-"`
-	Source        string  `gorm:"size:128" json:"source"`
-	Points        int     `gorm:"not null;default:100" json:"points"`
-	Visibility    int     `gorm:"not null;default:1" json:"visibility"`
-	CompareMode   string  `gorm:"size:16;not null;default:default" json:"compare_mode"`
-	FloatEps      float64 `gorm:"not null;default:0.000001" json:"float_eps"`
-	TestcaseCount int     `gorm:"not null;default:0" json:"testcase_count"`
-	ScoresJSON    string  `gorm:"column:testcase_scores;type:text" json:"-"`
+	ID            uint   `gorm:"primaryKey" json:"id"`
+	DisplayID     string `gorm:"size:16;uniqueIndex;not null" json:"display_id"`
+	Title         string `gorm:"size:128;not null" json:"title"`
+	Description   string `gorm:"type:mediumtext" json:"description"`
+	InputFormat   string `gorm:"type:mediumtext" json:"input_format"`
+	OutputFormat  string `gorm:"type:mediumtext" json:"output_format"`
+	Hint          string `gorm:"type:mediumtext" json:"hint"`
+	SamplesJSON   string `gorm:"column:samples;type:text" json:"-"`
+	TimeLimitMS   int    `gorm:"not null;default:1000" json:"time_limit_ms"`
+	MemoryLimitMB int    `gorm:"not null;default:256" json:"memory_limit_mb"`
+	Difficulty    string `gorm:"size:16;index" json:"difficulty"`
+	TagsJSON      string `gorm:"column:tags;size:255" json:"-"`
+	Source        string `gorm:"size:128" json:"source"`
+	Points        int    `gorm:"not null;default:100" json:"points"`
+	Visibility    int    `gorm:"not null;default:1" json:"visibility"`
+	CompareMode   string `gorm:"size:16;not null;default:default" json:"compare_mode"`
+	SPJLanguage   string `gorm:"column:spj_language;size:16;not null;default:''" json:"spj_language"`
+	SPJCode       string `gorm:"column:spj_code;type:longtext" json:"spj_code"`
+	// TestdataSyncedAt 记录测试数据最近一次成功同步到全部评测节点的时间。
+	TestdataSyncedAt *time.Time `gorm:"column:testdata_synced_at" json:"testdata_synced_at"`
+	FloatEps         float64    `gorm:"not null;default:0.000001" json:"float_eps"`
+	TestcaseCount    int        `gorm:"not null;default:0" json:"testcase_count"`
+	ScoresJSON       string     `gorm:"column:testcase_scores;type:text" json:"-"`
 	// SubtasksJSON 保存子任务定义（名称、分数、包含的测试点）。
 	SubtasksJSON  string `gorm:"column:subtasks;type:text" json:"-"`
 	DataHash      string `gorm:"size:64" json:"data_hash"`

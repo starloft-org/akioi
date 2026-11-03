@@ -171,6 +171,8 @@ type dispatchTask struct {
 	TimeLimitMS   int             `json:"time_limit_ms"`
 	MemoryLimitMB int             `json:"memory_limit_mb"`
 	CompareMode   string          `json:"compare_mode"`
+	SPJCode       string          `json:"spj_code,omitempty"`
+	SPJLanguage   string          `json:"spj_language,omitempty"`
 	FloatEps      float64         `json:"float_eps"`
 	Testcases     []dispatchCase  `json:"testcases"`
 	Subtasks      []model.Subtask `json:"subtasks,omitempty"`
@@ -220,6 +222,8 @@ func (s *JudgeService) dispatch(ctx context.Context, sub *model.Submission, prob
 		TimeLimitMS:   prob.TimeLimitMS,
 		MemoryLimitMB: prob.MemoryLimitMB,
 		CompareMode:   prob.CompareMode,
+		SPJCode:       prob.SPJCode,
+		SPJLanguage:   prob.SPJLanguage,
 		FloatEps:      prob.FloatEps,
 		Testcases:     items,
 		Subtasks:      prob.Subtasks(),

@@ -191,12 +191,9 @@ func (h *Handler) importPreparedGroup(ctx context.Context, preps []*preparedProb
 		return items, err
 	}
 
-	// 事务提交后再推送测试数据，避免回滚后节点上残留数据
+	// 测试数据只保存在主站：评测节点由后台定时任务统一同步，导入时不再逐题推送。
 	for i := range items {
-		report(i, "正在推送测试数据 "+items[i].DisplayID)
 		logger.Adminf("管理员 %s 导入题目 %s (id=%d) ip=%s", u.Username, items[i].DisplayID, items[i].ProblemID, ip)
-		items[i].SyncFailed = h.Testdata.SyncToNodes(ctx, items[i].ProblemID)
-		report(i+1, "")
 	}
 	return items, nil
 }

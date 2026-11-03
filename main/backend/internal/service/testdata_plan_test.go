@@ -124,7 +124,8 @@ func TestNaturalLess(t *testing.T) {
 
 func TestSplitScore(t *testing.T) {
 	got := splitScore(100, 3)
-	want := []int{34, 33, 33}
+	// 余数从后往前补：前面分值更整齐。
+	want := []int{33, 33, 34}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("splitScore(100, 3) = %v, 期望 %v", got, want)

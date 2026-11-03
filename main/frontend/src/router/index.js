@@ -115,12 +115,6 @@ const routes = [
         component: () => import('@/views/admin/ProblemEdit.vue')
       },
       {
-        path: 'problems/:id/testdata',
-        name: 'admin-testdata',
-        meta: { permission: 'problems' },
-        component: () => import('@/views/admin/Testdata.vue')
-      },
-      {
         path: 'contests',
         name: 'admin-contests',
         meta: { permission: 'contests' },

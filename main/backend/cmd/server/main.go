@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	"akioi/internal/config"
@@ -56,7 +57,17 @@ func main() {
 	if cfg.Env == "development" {
 		gin.SetMode(gin.DebugMode)
 	}
-	r := router.Setup(handler.New(db, cfg, rdb, settings), cfg, db, rdb)
+	h := handler.New(db, cfg, rdb, settings)
+	r := router.Setup(h, cfg, db, rdb)
+
+	// 测试数据只在主站保存：每 2 分钟把有变更、还没同步成功的题目补推到各评测节点
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			h.Testdata.SyncPending(context.Background())
+		}
+	}()
 
 	// 比赛到点后把题目里的隐藏题放开：每 30 秒检查一次，失败只记日志
 	go func() {

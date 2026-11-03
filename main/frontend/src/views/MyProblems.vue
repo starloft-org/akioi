@@ -165,6 +165,9 @@
         <el-button type="primary" :loading="uploading" :disabled="!fileList.length" @click="upload">
           上传并替换
         </el-button>
+        <el-button type="primary" plain :loading="savingScores" :disabled="!testcases.length" @click="saveTestdataScores">
+          保存分值
+        </el-button>
         <el-button type="danger" :disabled="!testcases.length" @click="clearTestdata">清空测试数据</el-button>
         <span class="muted">总分 {{ totalScore }}</span>
       </div>
@@ -188,8 +191,16 @@
         <el-table-column label="输出大小" width="120">
           <template #default="{ row }">{{ row.output_size }} B</template>
         </el-table-column>
-        <el-table-column label="分值" width="80" align="right">
-          <template #default="{ row }">{{ row.score }}</template>
+        <el-table-column label="分值" width="140">
+          <template #default="{ row }">
+            <el-input-number v-model="row.score" :min="0" :max="100000" size="small" controls-position="right" />
+          </template>
+        </el-table-column>
+        <el-table-column label="顺序" width="140">
+          <template #default="{ $index }">
+            <el-button link :disabled="$index === 0" @click="moveTestcase($index, -1)">上移</el-button>
+            <el-button link :disabled="$index === testcases.length - 1" @click="moveTestcase($index, 1)">下移</el-button>
+          </template>
         </el-table-column>
       </el-table>
     </el-dialog>
@@ -293,7 +304,9 @@ import {
   myGetImportTask,
   myImportProblemsOne,
   updateMyProblem,
-  uploadMyProblemTestdata
+  uploadMyProblemTestdata,
+  updateMyProblemTestdataScores,
+  reorderMyProblemTestdata,
 } from '@/api'
 
 const DIFFICULTIES = ['入门', '普及-', '普及', '普及+', '提高', '提高+', '省选', 'NOI']
@@ -353,6 +366,42 @@ const form = ref(emptyForm())
 const testdataDialog = ref(false)
 const testdataTarget = ref(null)
 const testcases = ref([])
+const savingScores = ref(false)
+
+const saveTestdataScores = async () => {
+  if (!testdataTarget.value || !testcases.value.length) return
+  savingScores.value = true
+  try {
+    const data = await updateMyProblemTestdataScores(
+      testdataTarget.value.id,
+      testcases.value.map((tc) => ({ index: tc.index, score: Number(tc.score) || 0 }))
+    )
+    testcases.value = data.items || testcases.value
+    ElMessage.success('分值已保存')
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '保存分值失败')
+  } finally {
+    savingScores.value = false
+  }
+}
+
+const moveTestcase = async (index, delta) => {
+  const target = index + delta
+  if (!testdataTarget.value || target < 0 || target >= testcases.value.length) return
+  const next = testcases.value.slice()
+  const [item] = next.splice(index, 1)
+  next.splice(target, 0, item)
+  try {
+    const data = await reorderMyProblemTestdata(
+      testdataTarget.value.id,
+      next.map((tc) => tc.index)
+    )
+    testcases.value = data.items || next
+    ElMessage.success('顺序已调整')
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '调整顺序失败')
+  }
+}
 const subtasks = ref([])
 const mySubtasksInput = ref('')
 const fileList = ref([])

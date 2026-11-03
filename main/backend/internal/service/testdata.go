@@ -502,9 +502,10 @@ func splitScore(total, n int) []int {
 	rest := total % n
 	for i := range out {
 		out[i] = base
-		if i < rest {
-			out[i]++
-		}
+	}
+	// 除不尽时余数从后往前补，前面的测试点分值更整齐。
+	for i := n - rest; i < n; i++ {
+		out[i]++
 	}
 	return out
 }
