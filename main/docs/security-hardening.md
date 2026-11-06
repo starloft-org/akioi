@@ -28,15 +28,9 @@
 
 ## 部署要求（S08）
 
-1. 前端容器默认以 HTTP 监听宿主机 `3000`（`FRONTEND_PORT` 可改），生产环境在**外层反向代理**上终止 TLS，并强制跳转。以 1Panel 或服务器自带的 nginx 为例：
+1. 前端容器固定以 HTTP 监听宿主机 `3000`，生产环境在**外层反向代理**上终止 TLS（80→443 跳转与证书都交给 1Panel 之类的面板处理）。以 nginx 为例，只需配一个 443 站点：
 
    ```nginx
-   server {
-       listen 80;
-       server_name oj.example.com;
-       return 301 https://$host$request_uri;
-   }
-
    server {
        listen 443 ssl http2;
        server_name oj.example.com;
@@ -53,7 +47,7 @@
    }
    ```
 
-   反向代理与本项目同机时，建议把 compose 的端口映射改成 `127.0.0.1:3000:80`，只允许本机代理访问。
+   反向代理与本项目同机时，建议把 compose 的端口映射改成 `127.0.0.1:3000:3000`，只允许本机代理访问。
 
 2. 如果 TLS 由前置代理终止、后端只接受内网请求，可以在 `.env` 里限制受信任代理：
 

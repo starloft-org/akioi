@@ -12,7 +12,6 @@
 | --- | --- |
 | `APP_ENV` | 运行环境标识 |
 | `SERVER_ADDR` | 后端监听地址 |
-| `FRONTEND_PORT` | 前端对外端口（默认 `3000`，HTTP；HTTPS 由外层反向代理终止） |
 | `DB_HOST` / `DB_PORT` / `DB_BIND_ADDR` | MySQL 连接信息 |
 | `DB_USER` / `DB_PASSWORD` | MySQL 账号（`DB_PASSWORD` 必填） |
 | `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | 连接池大小 |
@@ -32,6 +31,8 @@ cd /akioi && git pull --ff-only && bash main/scripts/init-env.sh
 ```
 
 脚本会随机生成数据库、Redis 与管理员密码，并把两端必须一致的 `JUDGE_SYNC_SECRET` 同时写入主站与评测节点的 `.env`。
+
+前端固定以 HTTP 监听宿主机 `3000`，HTTPS 与证书交给外层反向代理（如 1Panel）终止，反代上游填 `http://127.0.0.1:3000`。要换端口需同时改 `main/docker-compose.yml` 的映射与 `main/frontend/nginx.conf` 的 `listen`。
 
 ## 二、数据库中的配置
 

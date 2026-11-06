@@ -9,7 +9,7 @@
 #   - 缺少 .env 时从 .env.example 复制，已有 .env 只补空项，不覆盖已填写的值
 #   - DB_PASSWORD / REDIS_PASSWORD / ADMIN_INIT_PASSWORD 各自随机生成（登录密钥由主站首次启动自动生成并入库）
 #   - JUDGE_SYNC_SECRET 两端写成同一个值（沿用已有值，没有才生成）
-#   - judgeserver 的 MAIN_BASE_URL 按主站地址与 FRONTEND_PORT 生成
+#   - judgeserver 的 MAIN_BASE_URL 按主站地址与固定 3000 端口生成
 #   - judgeserver 的 HOST_TESTDATA_DIR / HOST_WORK_DIR 按仓库路径生成并建好目录
 
 set -euo pipefail
@@ -70,13 +70,8 @@ if [ -z "$HOST" ]; then
 fi
 
 if [ -n "$HOST" ]; then
-  PORT="$(val "$MAIN_ENV" FRONTEND_PORT)"
-  [ -n "$PORT" ] || PORT=3000
-  if [ "$PORT" = "80" ]; then
-    BASE="http://$HOST"
-  else
-    BASE="http://$HOST:$PORT"
-  fi
+  # 前端固定以 HTTP 监听 3000，HTTPS 由外层反向代理终止；节点回传走这个内部地址
+  BASE="http://$HOST:3000"
   if [ "$EXPLICIT" -eq 1 ]; then
     setval "$JUDGE_ENV" MAIN_BASE_URL "$BASE"
   else
@@ -93,7 +88,7 @@ chmod 600 "$MAIN_ENV" "$JUDGE_ENV"
 
 echo
 echo "===== $MAIN_ENV"
-for key in DB_PASSWORD REDIS_PASSWORD ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET FRONTEND_PORT; do
+for key in DB_PASSWORD REDIS_PASSWORD ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET; do
   printf '  %-20s %s\n' "$key" "$(val "$MAIN_ENV" "$key")"
 done
 echo "===== $JUDGE_ENV"

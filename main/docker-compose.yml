@@ -74,9 +74,9 @@ services:
     container_name: akioi_frontend
     restart: unless-stopped
     ports:
-      # 前端以 HTTP 监听宿主机 3000，HTTPS 由外层反向代理（如 1Panel）终止。
-      # 反向代理的上游填 http://127.0.0.1:3000 即可；改端口时改 FRONTEND_PORT 并同步改上游。
-      # 若反向代理就在本机，可把映射改成 127.0.0.1:3000:80，避免 3000 直接暴露到公网。
-      - "${FRONTEND_PORT:-3000}:80"
+      # 前端固定以 HTTP 监听 3000，HTTPS 由外层反向代理（如 1Panel）终止。
+      # 反向代理的上游填 http://127.0.0.1:3000；要换端口就同时改这里和 nginx.conf 的 listen。
+      # 若反向代理就在本机，可改成 127.0.0.1:3000:3000，避免 3000 直接暴露到公网。
+      - "3000:3000"
     depends_on:
       - backend
