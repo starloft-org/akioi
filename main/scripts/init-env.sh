@@ -71,7 +71,7 @@ fi
 
 if [ -n "$HOST" ]; then
   PORT="$(val "$MAIN_ENV" FRONTEND_PORT)"
-  [ -n "$PORT" ] || PORT=80
+  [ -n "$PORT" ] || PORT=3000
   if [ "$PORT" = "80" ]; then
     BASE="http://$HOST"
   else

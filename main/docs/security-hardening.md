@@ -28,7 +28,7 @@
 
 ## 部署要求（S08）
 
-1. 在服务器上为站点配置 HTTPS（证书可放在 nginx 或云厂商负载均衡上），并强制跳转：
+1. 前端容器默认以 HTTP 监听宿主机 `3000`（`FRONTEND_PORT` 可改），生产环境在**外层反向代理**上终止 TLS，并强制跳转。以 1Panel 或服务器自带的 nginx 为例：
 
    ```nginx
    server {
@@ -44,7 +44,7 @@
        ssl_certificate_key /etc/nginx/certs/privkey.pem;
        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
        location / {
-           proxy_pass http://frontend:80;
+           proxy_pass http://127.0.0.1:3000;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -52,6 +52,8 @@
        }
    }
    ```
+
+   反向代理与本项目同机时，建议把 compose 的端口映射改成 `127.0.0.1:3000:80`，只允许本机代理访问。
 
 2. 如果 TLS 由前置代理终止、后端只接受内网请求，可以在 `.env` 里限制受信任代理：
 
@@ -61,4 +63,4 @@
 
    只有这些地址发来的 `X-Forwarded-For` 才会被当成真实 IP，其他请求一律使用直连地址。
 
-3. 评测节点不需要公网暴露，`judgeserver` 只需能与主站通信即可。
+3. 评测节点不需要公网暴露，`judgeserver` 只需能与主站通信即可。主站经过反向代理对外时，节点的 `MAIN_BASE_URL` 填对外地址（`https://域名` 或直连的 `http://<IP>:3000`）。

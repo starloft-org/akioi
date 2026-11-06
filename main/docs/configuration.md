@@ -12,7 +12,7 @@
 | --- | --- |
 | `APP_ENV` | 运行环境标识 |
 | `SERVER_ADDR` | 后端监听地址 |
-| `FRONTEND_PORT` | 前端对外端口 |
+| `FRONTEND_PORT` | 前端对外端口（默认 `3000`，HTTP；HTTPS 由外层反向代理终止） |
 | `DB_HOST` / `DB_PORT` / `DB_BIND_ADDR` | MySQL 连接信息 |
 | `DB_USER` / `DB_PASSWORD` | MySQL 账号（`DB_PASSWORD` 必填） |
 | `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | 连接池大小 |
