@@ -28,14 +28,37 @@
 
 ## 部署要求（S08）
 
-1. 前端容器已内置 HTTPS 与证书管理：80 端口只保留 Let's Encrypt 的 ACME 校验与 301 跳转，不再返回任何页面或接口；业务全部走 443，并返回 `Strict-Transport-Security`。在 `main/.env` 填写 `DOMAIN` 与 `ACME_EMAIL` 后，容器启动时自动申请证书、之后每 12 小时检查续期；未配置或申请失败时先用临时自签名证书占位。完整流程与排错见 [https.md](https.md)。
+1. 在服务器上为站点配置 HTTPS（证书可放在 nginx 或云厂商负载均衡上），并强制跳转：
 
-2. 如果 TLS 由云厂商负载均衡或前置代理终止、前端只接受内网请求，可以在 `.env` 里限制受信任代理：
+   ```nginx
+   server {
+       listen 80;
+       server_name oj.example.com;
+       return 301 https://$host$request_uri;
+   }
+
+   server {
+       listen 443 ssl http2;
+       server_name oj.example.com;
+       ssl_certificate     /etc/nginx/certs/fullchain.pem;
+       ssl_certificate_key /etc/nginx/certs/privkey.pem;
+       add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+       location / {
+           proxy_pass http://frontend:80;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto https;
+       }
+   }
+   ```
+
+2. 如果 TLS 由前置代理终止、后端只接受内网请求，可以在 `.env` 里限制受信任代理：
 
    ```
    TRUSTED_PROXIES=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
    ```
 
-   只有这些地址发来的 `X-Forwarded-For` 才会被当成真实 IP，其他请求一律使用直连地址。这种情况下前端默认的 80/443 可以只映射到内网。
+   只有这些地址发来的 `X-Forwarded-For` 才会被当成真实 IP，其他请求一律使用直连地址。
 
-3. 评测节点不需要公网暴露，`judgeserver` 只需能与主站通信即可。主站启用 HTTPS 后，节点的 `MAIN_BASE_URL` 要改成 `https://域名`（`scripts/init-env.sh` 会按 `main/.env` 里的 `DOMAIN` 自动生成）。
+3. 评测节点不需要公网暴露，`judgeserver` 只需能与主站通信即可。

@@ -12,10 +12,7 @@
 | --- | --- |
 | `APP_ENV` | 运行环境标识 |
 | `SERVER_ADDR` | 后端监听地址 |
-| `FRONTEND_PORT` | 前端对外 HTTP 端口，只用于 ACME 校验与 301 跳转（HTTPS 固定 443） |
-| `DOMAIN` / `ACME_EMAIL` | 自动申请 Let's Encrypt 证书用的域名与邮箱，详见 [https.md](https.md) |
-| `CERT_NAME` | 证书目录名（默认 `akioi`），同机多站点时用于区分 |
-| `LETSENCRYPT_STAGING` | 设为 `1` 时使用 Let's Encrypt 测试环境 |
+| `FRONTEND_PORT` | 前端对外端口 |
 | `DB_HOST` / `DB_PORT` / `DB_BIND_ADDR` | MySQL 连接信息 |
 | `DB_USER` / `DB_PASSWORD` | MySQL 账号（`DB_PASSWORD` 必填） |
 | `DB_MAX_OPEN_CONNS` / `DB_MAX_IDLE_CONNS` | 连接池大小 |
@@ -35,8 +32,6 @@ cd /akioi && git pull --ff-only && bash main/scripts/init-env.sh
 ```
 
 脚本会随机生成数据库、Redis 与管理员密码，并把两端必须一致的 `JUDGE_SYNC_SECRET` 同时写入主站与评测节点的 `.env`。
-
-前端默认只通过 HTTPS 提供业务，80 只保留 ACME 校验与 301 跳转。填好 `DOMAIN` 与 `ACME_EMAIL` 后容器会自动申请并续期 Let's Encrypt 证书，流程与排错见 [https.md](https.md)。
 
 ## 二、数据库中的配置
 
@@ -76,6 +71,5 @@ cd /akioi && git pull --ff-only && bash main/scripts/init-env.sh
 | 短信发送失败 | 短信开关没开、模板 ID 未填、或 API Key 权限不含短信接口 |
 | 评测结果一直不回来 | 主站与节点的 `JUDGE_SYNC_SECRET` 不一致，或节点地址配置错误 |
 | 改了 `.env` 不生效 | 密钥类配置以数据库为准，请在后台修改；`.env` 只在库中缺少 `secrets` 行时被导入一次 |
-| 浏览器提示证书不受信任 | 没填 `DOMAIN` / `ACME_EMAIL`，或证书申请失败；先看 `docker compose logs frontend`，详见 [https.md](https.md) |
 
 从旧版本升级时，如果 `.env` 里仍写着旧的密钥键，首次启动会自动导入，导入成功后可以删掉这些键；也可以直接把密钥填到后台「密钥与集成」。

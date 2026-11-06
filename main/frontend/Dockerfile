@@ -16,14 +16,7 @@ RUN npm run build
 
 FROM nginx:alpine
 
-# certbot 负责自动申请与续期 Let's Encrypt 证书，
-# openssl 用于还没有正式证书时生成临时自签名证书让 nginx 先跑起来
-RUN apk add --no-cache certbot openssl
-
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint-ssl.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint-ssl.sh
 
-EXPOSE 80 443
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint-ssl.sh"]
+EXPOSE 80

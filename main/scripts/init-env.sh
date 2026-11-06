@@ -69,12 +69,7 @@ if [ -z "$HOST" ]; then
   HOST="$(hostname -I 2>/dev/null | awk '{print $1}' | tr -d '\r' || true)"
 fi
 
-DOMAIN="$(val "$MAIN_ENV" DOMAIN)"
-BASE=""
-if [ -n "$DOMAIN" ]; then
-  # 站点启用 HTTPS 后，80 只做跳转，评测节点必须用 https 回传
-  BASE="https://$DOMAIN"
-elif [ -n "$HOST" ]; then
+if [ -n "$HOST" ]; then
   PORT="$(val "$MAIN_ENV" FRONTEND_PORT)"
   [ -n "$PORT" ] || PORT=80
   if [ "$PORT" = "80" ]; then
@@ -82,17 +77,13 @@ elif [ -n "$HOST" ]; then
   else
     BASE="http://$HOST:$PORT"
   fi
-  echo "警告：main/.env 未填写 DOMAIN，主站会先用临时自签名证书提供 HTTPS，80 只做跳转；" >&2
-  echo "      评测节点回传会因证书校验失败，请在 main/.env 填写 DOMAIN 与 ACME_EMAIL 后重建前端。" >&2
-else
-  echo "警告：未取到本机内网 IP，请重跑并显式指定，例如：bash main/scripts/init-env.sh 10.0.0.9" >&2
-fi
-if [ -n "$BASE" ]; then
   if [ "$EXPLICIT" -eq 1 ]; then
     setval "$JUDGE_ENV" MAIN_BASE_URL "$BASE"
   else
     fill "$JUDGE_ENV" MAIN_BASE_URL "$BASE"
   fi
+else
+  echo "警告：未取到本机内网 IP，请重跑并显式指定，例如：bash main/scripts/init-env.sh 10.0.0.9" >&2
 fi
 
 fill "$JUDGE_ENV" HOST_TESTDATA_DIR "$ROOT/judgeserver/data/testdata"
@@ -102,7 +93,7 @@ chmod 600 "$MAIN_ENV" "$JUDGE_ENV"
 
 echo
 echo "===== $MAIN_ENV"
-for key in DB_PASSWORD REDIS_PASSWORD ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET FRONTEND_PORT DOMAIN ACME_EMAIL; do
+for key in DB_PASSWORD REDIS_PASSWORD ADMIN_INIT_USERNAME ADMIN_INIT_PASSWORD JUDGE_SYNC_SECRET FRONTEND_PORT; do
   printf '  %-20s %s\n' "$key" "$(val "$MAIN_ENV" "$key")"
 done
 echo "===== $JUDGE_ENV"
